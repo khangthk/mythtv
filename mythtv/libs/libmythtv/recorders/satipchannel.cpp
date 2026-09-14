@@ -2,6 +2,7 @@
 #include <utility>
 
 // Qt includes
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QMutexLocker>
 #include <QString>
 
@@ -49,7 +50,7 @@ bool SatIPChannel::Open(void)
     m_tunerType = SatIP::toTunerType(m_device);
 
     LOG(VB_CHANNEL, LOG_DEBUG, LOC + QString("Open(%1) m_tunerType:%2 %3")
-        .arg(m_device).arg(m_tunerType).arg(m_tunerType.toString()));
+        .arg(m_device).arg(m_tunerType.toInt()).arg(m_tunerType.toString()));
 
     if (!InitializeInput())
     {

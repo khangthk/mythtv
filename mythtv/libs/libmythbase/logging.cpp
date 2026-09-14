@@ -1,5 +1,9 @@
 #include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QAtomicInt>
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QMutex>
 #include <QMutexLocker>
 #include <QWaitCondition>
@@ -13,12 +17,12 @@
 #include <QVariantMap>
 #include <iostream>
 
+#include "mythconfig.h"
 #include "mythlogging.h"
 #include "logging.h"
 #include "loggingserver.h"
 #include "mythdb.h"
 #include "mythdirs.h"
-#include "mythcorecontext.h"
 #include "mythsystemlegacy.h"
 #include "dbutil.h"
 #include "exitcodes.h"
@@ -37,15 +41,15 @@
 #include <sys/time.h>
 #endif
 #define SYSLOG_NAMES
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
 #include "mythsyslog.h"
 #endif
 #include <unistd.h>
 
 // Various ways to get to thread's tid
-#if defined(__linux__)
+#ifdef Q_OS_LINUX
 #include <sys/syscall.h>
-#elif defined(__FreeBSD__)
+#elif defined(Q_OS_FREEBSD)
 extern "C" {
 #include <sys/ucontext.h>
 #include <sys/thr.h>
@@ -72,13 +76,14 @@ static bool                    logThreadFinished = false;
 static bool                    debugRegistration = false;
 
 struct LogPropagateOpts {
-    bool    m_propagate;
-    int     m_quiet;
-    int     m_facility;
-    QString m_path;
+    bool    m_propagate { false };
+    int     m_quiet     { 0 };
+    int     m_facility  { 0 };
+    QString m_path      { "" };
+    bool    m_loglong   { false };
 };
 
-LogPropagateOpts        logPropagateOpts {false, 0, 0, ""};
+LogPropagateOpts        logPropagateOpts {};
 QString                 logPropagateArgs;
 QStringList             logPropagateArgList;
 
@@ -172,11 +177,11 @@ void LoggingItem::setThreadTid(void)
     {
         m_tid = 0;
 
-#if defined(Q_OS_ANDROID)
+#ifdef Q_OS_ANDROID
         m_tid = (int64_t)gettid();
-#elif defined(__linux__)
+#elif defined(Q_OS_LINUX)
         m_tid = syscall(SYS_gettid);
-#elif defined(__FreeBSD__)
+#elif defined(Q_OS_FREEBSD)
         long lwpid;
         [[maybe_unused]] int dummy = thr_self( &lwpid );
         m_tid = (int64_t)lwpid;
@@ -212,15 +217,44 @@ char LoggingItem::getLevelChar (void)
     return '-';
 }
 
+std::string LoggingItem::toString()
+{
+    QString ptid = QString::number(pid()); // pid, add tid if non-zero
+    if(tid())
+    {
+        ptid.append("/").append(QString::number(tid()));
+    }
+    return qPrintable(QString("%1 %2 [%3] %4 %5:%6:%7  %8\n")
+                          .arg(getTimestampUs(),
+                               QString(QChar(getLevelChar())),
+                               ptid,
+                               threadName(),
+                               file(),
+                               QString::number(line()),
+                               function(),
+                               message()
+                              ));
+}
+
+std::string LoggingItem::toStringShort()
+{
+    return qPrintable(QString("%1 %2  %3\n")
+                          .arg(getTimestampUs(),
+                               QString(QChar(getLevelChar())),
+                               message()
+                              ));
+}
+
 /// \brief LoggerThread constructor.  Enables debugging of thread registration
 ///        and deregistration if the VERBOSE_THREADS environment variable is
 ///        set.
 LoggerThread::LoggerThread(QString filename, bool progress, bool quiet,
-                           int facility) :
+                           int facility, bool loglong) :
     MThread("Logger"),
     m_waitNotEmpty(new QWaitCondition()),
     m_waitEmpty(new QWaitCondition()),
     m_filename(std::move(filename)), m_progress(progress), m_quiet(quiet),
+    m_loglong(loglong),
     m_facility(facility), m_pid(getpid())
 {
     if (qEnvironmentVariableIsSet("VERBOSE_THREADS"))
@@ -380,45 +414,25 @@ bool LoggerThread::logConsole(LoggingItem *item) const
     }
     else
     {
-        QString timestamp = item->getTimestampUs();
-        char shortname = item->getLevelChar();
-
-#ifndef NDEBUG
-        if (item->tid())
+#if !defined(NDEBUG) || CONFIG_FORCE_LOGLONG
+        if (true) // NOLINT(readability-simplify-boolean-expr)
+#else
+        if (m_loglong)
+#endif
         {
-            line = qPrintable(QString("%1 %2 [%3/%4] %5 %6:%7:%8  %9\n")
-                .arg(timestamp, QString(shortname),
-                     QString::number(item->pid()),
-                     QString::number(item->tid()),
-                     item->threadName(),
-                     item->m_file,
-                     QString::number(item->m_line),
-                     item->m_function,
-                     item->m_message));
+            line = item->toString();
         }
         else
         {
-            line = qPrintable(QString("%1 %2 [%3] %4 %5:%6:%7  %8\n")
-                .arg(timestamp, QString(shortname),
-                     QString::number(item->pid()),
-                     item->threadName(),
-                     item->m_file,
-                     QString::number(item->m_line),
-                     item->m_function,
-                     item->m_message));
+            line = item->toStringShort();
         }
-#else
-        line = qPrintable(QString("%1 %2  %3\n")
-                          .arg(timestamp, QString(shortname),
-                               item->m_message));
-#endif
     }
 
-    (void)write(1, line.data(), line.size());
+    std::cout << line << std::flush;
 
 #else // Q_OS_ANDROID
 
-    android_LogPriority aprio;
+    android_LogPriority aprio {ANDROID_LOG_UNKNOWN};
     switch (item->m_level)
     {
     case LOG_EMERG:
@@ -539,12 +553,6 @@ void LogPrintLine( uint64_t mask, LogLevel_t level, const char *file, int line,
     item->m_message = std::move(message);
 
     QMutexLocker qLock(&logQueueMutex);
-
-#if defined( _MSC_VER ) && defined( _DEBUG )
-        OutputDebugStringA( qPrintable(item->m_message) );
-        OutputDebugStringA( "\n" );
-#endif
-
     logQueue.enqueue(item);
 
     if (logThread && logThreadFinished && !logThread->isRunning())
@@ -593,7 +601,13 @@ void logPropagateCalc(void)
         logPropagateArgList << "--quiet";
     }
 
-#if !defined(_WIN32) && !defined(Q_OS_ANDROID)
+    if (logPropagateOpts.m_loglong)
+    {
+        logPropagateArgs += " --loglong";
+        logPropagateArgList << "--loglong";
+    }
+
+#if !defined(Q_OS_WINDOWS) && !defined(Q_OS_ANDROID)
     if (logPropagateOpts.m_facility >= 0)
     {
         const CODE *syslogname = nullptr;
@@ -635,7 +649,7 @@ bool logPropagateQuiet(void)
 /// \param  testHarness Should always be false. Set to true when
 ///                     invoked by the testing code.
 void logStart(const QString& logfile, bool progress, int quiet, int facility,
-              LogLevel_t level, bool propagate, bool testHarness)
+              LogLevel_t level, bool propagate, bool loglong, bool testHarness)
 {
     if (logThread && logThread->isRunning())
         return;
@@ -647,6 +661,7 @@ void logStart(const QString& logfile, bool progress, int quiet, int facility,
     logPropagateOpts.m_propagate = propagate;
     logPropagateOpts.m_quiet = quiet;
     logPropagateOpts.m_facility = facility;
+    logPropagateOpts.m_loglong = loglong;
 
     if (propagate)
     {
@@ -660,7 +675,7 @@ void logStart(const QString& logfile, bool progress, int quiet, int facility,
         return;
 
     if (!logThread)
-        logThread = new LoggerThread(logfile, progress, quiet, facility);
+        logThread = new LoggerThread(logfile, progress, quiet, facility, loglong);
 
     logThread->start();
 }
@@ -672,6 +687,10 @@ void logStop(void)
     {
         logThread->stop();
         logThread->wait();
+        qDeleteAll(verboseMap);  // delete VerboseDef memory in map values
+        verboseMap.clear();
+        qDeleteAll(loglevelMap); // delete LoglevelDef memory in map values
+        loglevelMap.clear();
         delete logThread;
         logThread = nullptr;
     }
@@ -720,7 +739,7 @@ void loggingDeregisterThread(void)
 /// \return Syslog facility as enumerated type.  Negative if not found.
 int syslogGetFacility([[maybe_unused]] const QString& facility)
 {
-#ifdef _WIN32
+#ifdef Q_OS_WINDOWS
     LOG(VB_GENERAL, LOG_NOTICE,
         "Windows does not support syslog, disabling" );
     return( -2 );
@@ -827,7 +846,9 @@ void verboseInit(void)
 {
     QMutexLocker locker(&verboseMapMutex);
     QMutexLocker locker2(&loglevelMapMutex);
+    qDeleteAll(verboseMap);  // delete VerboseDef memory in map values
     verboseMap.clear();
+    qDeleteAll(loglevelMap); // delete LoglevelDef memory in map values
     loglevelMap.clear();
 
     // This looks funky, so I'll put some explanation here.  The verbosedefs.h
@@ -863,10 +884,10 @@ void verboseHelp(void)
         if (item->helpText.isEmpty())
             continue;
         std::cerr << name.toLocal8Bit().constData() << " - "
-                  << item->helpText.toLocal8Bit().constData() << std::endl;
+                  << item->helpText.toLocal8Bit().constData() << '\n';
     }
 
-    std::cerr << std::endl <<
+    std::cerr << '\n' <<
       "The default for this program appears to be: '-v " <<
       m_verbose.toLocal8Bit().constData() << "'\n\n"
       "Most options are additive except for 'none' and 'all'.\n"
@@ -885,7 +906,7 @@ void verboseHelp(void)
          << "to the component.\n"
          << "    For example: -v gui:debug,channel:notice,record\n\n";
 
-    std::cerr << "Some debug levels may not apply to this program.\n" << std::endl;
+    std::cerr << "Some debug levels may not apply to this program.\n\n";
 }
 
 /// \brief  Parse the --verbose commandline argument and set the verbose level
@@ -996,7 +1017,7 @@ int verboseArgParse(const QString& arg)
             else
             {
                 std::cerr << "Unknown argument for -v/--verbose: " <<
-                        option.toLocal8Bit().constData() << std::endl;;
+                        option.toLocal8Bit().constData() << '\n';
                 return GENERIC_EXIT_INVALID_CMDLINE;
             }
         }
@@ -1021,7 +1042,4 @@ QString logStrerror(int errnum)
     return QString("%1 (%2)").arg(strerror(errnum)).arg(errnum);
 }
 
-
-/*
- * vim:ts=4:sw=4:ai:et:si:sts=4
- */
+#include "moc_logging.cpp"

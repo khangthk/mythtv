@@ -5,7 +5,7 @@
 #include <QCoreApplication>
 
 #include "mythtvexp.h"
-#include "libmyth/standardsettings.h"
+#include "libmythui/standardsettings.h"
 
 class ProfileGroup;
 
@@ -21,8 +21,11 @@ class ProfileGroupStorage : public SimpleDBStorage
     {
     }
 
+  protected:
     QString GetSetClause(MSqlBindings &bindings) const override; // SimpleDBStorage
     QString GetWhereClause(MSqlBindings &bindings) const override; // SimpleDBStorage
+
+  private:
     const ProfileGroup& m_parent;
 };
 
@@ -50,6 +53,11 @@ class ProfileGroup : public GroupSetting
             setVisible(false);
         }
 
+        ~Is_default() override
+        {
+            delete GetStorage();
+        }
+
         void edit(MythScreenType * /*screen*/) override { } // StandardSetting
         void resultEdit(DialogCompletionEvent * /*dce*/) override { } // StandardSetting
     };
@@ -62,6 +70,11 @@ class ProfileGroup : public GroupSetting
         {
             setLabel(QObject::tr("Profile Group Name"));
         }
+
+        ~Name() override
+        {
+            delete GetStorage();
+        }
     };
 
     class HostName : public MythUIComboBoxSetting
@@ -72,6 +85,11 @@ class ProfileGroup : public GroupSetting
                                                           "hostname"))
         {
             setLabel(QObject::tr("Hostname"));
+        }
+
+        ~HostName() override
+        {
+            delete GetStorage();
         }
         void fillSelections();
     };
@@ -84,6 +102,11 @@ class ProfileGroup : public GroupSetting
                                                           "cardtype"))
         {
             setLabel(QObject::tr("Card-Type"));
+        }
+
+        ~CardInfo() override
+        {
+            delete GetStorage();
         }
     };
 

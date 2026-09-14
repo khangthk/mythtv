@@ -1,4 +1,5 @@
 // MythTV
+#include "libmythbase/mythconfig.h"
 #include "mythutilscocoa.h"
 
 // OSX
@@ -6,13 +7,13 @@
 #import <IOKit/graphics/IOGraphicsLib.h>
 #include <AvailabilityMacros.h>
 
-// kIOMasterPortDefault was deprecated in OS_X 12
-// kIOMainPortDefault defaults to a main/master port value of 0
-static constexpr int8_t kMythIOMainPortDefault { 0 };
+#if !HAVE_IOMAINPORT
+#define kIOMainPortDefault kIOMasterPortDefault
+#endif
 
 CGDirectDisplayID GetOSXCocoaDisplay(void* View)
 {
-    NSView *thisview = static_cast<NSView *>(View);
+    auto* thisview = static_cast<NSView *>(View);
     if (!thisview)
         return 0;
     NSScreen *screen = [[thisview window] screen];
@@ -26,7 +27,7 @@ static Boolean CFNumberEqualsUInt32(CFNumberRef Number, uint32_t Uint32)
 {
     if (Number == nullptr)
         return (Uint32 == 0);
-    int64_t Int64;
+    int64_t Int64 = 0;
     if (!CFNumberGetValue(Number, kCFNumberSInt64Type, &Int64))
         return false;
     return Int64 == Uint32;
@@ -43,23 +44,23 @@ QByteArray GetOSXEDID(CGDirectDisplayID Display)
     uint32_t serial = CGDisplaySerialNumber(Display);
     CFMutableDictionaryRef matching = IOServiceMatching("IODisplayConnect");
 
-    io_iterator_t iter;
-    if (IOServiceGetMatchingServices(kMythIOMainPortDefault, matching, &iter))
+    io_iterator_t iter = 0;
+    if (IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iter))
       return result;
 
     io_service_t service = 0;
     while ((service = IOIteratorNext(iter)) != 0)
     {
         CFDictionaryRef info     = IODisplayCreateInfoDictionary(service, kIODisplayOnlyPreferredName);
-        CFNumberRef vendorID     = static_cast<CFNumberRef>(CFDictionaryGetValue(info, CFSTR(kDisplayVendorID)));
-        CFNumberRef productID    = static_cast<CFNumberRef>(CFDictionaryGetValue(info, CFSTR(kDisplayProductID)));
-        CFNumberRef serialNumber = static_cast<CFNumberRef>(CFDictionaryGetValue(info, CFSTR(kDisplaySerialNumber)));
+        const auto *vendorID     = static_cast<CFNumberRef>(CFDictionaryGetValue(info, CFSTR(kDisplayVendorID)));
+        const auto *productID    = static_cast<CFNumberRef>(CFDictionaryGetValue(info, CFSTR(kDisplayProductID)));
+        const auto *serialNumber = static_cast<CFNumberRef>(CFDictionaryGetValue(info, CFSTR(kDisplaySerialNumber)));
 
         if (CFNumberEqualsUInt32(vendorID, vendor) &&
             CFNumberEqualsUInt32(productID, model) &&
             CFNumberEqualsUInt32(serialNumber, serial))
         {
-            CFDataRef edid = static_cast<CFDataRef>(CFDictionaryGetValue(info, CFSTR(kIODisplayEDIDKey)));
+            const auto *edid = static_cast<CFDataRef>(CFDictionaryGetValue(info, CFSTR(kIODisplayEDIDKey)));
             if (edid)
             {
                 const char* data = reinterpret_cast<const char*>(CFDataGetBytePtr(edid));

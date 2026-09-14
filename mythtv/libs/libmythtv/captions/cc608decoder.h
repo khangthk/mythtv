@@ -4,7 +4,6 @@
 #define CCDECODER_H_
 
 #include <cstdint>
-#include <ctime>
 
 #include <array>
 #include <vector>
@@ -13,8 +12,49 @@
 #include <QRecursiveMutex>
 #include <QChar>
 
-#include "libmythtv/format.h"
 #include "libmythbase/mythchrono.h"
+
+struct teletextsubtitle
+{
+    unsigned char row;
+    unsigned char col;
+    unsigned char dbl;
+    unsigned char fg;
+    unsigned char bg;
+    unsigned char len;
+};
+
+struct ccsubtitle
+{
+    unsigned char row;
+    unsigned char rowcount;
+    unsigned char resumedirect;
+    unsigned char resumetext;
+    unsigned char clr; // clear the display
+    unsigned char len; //length of string to follow
+};
+
+// resumedirect codes
+enum CC_STYLE : std::uint8_t {
+    CC_STYLE_POPUP  = 0x00,
+    CC_STYLE_PAINT  = 0x01,
+    CC_STYLE_ROLLUP = 0x02,
+};
+
+// resumetext special codes
+static constexpr uint8_t CC_LINE_CONT  { 0x02 };
+static constexpr uint8_t CC_MODE_MASK  { 0xf0 };
+static constexpr uint8_t CC_TXT_MASK   { 0x20 };
+enum CC_MODE : std::uint8_t {
+    CC_CC1  = 0x00,
+    CC_CC2  = 0x10,
+    CC_TXT1 = 0x20,
+    CC_TXT2 = 0x30,
+    CC_CC3  = 0x40,
+    CC_CC4  = 0x50,
+    CC_TXT3 = 0x60,
+    CC_TXT4 = 0x70,
+};
 
 using CC608Seen        = std::array<bool,4>;
 using CC608ProgramType = std::array<QString,96>;
@@ -27,7 +67,7 @@ class CC608Input
 {
   public:
     virtual ~CC608Input() = default;
-    virtual void AddTextData(unsigned char *buf, int len,
+    virtual void AddTextData(unsigned char *buf, size_t len,
                              std::chrono::milliseconds timecode, char type) = 0;
 };
 
@@ -55,7 +95,7 @@ class CC608Decoder
 
     void FormatCC(std::chrono::milliseconds tc, int code1, int code2);
     void FormatCCField(std::chrono::milliseconds tc, size_t field, int data);
-    bool FalseDup(std::chrono::milliseconds tc, int field, int data);
+    bool FalseDup(std::chrono::milliseconds tc, size_t field, int data);
 
     void DecodeVPS(const unsigned char *buf);
     void DecodeWSS(const unsigned char *buf);
@@ -77,12 +117,14 @@ class CC608Decoder
   private:
     QChar CharCC(int code) const { return m_stdChar[code]; }
     void ResetCC(size_t mode);
-    void BufferCC(size_t mode, int len, int clr);
-    int NewRowCC(size_t mode, int len);
+    void BufferCC(size_t mode, size_t len, int clr);
+    size_t NewRowCC(size_t mode, size_t len);
 
+    void FormatTextCode(std::chrono::milliseconds tc, size_t field, size_t mode, size_t len, int b1, int b2);
+    void FormatControlCode(std::chrono::milliseconds tc, size_t field, int b1, int b2);
     QString XDSDecodeString(const std::vector<unsigned char>&buf,
                             uint start, uint end) const;
-    bool XDSDecode(int field, int b1, int b2);
+    bool XDSDecode(size_t field, int b1, int b2);
 
     bool XDSPacketParseProgram(const std::vector<unsigned char> &xds_buf,
                                bool future);

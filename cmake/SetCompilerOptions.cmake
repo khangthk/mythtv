@@ -5,6 +5,55 @@
 #
 
 #
+# Test for required minimum compiler versions.
+#
+get_cmake_property(_ENABLED_LANGUAGES ENABLED_LANGUAGES)
+if("CXX" IN_LIST _ENABLED_LANGUAGES)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 8.0.0)
+      message(FATAL_ERROR "GCC version 8 or better required.")
+    endif()
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 11.0.0)
+      message(FATAL_ERROR "Clang version 11 or better required.")
+    endif()
+  else()
+    message(FATAL_ERROR "Unknown compiler.")
+  endif()
+endif()
+
+#
+# Require the C++17 standard as a minimum, and disable compiler
+# extensions.
+#
+set(_CXX_MINIMUM 20)
+if(DEFINED CMAKE_CXX_STANDARD)
+  if (CMAKE_CXX_STANDARD LESS ${_CXX_MINIMUM})
+    message(FATAL_ERROR "C++${_CXX_MINIMUM} or better required.")
+  endif()
+else()
+  set(CMAKE_CXX_STANDARD ${_CXX_MINIMUM})
+endif()
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Require the C17 standard as a minimum, and disable compiler
+# extensions.
+set(_C_MINIMUM 17)
+if(DEFINED CMAKE_C_STANDARD)
+  if (CMAKE_C_STANDARD LESS ${_C_MINIMUM})
+    message(FATAL_ERROR "C${_C_MINIMUM} or better required.")
+  endif()
+else()
+  set(CMAKE_C_STANDARD ${_C_MINIMUM})
+endif()
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
+
+# This is propagated to sub-projects, so only needs to be included for the
+# top level project
+include(CompilerCaching OPTIONAL)
+#
 # Load needed functions
 #
 include(CheckCCompilerFlag)
@@ -24,7 +73,28 @@ endif()
 #
 # Always use position independent code.
 #
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+# CMake always creates libraries using PIC.  According to the
+# documentation, the following will create position independent code
+# for executables, but cmake insists on doing this by setting "-pie
+# -fPIE" instead of setting "-fPIC".  That doesn't fix the problem
+# with Qt6 builds and protected symbols, and in fact makes it worse.
+# The solution to force cmake to set "-fPIC" instead of "-pie -fPIE"
+# on executables by manually updating the linker flags.
+#
+# set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+# include(CheckPIESupported)
+# check_pie_supported()
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fPIC")
+
+#
+# Add additional build specific compiler options.
+#
+if(CMAKE_BUILD_TYPE MATCHES "([A-Za-z])(.*)")
+  string(TOUPPER ${CMAKE_MATCH_1} _INIT)
+  string(TOLOWER ${CMAKE_MATCH_2} _REST)
+  include(SetCompilerOptions${_INIT}${_REST} OPTIONAL)
+endif()
+
 
 #
 # Always used flags
@@ -32,106 +102,102 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 list(
   APPEND
   CFLAGS
+  -fdiagnostics-color=auto
   -fno-math-errno
   -fno-signed-zeros
+  -fno-tree-vectorize
+  -mstack-alignment=16
+  -D_FILE_OFFSET_BITS=64
+  -D_GNU_SOURCE
+  -D_DEFAULT_SOURCE
   -Wall
-  -Wcast-qual
-  -Wdeclaration-after-statement
   -Wextra
-  -Wno-pointer-to-int-cast
-  -Wpedantic
+  -Wduplicated-branches
+  -Wduplicated-cond
+  -Werror=format-security
+  -Werror=implicit-function-declaration
+  -Werror=return-type
+  -Wjump-misses-init
+  -Wlogical-op
+  -Wnull-dereference
   -Wpointer-arith
-  -Wredundant-decls
-  -Wredundant-decls
-  -Wstrict-prototypes
-  -Wundef
   -Wwrite-strings)
 
 list(
   APPEND
   CXXFLAGS
+  -faligned-new
+  -fdiagnostics-color=auto
   -fno-math-errno
   -fno-signed-zeros
+  -fno-tree-vectorize
+  -funit-at-a-time
+  -mstack-alignment=16
+  -D_FILE_OFFSET_BITS=64
+  -D_GNU_SOURCE
+  -D_DEFAULT_SOURCE
+  -Qunused-arguments
   -Wall
   -Wextra
+  # -Wdouble-promotion
+  -Wduplicated-cond
+  -Werror=format-security
+  -Werror=implicit-function-declaration
+  -Werror=return-type
+  -Werror=undef
+  -Werror=vla
+  -Wimplicit-fallthrough
+  -Wjump-misses-init
+  -Wlogical-op
+  -Wmissing-declarations
+  -Wnull-dereference
+  -Woverloaded-virtual
   -Wpointer-arith
-  -Wundef)
+  -Wredundant-decls
+  -Wsuggest-override
+  # -Wall flags to disable
+  -Wno-unknown-pragmas # gcc doesn't recognize clang pragmas
+)
 
-if(ENABLE_LTO AND NOT CMAKE_CROSSCOMPILING)
-  list(APPEND CFLAGS -flto)
-  list(APPEND CXXFLAGS -flto)
-  list(APPEND LFLAGS -flto)
-endif()
-
+#
+# Add platform specific flags.
+#
 if(NOT ANDROID)
   list(APPEND CXXFLAGS "-Wshadow")
+  list(APPEND CFLAGS "-Wshadow")
 endif()
 
-if(NOT CMAKE_SYSTEM_NAME MATCHES "Darwin")
-  list(APPEND CFLAGS -Wmissing-prototypes -Werror=missing-prototypes)
+#
+# Add processor specific flags.
+#
+if(CMAKE_SYSTEM_PROCESSOR STREQUAL "i686")
+  list(APPEND CXXFLAGS "-msse")
+  list(APPEND CFLAGS "-msse")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "ppc|powerpc")
+  if(ENABLE_ALTIVEC)
+    list(APPEND CFLAGS -maltivec -mabi=altivec)
+  endif()
 endif()
 
 #
 # Add compiler specific flags.
 #
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-  list(
-    APPEND
-    CFLAGS
-    -fdiagnostics-color=auto
-    -fno-tree-vectorize
-    -Wdouble-promotion
-    -Wduplicated-cond
-    -Wduplicated-branches
-    -Werror=format-security
-    -Werror=implicit-function-declaration
-    -Werror=return-type
-    -Werror=vla
-    -Wjump-misses-init
-    -Wlogical-op
-    -Wnull-dereference)
-
-  list(
-    APPEND
-    CXXFLAGS
-    -faligned-new
-    -funit-at-a-time
-    -Wdouble-promotion
-    -Wduplicated-cond
-    -Wlogical-op
-    -Wmissing-declarations
-    -Wnull-dereference
-    -Woverloaded-virtual
-    -Wzero-as-null-pointer-constant)
+  # This warning prevents comparison of tthe C++20 spaceship operator
+  # to the literal value 0.
+  # list(APPEND CXXFLAGS -Wzero-as-null-pointer-constant)
 
   # This warning flag isn't enabled yet because it will require a large number
   # of changes to the code to eliminate all the warnings.
-  # add_compile_options($<${gnu_cxx}:$<BUILD_INTERFACE:-Wold-style-cast>>)
+  #
+  # list(APPEND CXXFLAGS -Wold-style-cast)
 
   # This warning flag can't be enabled because the Qt5 moc compiler produces
   # files that contain "useless" casts.
-  # add_compile_options($<${gnu_cxx}:$<BUILD_INTERFACE:-Wuseless-cast>>)
-
-  # The Q_OBJECT macro gets included in every subclass that is based on QOBject,
-  # and has a couple of functions marked as "virtual" instead of "override".
-  # Apparently earlier version of GCC didn't warn about this because the errors
-  # were in the /usr/include directory. GCC11 does print these warnings. A ton
-  # of them. Disable this warning to make it easier to find real errors.
-  if(CXX_COMPILER_VERSION VERSION_LESS 11.0.0)
-    list(APPEND CXXFLAGS -Wsuggest-override)
-  endif()
+  #
+  # list(APPEND CXXFLAGS -Wuseless-cast)
 
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-
-  list(
-    APPEND
-    CFLAGS
-    -mllvm
-    -mstack-alignment=16
-    -Qunused-arguments
-    -Werror=implicit-function-declaration
-    -Werror=return-type
-    -Wimplicit-fallthrough)
 
   # The constant-logical-operand only gives use false positives for constant
   # logical operands meant to be optimized away.
@@ -142,31 +208,78 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   # lets rely on other compilers to report on unused values.
   list(APPEND CXXFLAGS -Wno-unused-value)
 
-  # clang complains about every unused -I unless you pass it this.
-  list(APPEND CXXFLAGS -Qunused-arguments)
-
   # Clang on FreeBSD doesn't ignore warnings in system headers. A trivial test
   # shows that Clang defaults /usr/local/include to a system directory, but
   # somehow this gets messed up in MythTV builds.
   #
   # Clang on MacOSX also doesn't ignore warnings in system headers.
   if(NOT CMAKE_SYSTEM_NAME MATCHES "(FreeBSD|Darwin)")
-    list(APPEND CXXFLAGS -Wzero-as-null-pointer-constant)
+    # This warning prevents comparison of tthe C++20 spaceship operator
+    # to the literal value 0.
+   # list(APPEND CXXFLAGS -Wzero-as-null-pointer-constant)
   endif()
 
+endif()
+
+# Setting ENABLE_VALGRIND=ON does NOT mean that we're going to pull Valgrind
+# into MythTv. It means that we're going to make a few small changes to
+# MythTv apps which will make them easier to test with a tool like Valgrind.
+# Even with these changes, apps run 10 - 50 times slower under Valgrind.
+if(ENABLE_VALGRIND)
+    add_compile_definitions(CONFIG_VALGRIND=1)
+    # Disabling frame pointer omission makes it
+    # easier to understand reported call stacks.
+    if(MSVC)
+        add_compile_options(/Oy-)
+    else()
+        add_compile_options(-fno-omit-frame-pointer)
+    endif()
+endif()
+
+# Set ENABLE_ASAN=ON to build the apps with Address Sanitizer. Upon exit,
+# they will report memory corruption issues by printing to stdout. The
+# added memory tracking will cause the apps to run 1.5 - 2 times slower.
+if(ENABLE_ASAN)
+    if(MSVC)
+        add_compile_options(/fsanitize=address /Oy-)
+    else()
+        add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=address)
+    endif()
+endif()
+
+# Set ENABLE_TSAN=ON to build the apps with Thread Sanitizer. Upon exit,
+# they will report data race issues by printing to stdout. The added
+# memory tracking will cause the apps to run 5 - 10 times slower.
+if(ENABLE_TSAN)
+    if(MSVC)
+        add_compile_options(/fsanitize=thread /Oy-)
+    else()
+        add_compile_options(-fsanitize=thread -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=thread)
+    endif()
+endif()
+
+#
+# Check for Interprocedural Optimization, aka Link Time Optimization.
+#
+include(CheckIPOSupported)
+check_ipo_supported(RESULT has_ipo)
+if(ENABLE_LTO AND has_ipo AND NOT CMAKE_CROSSCOMPILING)
+  message(STATUS "Enabling link-time optimization.")
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 endif()
 
 #
 # Now test each flag and see if its valid.
 #
-get_cmake_property(_ENABLED_LANGUAGES ENABLED_LANGUAGES)
 list(FIND _ENABLED_LANGUAGES "C" _ENABLED_C)
 if(NOT _ENABLED_C EQUAL -1)
   foreach(_FLAG IN LISTS CFLAGS)
     string(SUBSTRING ${_FLAG} 1 -1 _NAME)
     check_c_compiler_flag("${_FLAG}" HAVE_C_${_NAME})
-    if(HAVE_C_${_FLAG}_NAME)
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${_FLAG}}")
+    if(HAVE_C_${_NAME})
+      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${_FLAG}")
     endif()
   endforeach()
 
@@ -186,8 +299,8 @@ if(NOT _ENABLED_CXX EQUAL -1)
   foreach(_FLAG IN LISTS CXXFLAGS)
     string(SUBSTRING ${_FLAG} 1 -1 _NAME)
     check_cxx_compiler_flag("${_FLAG}" HAVE_CXX_${_NAME})
-    if(HAVE_CXX_${_FLAG}_NAME)
-      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${_FLAG}}")
+    if(HAVE_CXX_${_NAME})
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${_FLAG}")
     endif()
   endforeach()
 
@@ -201,6 +314,11 @@ if(NOT _ENABLED_CXX EQUAL -1)
     endif()
   endforeach()
 endif()
+
+#
+# Add flags for profiling
+#
+include(SetCompilerOptionsCoverage)
 
 list(REMOVE_DUPLICATES CMAKE_C_FLAGS)
 list(REMOVE_DUPLICATES CMAKE_CXX_FLAGS)

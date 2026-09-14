@@ -1,5 +1,3 @@
-// MythTV
-#include "libmythbase/mythlogging.h"
 #include "platforms/mythscreensaverdrm.h"
 
 #define LOC QString("ScreenSaverDRM: ")
@@ -24,7 +22,7 @@ MythScreenSaverDRM* MythScreenSaverDRM::Create(QObject *Parent, MythDisplay* mDi
 */
 MythScreenSaverDRM::MythScreenSaverDRM(QObject* Parent, MythDisplay *mDisplay)
   : MythScreenSaver(Parent),
-    m_display(dynamic_cast<MythDisplayDRM*>(mDisplay))
+    m_display(qobject_cast<MythDisplayDRM*>(mDisplay))
 {
     m_valid = m_display != nullptr;
 }
@@ -46,3 +44,5 @@ bool MythScreenSaverDRM::Asleep()
 {
     return false;
 }
+
+#include "moc_mythscreensaverdrm.cpp"

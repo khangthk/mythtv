@@ -17,9 +17,11 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
+#ifndef MYTHBACKEND_TEST_RECORDINGEXTENDER_H
+#define MYTHBACKEND_TEST_RECORDINGEXTENDER_H
 
 #include <QTest>
-#include <iostream>
+
 #include "recordingextender.h"
 
 class TestRecordingExtender : public RecordingExtender
@@ -27,6 +29,7 @@ class TestRecordingExtender : public RecordingExtender
     Q_OBJECT
 
   public:
+    TestRecordingExtender();
     QDateTime getNow() {return m_nowForTest; }
 
   private:
@@ -63,6 +66,7 @@ class TestRecordingExtender : public RecordingExtender
 
 class TestRecExtEspnDataSource : public RecExtEspnDataSource
 {
+    Q_OBJECT
   public:
     TestRecExtEspnDataSource(QObject *parent) :
       RecExtEspnDataSource(parent) {};
@@ -70,35 +74,40 @@ class TestRecExtEspnDataSource : public RecExtEspnDataSource
     QUrl makeInfoUrl(const SportInfo& info, const QDateTime& dt) override;
     QUrl makeGameUrl(const ActiveGame& game, const QString& str) override;
     QDateTime getNow()
-        {return static_cast<TestRecordingExtender*>(parent())->getNow(); }
+        {return qobject_cast<TestRecordingExtender*>(parent())->getNow(); }
 };
 
 class TestRecExtEspnDataPage : public RecExtEspnDataPage
 {
+    Q_OBJECT
   public:
     TestRecExtEspnDataPage(RecExtDataSource* parent, QJsonDocument doc) :
         RecExtEspnDataPage(parent, std::move(doc)) {}
     QDateTime getNow() override
-        {return static_cast<TestRecExtEspnDataSource*>(parent())->getNow(); }
+        {return qobject_cast<TestRecExtEspnDataSource*>(parent())->getNow(); }
 };
 
 //////////////////////////////////////////////////
 
 class TestRecExtMlbDataSource : public RecExtMlbDataSource
 {
+    Q_OBJECT
   public:
     TestRecExtMlbDataSource(QObject *parent) :
       RecExtMlbDataSource(parent) {};
     RecExtDataPage* newPage(const QJsonDocument& doc) override;
     QDateTime getNow()
-        {return static_cast<TestRecordingExtender*>(parent())->getNow(); }
+        {return qobject_cast<TestRecordingExtender*>(parent())->getNow(); }
 };
 
 class TestRecExtMlbDataPage : public RecExtMlbDataPage
 {
+    Q_OBJECT
   public:
     TestRecExtMlbDataPage(RecExtDataSource* parent, QJsonDocument doc) :
         RecExtMlbDataPage(parent, std::move(doc)) {}
     QDateTime getNow() override
-        {return static_cast<TestRecExtMlbDataSource*>(parent())->getNow(); }
+        {return qobject_cast<TestRecExtMlbDataSource*>(parent())->getNow(); }
 };
+
+#endif // MYTHBACKEND_TEST_RECORDINGEXTENDER_H

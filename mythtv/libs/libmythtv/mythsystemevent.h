@@ -4,8 +4,8 @@
 #include <QEvent>
 #include <QObject>
 
-#include "libmythbase/programinfo.h"
-#include "libmyth/rawsettingseditor.h"
+#include "libmythui/rawsettingseditor.h"
+#include "programinfo.h"
 #include "recordinginfo.h"
 
 // Helper commands for formatting and sending a MythSystemEvent
@@ -37,6 +37,7 @@ class MTV_PUBLIC MythSystemEventHandler : public QObject
     static void SubstituteMatches(const QStringList &tokens, QString &command);
     static QString EventNameToSetting(const QString &name);
 
+  protected:
     // Custom Event Handler
     void customEvent(QEvent *e) override; // QObject
 };

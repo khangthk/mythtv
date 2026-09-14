@@ -25,6 +25,7 @@
 #include "libavutil/intreadwrite.h"
 
 #include "avcodec.h"
+#include "parser_internal.h"
 
 /* Parser (mostly) copied from dvdsub.c */
 
@@ -124,11 +125,7 @@ static int dvbsub_parse(AVCodecParserContext *s,
             {
                 len = AV_RB16(p + 4);
 
-                // MythTV #5978 "<=" -> "<"
-                // This is unresolved ffmpeg issue 378, use
-                // their solution if/when this is fixed upstream.
-                //if (len + 6 <= p_end - p)
-                if (len + 6 < p_end - p)
+                if (len + 6 <= p_end - p)
                 {
                     out_size += len + 6;
 
@@ -167,8 +164,8 @@ static int dvbsub_parse(AVCodecParserContext *s,
     return buf_size;
 }
 
-const AVCodecParser ff_dvbsub_parser = {
-    .codec_ids      = { AV_CODEC_ID_DVB_SUBTITLE },
+const FFCodecParser ff_dvbsub_parser = {
+    PARSER_CODEC_LIST(AV_CODEC_ID_DVB_SUBTITLE),
     .priv_data_size = sizeof(DVBSubParseContext),
-    .parser_parse   = dvbsub_parse,
+    .parse          = dvbsub_parse,
 };

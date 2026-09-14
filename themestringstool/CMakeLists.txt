@@ -5,10 +5,17 @@
 #
 
 #
-# Can use cmake features introduced in 3.16.  Super-project has already
+# Catch running cmake in the wrong directory.
+#
+if(NOT SUPER_VERSION)
+  message(FATAL_ERROR "You must run cmake from the parent of this directory.")
+endif()
+
+#
+# Can use cmake features introduced in 3.20.  Super-project has already
 # validated the higher version required for android.
 #
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.20)
 
 #
 # Validate parameters
@@ -33,8 +40,6 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 #
 # Set CMake features
 #
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(SetCmakePolicies NO_POLICY_SCOPE)
 set(CMAKE_AUTOMOC ON)
 
@@ -66,9 +71,11 @@ include(SetSearchPaths)
 include(SetCompilerOptions)
 include(MythFindQt)
 
-add_executable(themestringtool themestrings.cpp)
+add_executable(themestrings themestrings.cpp)
 
 target_link_libraries(
-  themestringtool
+  themestrings
   PUBLIC Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Widgets
          Qt${QT_VERSION_MAJOR}::Xml)
+
+install(TARGETS themestrings RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

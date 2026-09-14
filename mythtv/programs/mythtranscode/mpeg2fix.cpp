@@ -13,15 +13,18 @@
 #include <utility>
 
 // Qt headers
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QFileInfo>
 #include <QList>
 #include <QMap>
 #include <QQueue>
 
 // MythTV headers
-#include "libmythbase/mythconfig.h"
-
 #include "libmythbase/mthread.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythlogging.h"
 
@@ -35,7 +38,7 @@ extern "C" {
 // MythTranscode
 #include "mpeg2fix.h"
 
-#ifdef _WIN32
+#ifdef Q_OS_WINDOWS
 #include <winsock2.h>
 #else
 #include <netinet/in.h>
@@ -44,19 +47,6 @@ extern "C" {
 #ifndef O_LARGEFILE
 #define O_LARGEFILE 0
 #endif
-
-static void *my_malloc(unsigned size, [[maybe_unused]] mpeg2_alloc_t reason)
-{
-    if (size)
-    {
-#ifdef _WIN32
-        return _aligned_malloc( 64, size );
-#else
-        return aligned_alloc( 64, size );
-#endif
-    }
-    return nullptr;
-}
 
 static void my_av_print([[maybe_unused]] void *ptr,
                         int level, const char* fmt, va_list vl)
@@ -139,7 +129,10 @@ PTSOffsetQueue::PTSOffsetQueue(int vidid, QList<int> keys, int64_t initPTS)
     idx.type = false;
 
     for (const int key : std::as_const(m_keyList))
+    {
+        // clazy:exclude-next-line=reserve-candidates - no QMap::reserve
         m_offset[key].push_back(idx);
+    }
 }
 
 int64_t PTSOffsetQueue::Get(int idx, AVPacket *pkt)
@@ -225,7 +218,7 @@ int64_t PTSOffsetQueue::UpdateOrigPTS(int idx, int64_t &origPTS, AVPacket *pkt)
             QString("Moving PTS offset of stream %1 by %2")
                 .arg(idx).arg(PtsTime(delta)));
     }
-    return (delta);
+    return delta;
 }
 
 MPEG2fixup::MPEG2fixup(const QString &inf, const QString &outf,
@@ -266,7 +259,6 @@ MPEG2fixup::MPEG2fixup(const QString &inf, const QString &outf,
         m_useSecondary = true;
     }
 
-    mpeg2_malloc_hooks(my_malloc, nullptr);
     m_headerDecoder = mpeg2_init();
     m_imgDecoder = mpeg2_init();
 
@@ -598,9 +590,13 @@ void MPEG2fixup::InitReplex()
     {
         LOG(VB_GENERAL, LOG_NOTICE, "MPEG2fixup::InitReplex(): High Definition input, increasing replex buffers");
         if (m_rx.m_otype == REPLEX_MPEG2)
+        {
             m_rx.m_otype = REPLEX_HDTV;
+        }
         else if (m_rx.m_otype == REPLEX_TS_SD)
+        {
             m_rx.m_otype = REPLEX_TS_HD;
+        }
         else
         {
             LOG(VB_GENERAL, LOG_WARNING, "MPEG2fixup::InitReplex(): Using '--ostream=dvd' with HD video is an invalid combination");
@@ -808,24 +804,6 @@ bool MPEG2fixup::InitAV(const QString& inputfile, const char *type, int64_t offs
         LOG(VB_GENERAL, LOG_ERR,
             QString("Couldn't open input file, error #%1").arg(ret));
         return false;
-    }
-
-    if (m_inputFC->iformat && strcmp(m_inputFC->iformat->name, "mpegts") == 0 &&
-        gCoreContext->GetBoolSetting("FFMPEGTS", false))
-    {
-        fmt = av_find_input_format("mpegts-ffmpeg");
-        if (fmt)
-        {
-            LOG(VB_PLAYBACK, LOG_INFO, "Using FFmpeg MPEG-TS demuxer (forced)");
-            avformat_close_input(&m_inputFC);
-            ret = avformat_open_input(&m_inputFC, ifname, fmt, nullptr);
-            if (ret)
-            {
-                LOG(VB_GENERAL, LOG_ERR,
-                    QString("Couldn't open input file, error #%1").arg(ret));
-                return false;
-            }
-        }
     }
 
     m_mkvFile = m_inputFC->iformat && strcmp(m_inputFC->iformat->name, "mkv") == 0;
@@ -1104,6 +1082,10 @@ void MPEG2fixup::WriteYUV(const QString& filename, const mpeg2_info_t *info)
         return;
     }
 
+    // Automatically close file at function exit
+    auto close_fh = [](const int *fh2) { close(*fh2); };
+    std::unique_ptr<int,decltype(close_fh)> cleanup { &fh, close_fh };
+
     ssize_t ret = write(fh, info->display_fbuf->buf[0],
 		       static_cast<size_t>(info->sequence->width) *
 		       static_cast<size_t>(info->sequence->height));
@@ -1111,7 +1093,7 @@ void MPEG2fixup::WriteYUV(const QString& filename, const mpeg2_info_t *info)
     {
         LOG(VB_GENERAL, LOG_ERR, QString("write failed %1: ").arg(filename) +
                 ENO);
-        goto closefd;
+        return;
     }
     ret = write(fh, info->display_fbuf->buf[1],
                 static_cast<size_t>(info->sequence->chroma_width) *
@@ -1120,7 +1102,7 @@ void MPEG2fixup::WriteYUV(const QString& filename, const mpeg2_info_t *info)
     {
         LOG(VB_GENERAL, LOG_ERR, QString("write failed %1: ").arg(filename) +
                 ENO);
-        goto closefd;
+        return;
     }
     ret = write(fh, info->display_fbuf->buf[2],
                 static_cast<size_t>(info->sequence->chroma_width) *
@@ -1129,10 +1111,8 @@ void MPEG2fixup::WriteYUV(const QString& filename, const mpeg2_info_t *info)
     {
         LOG(VB_GENERAL, LOG_ERR, QString("write failed %1: ").arg(filename) +
                 ENO);
-        goto closefd;
+        return;
     }
-closefd:
-    close(fh);
 }
 
 void MPEG2fixup::WriteData(const QString& filename, uint8_t *data, int size)
@@ -1234,17 +1214,35 @@ bool MPEG2fixup::BuildFrame(AVPacket *pkt, const QString& fname)
 
     if (info->display_picture->nb_fields % 2)
     {
-        m_picture->top_field_first = ((info->display_picture->flags &
-                                       PIC_FLAG_TOP_FIELD_FIRST) != 0) ? 0 : 1;
+        if ((info->display_picture->flags & PIC_FLAG_TOP_FIELD_FIRST) != 0)
+        {
+            m_picture->flags &= ~AV_FRAME_FLAG_TOP_FIELD_FIRST;
+        }
+        else
+        {
+            m_picture->flags |= AV_FRAME_FLAG_TOP_FIELD_FIRST;
+        }
     }
     else
     {
-        m_picture->top_field_first = ((info->display_picture->flags &
-                                       PIC_FLAG_TOP_FIELD_FIRST) != 0) ? 1 : 0;
+        if ((info->display_picture->flags & PIC_FLAG_TOP_FIELD_FIRST) != 0)
+        {
+            m_picture->flags |= AV_FRAME_FLAG_TOP_FIELD_FIRST;
+        }
+        else
+        {
+            m_picture->flags &= ~AV_FRAME_FLAG_TOP_FIELD_FIRST;
+        }
     }
 
-    m_picture->interlaced_frame = ((info->display_picture->flags &
-                                    PIC_FLAG_PROGRESSIVE_FRAME) != 0) ? 0 : 1;
+    if ((info->display_picture->flags & PIC_FLAG_PROGRESSIVE_FRAME) != 0)
+    {
+        m_picture->flags &= ~AV_FRAME_FLAG_INTERLACED;
+    }
+    else
+    {
+        m_picture->flags |= AV_FRAME_FLAG_INTERLACED;
+    }
 
     const AVCodec *out_codec = avcodec_find_encoder(AV_CODEC_ID_MPEG2VIDEO);
     if (!out_codec)
@@ -1259,7 +1257,7 @@ bool MPEG2fixup::BuildFrame(AVPacket *pkt, const QString& fname)
     //sequence->progressive == frame->progressive
     //We fix the discrepancy by discarding avcodec's sequence header, and
     //replace it with the original
-    if (m_picture->interlaced_frame)
+    if ((m_picture->flags & AV_FRAME_FLAG_INTERLACED) != 0)
         c->flags |= AV_CODEC_FLAG_INTERLACED_DCT;
 
     c->bit_rate = info->sequence->byte_rate << 3; //not used
@@ -1289,7 +1287,7 @@ bool MPEG2fixup::BuildFrame(AVPacket *pkt, const QString& fname)
     m_picture->height = info->sequence->height;
     m_picture->format = AV_PIX_FMT_YUV420P;
     m_picture->pts = AV_NOPTS_VALUE;
-    m_picture->key_frame = 1;
+    m_picture->flags |= AV_FRAME_FLAG_KEY;
     m_picture->pict_type = AV_PICTURE_TYPE_NONE;
     m_picture->quality = 0;
 
@@ -1450,7 +1448,7 @@ int MPEG2fixup::GetFrame(AVPacket *pkt)
         if ((m_showProgress || m_updateStatus) &&
             MythDate::current() > m_statusTime)
         {
-            float percent_done = 100.0 * pkt->pos / m_fileSize;
+            float percent_done = 100.0F * pkt->pos / m_fileSize;
             if (m_updateStatus)
                 m_updateStatus(percent_done);
             if (m_showProgress)
@@ -1520,7 +1518,7 @@ bool MPEG2fixup::FindStart()
         return false;
     }
 
-    do
+    while (found.count() != m_aFrame.count())
     {
         if (GetFrame(pkt))
         {
@@ -1637,7 +1635,7 @@ bool MPEG2fixup::FindStart()
                     break;
             }
         }
-    } while (found.count() != m_aFrame.count());
+    }
 
     av_packet_free(&pkt);
     return true;
@@ -2127,6 +2125,12 @@ int MPEG2fixup::Start()
         return GENERIC_EXIT_NOT_OK;
     }
 
+    if (m_inputFC->streams[m_vidId]->codecpar->codec_id != AV_CODEC_ID_MPEG2VIDEO)
+    {
+        LOG(VB_GENERAL, LOG_ERR, "Input video codec is not MPEG-2.");
+        return GENERIC_EXIT_NOT_OK;
+    }
+
     if (!FindStart())
     {
         av_packet_free(&pkt);
@@ -2235,7 +2239,7 @@ int MPEG2fixup::Start()
                 MPEG2frame *markedFrame = nullptr;
                 MPEG2frame *markedFrameP = nullptr;
 
-                if (expectedvPTS != expectedDTS + m_ptsIncrement * 300)
+                if (expectedvPTS != expectedDTS + (m_ptsIncrement * 300))
                 {
                     LOG(VB_GENERAL, LOG_ERR,
                         QString("expectedPTS != expectedDTS + ptsIncrement"));
@@ -2503,6 +2507,12 @@ int MPEG2fixup::Start()
                             return GENERIC_EXIT_WRITE_FRAME_ERROR;
                         }
 
+                        // Target size = current + loop iterations
+                        // Target = Lreorder.count() +
+                        //          (m_vFrame.count() - (frame_pos - Lreorder.count()))
+                        // Target = Lreorder.count() +
+                        //          m_vFrame.count() - frame_pos - Lreorder.count()
+                        Lreorder.reserve(m_vFrame.count() - frame_pos);
                         for (int index = frame_pos + Lreorder.count();
                              ret && index < m_vFrame.count(); index++, --ret)
                         {

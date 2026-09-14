@@ -1,6 +1,23 @@
-// MythTV
-#include "mythvideoout.h"
 #include "opengl/mythvaapiglxinterop.h"
+
+#include "libmythbase/mythconfig.h"
+
+#define Cursor XCursor // Prevent conflicts with Qt6.
+#define pointer Xpointer // Prevent conflicts with Qt6.
+#if defined(_X11_XLIB_H_) && !defined(Bool)
+#define Bool int
+#endif
+#if CONFIG_VAAPI_X11
+#include <va/va_x11.h>
+#endif // CONFIG_VAAPI_X11
+#include <va/va_glx.h>
+#undef None            // X11/X.h defines this. Causes compile failure in Qt6.
+#undef Cursor
+#undef pointer
+#undef Bool            // Interferes with cmake moc file compilation
+
+// MythTV
+#include "libmythbase/mythlogging.h"
 
 #define LOC QString("VAAPIGLX: ")
 
@@ -106,6 +123,7 @@ void MythVAAPIInteropGLX::InitPictureAttributes(MythVideoColourSpace* ColourSpac
     va_status = vaQueryDisplayAttributes(m_vaDisplay, attribs, &actual);
     CHECK_ST;
 
+    supported.reserve(actual);
     for (int i = 0; i < actual; i++)
     {
         int type = attribs[i].type;
@@ -309,6 +327,7 @@ MythVAAPIInteropGLXCopy::Acquire(MythRenderOpenGL* Context,
     return result;
 }
 
+#if CONFIG_VAAPI_X11
 MythVAAPIInteropGLXPixmap::MythVAAPIInteropGLXPixmap(MythPlayerUI* Player, MythRenderOpenGL* Context)
   : MythVAAPIInteropGLX(Player, Context, GL_VAAPIGLXPIX)
 {
@@ -491,3 +510,6 @@ bool MythVAAPIInteropGLXPixmap::IsSupported(MythRenderOpenGL* Context)
     QByteArray extensions(glXQueryExtensionsString(display, screen));
     return extensions.contains("GLX_EXT_texture_from_pixmap");
 }
+#endif // CONFIG_VAAPI_X11
+
+#include "moc_mythvaapiglxinterop.cpp"

@@ -1,11 +1,14 @@
 // std
+#include <algorithm>
 #include <utility>
 
 // Qt
 #include <QPen>
 
 // MythTV
-#include "libmyth/mythcontext.h"
+#include "libmythbase/mythconfig.h"
+#include "libmythbase/mythcorecontext.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythui/opengl/mythrenderopengl.h"
 #include "mythavutil.h"
 #include "opengl/mythopengltonemap.h"
@@ -320,7 +323,7 @@ bool MythOpenGLVideo::CreateVideoShader(VideoShaderType Type, MythDeintType Dein
             glsldefines += QString("#define MYTHTV_%1\n").arg(define);
         fragment = glsldefines + YUVFragmentExtensions + ((BicubicUpsize == Type) ? BicubicShader : RGBFragmentShader);
 
-#ifdef USING_MEDIACODEC
+#if CONFIG_MEDIACODEC
         if (FMT_MEDIACODEC == m_inputType)
             vertex = MediaCodecVertexShader;
 #endif
@@ -361,7 +364,7 @@ bool MythOpenGLVideo::CreateVideoShader(VideoShaderType Type, MythDeintType Dein
             defines << "YUY2";
         }
 
-#ifdef USING_VTB
+#if CONFIG_VIDEOTOOLBOX
         // N.B. Rectangular texture support is only currently used for VideoToolBox
         // video frames which are NV12. Do not use rectangular textures for the 'default'
         // shaders as it breaks video resizing and would require changes to our
@@ -408,6 +411,7 @@ bool MythOpenGLVideo::CreateVideoShader(VideoShaderType Type, MythDeintType Dein
         {
             QString find = QString("s_texture%1").arg(i);
             QStringList replacelist;
+            replacelist.reserve(count);
             for (int j = (i * count); j < ((i + 1) * count); ++j)
                 replacelist << QString("s_texture%1").arg(j);
             fragment.replace(find, replacelist.join(", "));
@@ -422,6 +426,8 @@ bool MythOpenGLVideo::CreateVideoShader(VideoShaderType Type, MythDeintType Dein
                 QString find2 = QString("kernelTex%1").arg(i);
                 QStringList replacelist1;
                 QStringList replacelist2;
+                replacelist1.reserve(count);
+                replacelist2.reserve(count);
                 for (int j = 0; j < count; ++j)
                 {
                     replacelist1 << QString("sampler2D kernelTexture%1%2").arg(i).arg(j);
@@ -721,7 +727,7 @@ void MythOpenGLVideo::RenderFrame(MythVideoFrame* Frame, bool TopFieldFirst, Fra
                 SetupFrameFormat(newsourcetype, newtargettype, newsize, newtargettexture);
             }
 
-#ifdef USING_MEDIACODEC
+#if CONFIG_MEDIACODEC
             // Set the texture transform for mediacodec
             if (FMT_MEDIACODEC == m_inputType)
             {
@@ -1059,7 +1065,7 @@ void MythOpenGLVideo::BindTextures(bool Deinterlacing, std::vector<MythVideoText
         }
     }
 
-    std::transform(Current.cbegin(), Current.cend(), std::back_inserter(Textures),
+    std::ranges::transform(Current, std::back_inserter(Textures),
                    [](MythVideoTextureOpenGL* Tex) { return reinterpret_cast<MythGLTexture*>(Tex); });
 }
 
@@ -1110,3 +1116,5 @@ void MythOpenGLVideo::SetupBicubic(VideoResizing& Resize)
         }
     }
 }
+
+#include "moc_mythopenglvideo.cpp"

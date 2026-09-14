@@ -2,9 +2,12 @@
 #include <QApplication>
 #include <QSqlError>
 #include <QVariant>
+#include <algorithm>
 
 // MythTV headers
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythdb.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythui/mythprogressdialog.h>
 
 // MythWeather headers
@@ -248,6 +251,8 @@ void ScreenSetup::loadData()
 
     ScreenListMap screenListMap = loadScreens();
 
+    QStringList type_strs;
+
     // Fill the inactive screen button list.
     ScreenListMap::const_iterator i = screenListMap.constBegin();
     while (i != screenListMap.constEnd())
@@ -256,7 +261,8 @@ void ScreenSetup::loadData()
         types = si->m_dataTypes;
         si->m_units = ENG_UNITS;
 
-        QStringList type_strs;
+        type_strs.clear();
+        type_strs.reserve(types.size());
         for (const QString& type : std::as_const(types))
         {
             TypeListInfo ti(type);
@@ -312,7 +318,7 @@ void ScreenSetup::loadData()
         TypeListInfo ti(dataitem, location,
                         m_sourceManager->getSourceByName(src));
 
-        if (active_screens.find(draworder) == active_screens.end())
+        if (!active_screens.contains(draworder))
         {
             auto *si = new ScreenListInfo(screenListMap[name]);
             // Clear types first as we will re-insert the values from the database
@@ -481,6 +487,7 @@ void ScreenSetup::doListSelect(MythUIButtonListItem *selected)
     {
         auto *si = selected->GetData().value<ScreenListInfo *>();
         QStringList type_strs;
+        type_strs.reserve(si->m_types.size());
 
         TypeListMap types;
         // NOLINTNEXTLINE(modernize-loop-convert)
@@ -642,7 +649,7 @@ void ScreenSetup::customEvent(QEvent *event)
 
             auto emptyloc = [](const auto & type)
                 { return type.m_location.isEmpty(); };
-            if (std::any_of(si->m_types.cbegin(), si->m_types.cend(), emptyloc))
+            if (std::ranges::any_of(std::as_const(si->m_types), emptyloc))
                 return;
 
             if (si->m_updating)
@@ -844,6 +851,7 @@ LocationDialog::LocationDialog(MythScreenStack *parent, const QString &name,
       m_screenListInfo(new ScreenListInfo(*si)),   m_sourceManager(srcman),
       m_retScreen(retScreen)
 {
+    m_types.reserve(si->m_types.size());
     for (const auto & type : std::as_const(si->m_types))
         m_types << type.m_name;
 }
@@ -1011,3 +1019,5 @@ void LocationDialog::itemClicked(MythUIButtonListItem *item)
 
     Close();
 }
+
+#include "moc_weatherSetup.cpp"

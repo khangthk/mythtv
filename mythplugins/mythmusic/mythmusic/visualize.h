@@ -13,6 +13,7 @@
 #define VISUALIZE_H
 
 // C++ headers
+#include <array>
 #include <vector>
 
 // Qt headers
@@ -20,17 +21,18 @@
 #include <QVector>
 
 // MythTV headers
-#include <libmyth/visual.h>
 #include <libmythmetadata/musicmetadata.h>
 #include <libmythbase/mythbaseexp.h>
+#ifndef __cpp_size_t_suffix
+#include <libmythbase/sizetliteral.h>
+#endif
 
 // MythMusic headers
 #include "constants.h"
 
 #include <complex>
 extern "C" {
-    #include <libavutil/mem.h>
-    #include <libavcodec/avfft.h>
+    #include <libavutil/tx.h>
 }
 
 static constexpr uint16_t SAMPLES_DEFAULT_SIZE { 512 };
@@ -107,8 +109,10 @@ class VisFactory
 };
 
 
-#define RUBBERBAND 0 // NOLINT(cppcoreguidelines-macro-usage)
-#define TWOCOLOUR 1 // NOLINT(cppcoreguidelines-macro-usage)
+// NOLINTBEGIN(cppcoreguidelines-macro-usage,modernize-macro-to-enum)
+#define RUBBERBAND 0
+#define TWOCOLOUR 1
+// NOLINTEND(cppcoreguidelines-macro-usage,modernize-macro-to-enum)
 
 class StereoScope : public VisualBase
 {
@@ -253,12 +257,22 @@ class Spectrogram : public VisualBase
     int            m_color {0};          // color or grayscale
     QVector<float> m_sigL;               // decaying signal window
     QVector<float> m_sigR;
-    FFTSample*     m_dftL { nullptr }; // real in, complex out
-    FFTSample*     m_dftR { nullptr };
-    RDFTContext*   m_rdftContext { nullptr };
-    std::array<int,256*6> m_red   {0}; // continuous color spectrum
-    std::array<int,256*6> m_green {0};
-    std::array<int,256*6> m_blue  {0};
+    float*         m_dftL { nullptr }; // real in, complex out
+    float*         m_dftR { nullptr };
+    float*         m_rdftTmp { nullptr };
+    static constexpr float kTxScale { 1.0F };
+    AVTXContext*   m_rdftContext { nullptr };
+    av_tx_fn       m_rdft        { nullptr };
+
+#ifdef __cpp_size_t_suffix
+    std::array<int,256Z*6> m_red   {0}; // continuous color spectrum
+    std::array<int,256Z*6> m_green {0};
+    std::array<int,256Z*6> m_blue  {0};
+#else
+    std::array<int,256_Z*6> m_red   {0}; // continuous color spectrum
+    std::array<int,256_Z*6> m_green {0};
+    std::array<int,256_Z*6> m_blue  {0};
+#endif
     bool           m_binpeak { true }; // peak of bins, else mean
     bool           m_history { true }; // spectrogram? or spectrum
     bool           m_showtext {false}; // freq overlay?
@@ -299,9 +313,12 @@ class Spectrum : public VisualBase
     int            m_fftlen {16 * 1024}; // window width
     QVector<float> m_sigL;               // decaying signal window
     QVector<float> m_sigR;
-    FFTSample*     m_dftL { nullptr }; // real in, complex out
-    FFTSample*     m_dftR { nullptr };
-    RDFTContext*   m_rdftContext { nullptr };
+    float*         m_dftL { nullptr }; // real in, complex out
+    float*         m_dftR { nullptr };
+    float*         m_rdftTmp { nullptr };
+    static constexpr float kTxScale { 1.0F };
+    AVTXContext*   m_rdftContext { nullptr };
+    av_tx_fn       m_rdft        { nullptr };
 };
 
 class Squares : public Spectrum
@@ -352,7 +369,7 @@ struct piano_key_data {
 
   public:
     Piano();
-    ~Piano() override;
+    ~Piano() override = default;
 
     void resize(const QSize &size) override; // VisualBase
 
@@ -379,8 +396,8 @@ struct piano_key_data {
 
     std::chrono::milliseconds m_offsetProcessed  {0ms};
 
-    piano_key_data *m_pianoData        {nullptr};
-    piano_audio    *m_audioData        {nullptr};
+    std::array<piano_key_data,kPianoNumKeys> m_pianoData {};
+    std::array<piano_audio,kPianoAudioSize> m_audioData {};
 
     std::vector<double> m_magnitude;
 };

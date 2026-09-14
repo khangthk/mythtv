@@ -1,0 +1,46 @@
+#ifndef AUDIOOUTPUTAUDIOTRACK_H
+#define AUDIOOUTPUTAUDIOTRACK_H
+
+#include "audiooutputbase.h"
+
+class QAndroidJniObject;
+/*
+
+    Audio output for android based on android.media.AudioTrack.
+
+    This uses the java class org.mythtv.audio.AudioOutputAudioTrack
+    to invoke android media playback methods.
+
+*/
+
+class AudioOutputAudioTrack : public AudioOutputBase
+{
+  public:
+    explicit AudioOutputAudioTrack(const AudioSettings &settings);
+    ~AudioOutputAudioTrack() override;
+
+    bool AddData(void *buffer, int len, std::chrono::milliseconds timecode, int frames) override; // AudioOutput
+    void Pause(bool paused) override; // AudioOutput
+    void SetSourceBitrate(int rate) override; // AudioOutputBase
+
+  protected:
+    bool OpenDevice(void) override; // AudioOutputBase
+    void CloseDevice(void) override; // AudioOutputBase
+    void WriteAudio(unsigned char *aubuf, int size) override; // AudioOutputBase
+    int  GetBufferedOnSoundcard(void) const override; // AudioOutputBase
+    AudioOutputSettings* GetOutputSettings(bool digital) override; // AudioOutputBase
+    bool StartOutputThread(void) override; // AudioOutputBase
+    void StopOutputThread(void) override; // AudioOutputBase
+
+    // Volume control
+    int GetVolumeChannel(int /* channel */) const override // VolumeBase
+        { return 100; }
+    void SetVolumeChannel(int /* channel */, int /* volume */) override // VolumeBase
+        {}
+
+  private:
+    QAndroidJniObject *m_audioTrack {nullptr};
+    int m_bitsPer10Frames {0};
+};
+
+#endif //AUDIOOUTPUTAUDIOTRACK_H

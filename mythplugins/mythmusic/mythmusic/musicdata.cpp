@@ -1,11 +1,13 @@
 // C/C++
-#include <unistd.h> // for usleep()
+#include <thread>
 
 // qt
 #include <QApplication>
 
 // MythTV
 #include <libmythbase/mthreadpool.h>
+#include <libmythbase/mythcorecontext.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythmetadata/musicfilescanner.h>
 #include <libmythmetadata/musicmetadata.h>
 #include <libmythmetadata/musicutils.h>
@@ -20,9 +22,10 @@
 // this is the global MusicData object shared thoughout MythMusic
 MusicData  *gMusicData = nullptr;
 
-
-///////////////////////////////////////////////////////////////////////////////
-
+void SendStringListThread::run()
+{
+    gCoreContext->SendReceiveStringList(m_strList);
+}
 
 MusicData::~MusicData(void)
 {
@@ -84,7 +87,7 @@ void MusicData::reloadMusic(void) const
     while (!m_all_music->doneLoading())
     {
         QCoreApplication::processEvents();
-        usleep(50000);
+        std::this_thread::sleep_for(50ms);
     }
 
     m_all_playlists->resync();
@@ -130,7 +133,7 @@ void MusicData::loadMusic(void) const
            || !gMusicData->m_all_music->doneLoading())
     {
         QCoreApplication::processEvents();
-        usleep(50000);
+        std::this_thread::sleep_for(50ms);
     }
 
     gPlayer->loadStreamPlaylist();
@@ -139,3 +142,5 @@ void MusicData::loadMusic(void) const
     if (busy)
         busy->Close();
 }
+
+#include "moc_musicdata.cpp"

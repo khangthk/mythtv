@@ -8,8 +8,6 @@ if(NOT ENABLE_BACKEND)
   return()
 endif()
 
-target_link_libraries(mythtv PUBLIC PkgConfig::LZO2)
-target_compile_definitions(mythtv PRIVATE USING_BACKEND USING_IPTV)
 target_sources(
   mythtv
   PRIVATE # Channel stuff
@@ -88,10 +86,7 @@ target_sources(
           # Import recorder
           recorders/importrecorder.h
           recorders/importrecorder.cpp
-          recorders/RTjpegN.h
           recorders/audioinput.h
-          recorders/go7007_myth.h
-          recorders/RTjpegN.cpp
           recorders/audioinput.cpp
           # Support for RTP/UDP streams
           recorders/cetonrtsp.h
@@ -114,6 +109,7 @@ target_sources(
           recorders/iptvstreamhandler.cpp
           recorders/streamhandler.cpp
           recorders/rtp/packetbuffer.cpp
+          recorders/rtp/rtpdatapacket.cpp
           recorders/rtp/rtppacketbuffer.cpp
           # Support for HTTP TS streams
           recorders/httptsstreamhandler.h
@@ -131,6 +127,8 @@ target_sources(
           recorders/HLS/HLSSegment.cpp
           recorders/HLS/HLSStream.cpp
           recorders/HLS/HLSStreamWorker.cpp
+          recorders/HLS/m3u.cpp
+          recorders/HLS/m3u.h
           # External recorder
           recorders/ExternalChannel.h
           recorders/ExternalRecChannelFetcher.h
@@ -145,11 +143,17 @@ target_sources(
 if(NOT WIN32)
   target_sources(
     mythtv
-    PRIVATE channelscan/externrecscanner.cpp channelscan/externrecscanner.h
-            recorders/v4lrecorder.cpp recorders/v4lrecorder.h)
+    PRIVATE
+    channelscan/externrecscanner.cpp
+    channelscan/externrecscanner.h
+    recorders/v4lrecorder.cpp
+    recorders/v4lrecorder.h
+    recorders/vbi608extractor.cpp
+    recorders/vbi608extractor.h
+    )
 endif()
-if(TARGET PkgConfig::ALSA)
-  target_link_libraries(mythtv PUBLIC PkgConfig::ALSA)
+if(TARGET ALSA::ALSA)
+  target_link_libraries(mythtv PUBLIC ALSA::ALSA)
   target_sources(mythtv PRIVATE recorders/audioinputalsa.cpp
                                 recorders/audioinputalsa.h)
 endif()
@@ -176,24 +180,9 @@ if(TARGET PkgConfig::V4L2)
             recorders/v4lchannel.cpp)
 endif()
 
-if(TARGET Lame::Lame)
-  # Simple NuppelVideo Recorder
-  if(USING_FFMPEG_THREADS)
-    target_compile_definitions(mythtv PRIVATE USING_FFMPEG_THREADS)
-  endif()
-
-  if(NOT MINGW AND NOT MSVC)
-    target_sources(mythtv PRIVATE recorders/NuppelVideoRecorder.cpp
-                                  recorders/NuppelVideoRecorder.h)
-  endif()
-  target_link_libraries(mythtv PUBLIC Lame::Lame)
-endif()
-
 # Support for cable boxes that provide Firewire out
-if(ENABLE_FIREWIRE)
-  target_link_libraries(
-    mythtv PRIVATE $<TARGET_NAME_IF_EXISTS:PkgConfig::LibAVC1394>
-                   $<TARGET_NAME_IF_EXISTS:PkgConfig::LibIEC61883>)
+if(TARGET firewire)
+  target_link_libraries(mythtv PUBLIC firewire)
   target_sources(
     mythtv
     PRIVATE recorders/firewirechannel.h
@@ -208,16 +197,11 @@ if(ENABLE_FIREWIRE)
             recorders/firewiresignalmonitor.cpp)
 
   if(APPLE)
-    target_compile_definitions(mythtv PRIVATE USING_FIREWIRE USING_OSX_FIREWIRE)
-    target_compile_options(mythtv PRIVATE -iframework
-                                          ${APPLE_AVCVIDEOSERVICES_HEADERS})
     target_sources(
       mythtv
       PRIVATE recorders/darwinfirewiredevice.h recorders/darwinavcinfo.h
               recorders/darwinavcinfo.cpp recorders/darwinfirewiredevice.cpp)
-    target_link_libraries(mythtv PUBLIC ${APPLE_AVCVIDEOSERVICES_LIBRARY})
   else()
-    target_compile_definitions(mythtv PRIVATE USING_LINUX_FIREWIRE)
     target_sources(
       mythtv
       PRIVATE recorders/linuxfirewiredevice.h recorders/linuxavcinfo.h

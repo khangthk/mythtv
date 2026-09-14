@@ -11,6 +11,11 @@
 #include <vector>
 
 // QT
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#include <QtVersionChecks>
+#endif
 #include <QWaitCondition>
 #include <QApplication>
 #include <QHash>
@@ -551,7 +556,7 @@ bool MythMainWindow::SaveScreenShot(const QImage& Image, QString Filename)
     LOG(VB_GENERAL, LOG_INFO, QString("Saving screenshot to %1 (%2x%3)")
                        .arg(Filename).arg(Image.width()).arg(Image.height()));
 
-    if (Image.save(Filename, extension.toLatin1(), 100))
+    if (Image.save(Filename, extension.toLatin1().constData(), 100))
     {
         LOG(VB_GENERAL, LOG_INFO, "MythMainWindow::screenShot succeeded");
         return true;
@@ -665,7 +670,7 @@ void MythMainWindow::Init(bool MayReInit)
     }
 
     // Workaround Qt/Windows playback bug?
-#ifdef _WIN32
+#ifdef Q_OS_WINDOWS
     flags |= Qt::MSWindowsOwnDC;
 #endif
 
@@ -902,6 +907,10 @@ void MythMainWindow::InitKeys()
         "Zoom out on browser window"),          ",,<,Ctrl+B,Media Rewind");
     RegisterKey("Browser", "TOGGLEINPUT",     QT_TRANSLATE_NOOP("MythControls",
         "Toggle where keyboard input goes to"),  "F1");
+    RegisterKey("Browser", "RELOAD"     ,     QT_TRANSLATE_NOOP("MythControls",
+        "Reload the current webpage"),           "F2");
+    RegisterKey("Browser", "FULLRELOAD",      QT_TRANSLATE_NOOP("MythControls",
+        "Reload the current webpage bypassing the cache"),  "F3");
 
     RegisterKey("Browser", "MOUSEUP",         QT_TRANSLATE_NOOP("MythControls",
         "Move mouse pointer up"),                 "2");
@@ -1145,7 +1154,7 @@ bool MythMainWindow::TranslateKeyPress(const QString& Context, QKeyEvent* Event,
 
     QStringList localActions;
     auto * keycontext = m_priv->m_keyContexts.value(Context);
-    if (AllowJumps && (m_priv->m_jumpMap.count(keynum) > 0) &&
+    if (AllowJumps && (m_priv->m_jumpMap.contains(keynum)) &&
         (!m_priv->m_jumpMap[keynum]->m_localAction.isEmpty()) &&
         keycontext && (keycontext->GetMapping(keynum, localActions)))
     {
@@ -1153,7 +1162,7 @@ bool MythMainWindow::TranslateKeyPress(const QString& Context, QKeyEvent* Event,
             AllowJumps = false;
     }
 
-    if (AllowJumps && m_priv->m_jumpMap.count(keynum) > 0 &&
+    if (AllowJumps && m_priv->m_jumpMap.contains(keynum) &&
             !m_priv->m_jumpMap[keynum]->m_exittomain && m_priv->m_exitMenuCallback == nullptr)
     {
         void (*callback)(void) = m_priv->m_jumpMap[keynum]->m_callback;
@@ -1162,7 +1171,7 @@ bool MythMainWindow::TranslateKeyPress(const QString& Context, QKeyEvent* Event,
     }
 
     if (AllowJumps &&
-        m_priv->m_jumpMap.count(keynum) > 0 && m_priv->m_exitMenuCallback == nullptr)
+        m_priv->m_jumpMap.contains(keynum) && m_priv->m_exitMenuCallback == nullptr)
     {
         m_priv->m_exitingtomain = true;
         m_priv->m_exitMenuCallback = m_priv->m_jumpMap[keynum]->m_callback;
@@ -1190,14 +1199,16 @@ void MythMainWindow::ClearKey(const QString& Context, const QString& Action)
     if (keycontext == nullptr)
         return;
 
-    QMutableMapIterator<int, QStringList> it(keycontext->m_actionMap);
-    while (it.hasNext())
+    for (auto it = keycontext->m_actionMap.begin();
+         it != keycontext->m_actionMap.end();
+         /* no inc */)
     {
-        it.next();
         QStringList list = it.value();
         list.removeAll(Action);
         if (list.isEmpty())
-            it.remove();
+            it = keycontext->m_actionMap.erase(it);
+        else
+            ++it;
     }
 }
 
@@ -1357,13 +1368,15 @@ void MythMainWindow::ClearJump(const QString& Destination)
        return;
     }
 
-    QMutableMapIterator<int, JumpData*> it(m_priv->m_jumpMap);
-    while (it.hasNext())
+    for (auto it = m_priv->m_jumpMap.begin();
+         it != m_priv->m_jumpMap.end();
+         /* no inc */)
     {
-        it.next();
         JumpData *jd = it.value();
         if (jd->m_destination == Destination)
-            it.remove();
+            it = m_priv->m_jumpMap.erase(it);
+        else
+            ++it;
     }
 }
 
@@ -1387,7 +1400,7 @@ void MythMainWindow::BindJump(const QString& Destination, const QString& Key)
         int keynum = keyseq[i].toCombined();
 #endif
 
-        if (m_priv->m_jumpMap.count(keynum) == 0)
+        if (!m_priv->m_jumpMap.contains(keynum))
         {
 #if 0
             LOG(VB_GENERAL, LOG_DEBUG, QString("Binding: %1 to JumpPoint: %2")
@@ -1441,7 +1454,9 @@ void MythMainWindow::RegisterJump(const QString& Destination, const QString& Des
         }
     }
 
-    JumpData jd = { Callback, Destination, Description, Exittomain, std::move(LocalAction) };
+    JumpData jd = { .m_callback=Callback, .m_destination=Destination,
+                    .m_description=Description, .m_exittomain=Exittomain,
+                    .m_localAction=std::move(LocalAction) };
     m_priv->m_destinationMap[Destination] = jd;
     BindJump(Destination, keybind);
 }
@@ -1456,7 +1471,7 @@ void MythMainWindow::ClearAllJumps()
 
 void MythMainWindow::JumpTo(const QString& Destination, bool Pop)
 {
-    if (m_priv->m_destinationMap.count(Destination) > 0 && m_priv->m_exitMenuCallback == nullptr)
+    if (m_priv->m_destinationMap.contains(Destination) && m_priv->m_exitMenuCallback == nullptr)
     {
         m_priv->m_exitingtomain = true;
         m_priv->m_popwindows = Pop;
@@ -1469,7 +1484,7 @@ void MythMainWindow::JumpTo(const QString& Destination, bool Pop)
 
 bool MythMainWindow::DestinationExists(const QString& Destination) const
 {
-    return m_priv->m_destinationMap.count(Destination) > 0;
+    return m_priv->m_destinationMap.contains(Destination);
 }
 
 QStringList MythMainWindow::EnumerateDestinations() const
@@ -1480,7 +1495,7 @@ QStringList MythMainWindow::EnumerateDestinations() const
 void MythMainWindow::RegisterMediaPlugin(const QString& Name, const QString& Desc,
                                          MediaPlayCallback Func)
 {
-    if (m_priv->m_mediaPluginMap.count(Name) == 0)
+    if (!m_priv->m_mediaPluginMap.contains(Name))
     {
         LOG(VB_GENERAL, LOG_NOTICE, QString("Registering %1 as a media playback plugin.")
             .arg(Name));
@@ -1913,11 +1928,11 @@ void MythMainWindow::customEvent(QEvent* Event)
         auto * event = dynamic_cast<ExternalKeycodeEvent *>(Event);
         if (event == nullptr)
             return;
-        auto * key = new QKeyEvent(QEvent::KeyPress, event->getKeycode(), Qt::NoModifier);
-        if (auto * target = GetTarget(*key); target)
-            QCoreApplication::sendEvent(target, key);
+        auto key = QKeyEvent(QEvent::KeyPress, event->getKeycode(), Qt::NoModifier);
+        if (auto * target = GetTarget(key); target)
+            QCoreApplication::sendEvent(target, &key);
         else
-            QCoreApplication::sendEvent(this, key);
+            QCoreApplication::sendEvent(this, &key);
     }
     else if (Event->type() == MythMediaEvent::kEventType)
     {
@@ -1990,7 +2005,9 @@ void MythMainWindow::customEvent(QEvent* Event)
         if (message.startsWith(ACTION_HANDLEMEDIA))
         {
             if (event->ExtraDataCount() == 1)
+            {
                 HandleMedia("Internal", event->ExtraData(0));
+            }
             else if (event->ExtraDataCount() >= 11)
             {
                 bool usebookmark = true;
@@ -2109,7 +2126,7 @@ void MythMainWindow::ShowMouseCursor(bool Show)
         return;
 
     // Set cursor call must come after Show() to work on some systems.
-    setCursor(Show ? (Qt::ArrowCursor) : (Qt::BlankCursor));
+    setCursor(Show ? Qt::ArrowCursor : Qt::BlankCursor);
     if (Show)
         m_priv->m_hideMouseTimer->start();
 }
@@ -2271,4 +2288,5 @@ void MythMainWindow::OnApplicationStateChange(Qt::ApplicationState State)
             break;
     }
 }
-/* vim: set expandtab tabstop=4 shiftwidth=4: */
+
+#include "moc_mythmainwindow.cpp"

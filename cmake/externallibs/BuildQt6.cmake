@@ -48,11 +48,19 @@ function(find_or_build_qt)
     endif()
   endif()
 
-  # Fedora stuffs things into lib64 instead of lib.
-  if(EXISTS ${QT6_HOST_PATH}/lib64/cmake/Qt6Core)
-    set(QT6_HOST_PATH_CMAKE_DIR ${QT6_HOST_PATH}/lib64/cmake)
-  else()
-    set(QT6_HOST_PATH_CMAKE_DIR ${QT6_HOST_PATH}/lib/cmake)
+  # Find where packages store their cmake modules.  This varies by distro.
+  foreach(DIR ${QT6_HOST_PATH}/lib64/cmake ${QT6_HOST_PATH}/lib/cmake
+              ${QT6_HOST_PATH}/lib/x86_64-linux-gnu/cmake)
+    if(EXISTS ${DIR})
+      set(QT6_HOST_PATH_CMAKE_DIR ${DIR})
+      break()
+    endif()
+  endforeach()
+  if(NOT EXISTS ${QT6_HOST_PATH_CMAKE_DIR})
+    message(
+      FATAL_ERROR
+        "Cannot find the cmake install directory. Should be something like /usr/lib/cmake."
+    )
   endif()
 
   # Check specific package availability. A user is likely to have the
@@ -60,35 +68,66 @@ function(find_or_build_qt)
   # need the various other qt6 tools devel packages installed.
   if(NOT EXISTS ${QT6_HOST_PATH_CMAKE_DIR}/Qt6ShaderTools)
     message(
+      "Directory ${QT6_HOST_PATH_CMAKE_DIR}/Qt6ShaderTools doesn't exist.")
+    message(
       FATAL_ERROR "You must install the qt6 qtshadertools development package.")
   endif()
   if(NOT EXISTS ${QT6_HOST_PATH_CMAKE_DIR}/Qt6QmlTools)
+    message("Directory ${QT6_HOST_PATH_CMAKE_DIR}/Qt6QmlTools doesn't exist.")
     message(
       FATAL_ERROR "You must install the qt6 qtdeclarative development package.")
   endif()
 
-  # Known versions of Qt6
+  # Known versions of Qt6 (as of 2025-003-11)
 
-  # None: Debian 11, Ubuntu 20.04
+  # None: Debian 11, RHEL8, Ubuntu 20.04
 
   # Ubuntu 22.04
   set(QT_6.2.4_SHA256
       "cfe41905b6bde3712c65b102ea3d46fc80a44c9d1487669f14e4a6ee82ebb8fd")
-  # Debian 12, Ubuntu 23.10, SuSe 15
+  # Debian 12, Ubuntu 24.04
   set(QT_6.4.2_SHA256
       "689f53e6652da82fccf7c2ab58066787487339f28d1ec66a8765ad357f4976be")
-  # Gentoo
   set(QT_6.5.2_SHA256
       "cde57be663d0f875759797298bdc37a936d517c39f2013e4e6ece5e12edeed12")
-  # Fedora 38/39
+  # Fedora 38
   set(QT_6.6.0_SHA256
       "652538fcb5d175d8f8176c84c847b79177c87847b7273dccaec1897d80b50002")
-  # Arch, Rawhide, SuSe Tumbleweed
   set(QT_6.6.1_SHA256
       "dd3668f65645fe270bc615d748bd4dc048bd17b9dc297025106e6ecc419ab95d")
-  # Fedora 40/41
+  # Centos 9, Fedora 39, RHEL9, Ubuntu 24.10
+  set(QT_6.6.2_SHA256
+      "3c1e42b3073ade1f7adbf06863c01e2c59521b7cc2349df2f74ecd7ebfcb922d")
+  # SuSe 15
+  set(QT_6.6.3_SHA256
+      "69d0348fef415da98aa890a34651e9cfb232f1bffcee289b7b4e21386bf36104")
   set(QT_6.7.2_SHA256
       "0aaea247db870193c260e8453ae692ca12abc1bd841faa1a6e6c99459968ca8a")
+  # Centos 10
+  set(QT_6.8.1_SHA256
+      "45e3a9f6d33c92ffe65a1fde1a8eba5b228112df675f7f9026eaa332b2e2edff")
+  # Arch, Debian Unstable, Fedora 40/41/42, Gentoo Suse Tumbleweed,
+  # Ubuntu Rolling Rhino
+  set(QT_6.8.2_SHA256
+      "659d8bb5931afac9ed5d89a78e868e6bd00465a58ab566e2123db02d674be559")
+  # Fedora 41
+  set(QT_6.8.3_SHA256
+      "cdd3a69967208276bb01af7ace7dba0ba53e679f886a4cbe624225c60fb73f2c")
+  set(QT_6.9.0_SHA256
+      "4f61e50551d0004a513fefbdb0a410595d94812a48600646fb7341ea0d17e1cb")
+  set(QT_6.10.0_SHA256
+      "81895fb038a9c3d6c6f698d7611339a189eb45c3d91746c7789b0b77a5981aa3")
+  set(QT_6.10.1_SHA256
+      "0ed08b079719394303cd2054b66b2dc0c5895ceeb88fb6131c18991c980bf00f")
+  # Fedora 42
+  set(QT_6.10.2_SHA256
+      "c3df0f0e421130cc52ed81cb712358804471ce9bd2a41d97828f9f5b1bf7fed2")
+  # Fedora 43/44
+  set(QT_6.10.3_SHA256
+      "cbc81e726b0ff3c0cdb0219bf74545e91cec013c4a8503c20f93f83d73dff5d2")
+  # Fedora Rawhide
+  set(QT_6.11.0_SHA256
+      "acf3b3db04c9e5d0820e8324b097320388954c297cee83d2bd698789234f68a4")
 
   # Qt6 requires that the version of the host tools match the version being
   # built.  What are the fallback target versions to build if there isn't an
@@ -99,6 +138,10 @@ function(find_or_build_qt)
   set(QT_MAP_6.5 "6.5.2")
   set(QT_MAP_6.6 "6.6.1")
   set(QT_MAP_6.7 "6.7.2")
+  set(QT_MAP_6.8 "6.8.1")
+  set(QT_MAP_6.9 "6.9.0")
+  set(QT_MAP_6.10 "6.10.0")
+  set(QT_MAP_6.11 "6.11.0")
 
   # Grab the host version directly. so as not to pollute our cross-build setup.
   file(STRINGS
@@ -123,6 +166,18 @@ function(find_or_build_qt)
       FATAL_ERROR
         "Qt6 requires that the target and host major/minor version are the same.  Your host version is ${HOST_QT_MAJMIN} but there are no instructions on how to build that version."
     )
+  endif()
+
+  # Qt 6.10 on android requires SDK version of 26.
+  if (QT_VERSION VERSION_GREATER_EQUAL 6.10)
+    if(ANDROID AND CMAKE_SYSTEM_VERSION LESS 26)
+      message(FATAL_ERROR "Qt 6.10 requires a minimum of Android 26 (found ${CMAKE_SYSTEM_VERSION}).")
+    endif()
+  endif()
+
+  # Qt 6.11 on android needs an extra argument to disable a new subsystem
+  if (QT_VERSION VERSION_GREATER_EQUAL 6.11)
+    list(APPEND QT6_BUILD_ARGS ${QT6_BUILD_ARGS} -DBUILD_qtcanvaspainter=OFF)
   endif()
 
   # Qt6 cross compiling requires that a native version of Qt6 be installed on
@@ -174,7 +229,8 @@ function(find_or_build_qt)
 
        # Other android arguments
        -DBUILD_SHARED_LIBS=ON
-       -DCMAKE_BUILD_TYPE=$<IF:$<CONFIG:Debug>,Debug,Release>
+       -DCMAKE_BUILD_TYPE=Release
+       -DQT_BUILD_DOCS=OFF
        -DQT_BUILD_EXAMPLES=OFF
        -DQT_BUILD_TESTS=OFF
        -DQT_USE_CCACHE=ON
@@ -186,6 +242,10 @@ function(find_or_build_qt)
        -DQT_FEATURE_system_sqlite=OFF
        -DQT_FEATURE_openssl_linked=ON
 
+       # Prevent Qt6 from compiling in support for the backtrace()
+       # function.  This function doesn't exist on Android.
+       -DQT_FEATURE_backtrace=OFF
+
        # Qt6 no longer allows disabling dpi scaling with the
        # AA_DisableHighDpiScaling attribute like it did in Qt5.  This
        # next line will prevent scaling support from being built for
@@ -195,10 +255,14 @@ function(find_or_build_qt)
        # class of problems for all devices.
        -DQT_FEATURE_highdpiscaling=OFF
 
-       # Qt6 components
+       # Which Qt6 components should be built.  This set of BUILD_xxx
+       # defines has a one-to-one correspondence to the submodules
+       # (aka directories) in the Qt6 sources.
        -DBUILD_qt3d=OFF
        -DBUILD_qt5compat=OFF
        -DBUILD_qtactiveqt=OFF
+#      -DBUILD_qtbase=ON
+#      -DBUILD_qtcanvaspainter=ON
        -DBUILD_qtcharts=OFF
        -DBUILD_qtcoap=OFF
        -DBUILD_qtconnectivity=OFF
@@ -206,14 +270,17 @@ function(find_or_build_qt)
        -DBUILD_qtdeclarative=OFF
        -DBUILD_qtdoc=OFF
        -DBUILD_qtgraphs=OFF
+       -DBUILD_qtgrpc=OFF
        -DBUILD_qthttpserver=OFF
-#       -DBUILD_qtimageformats=OFF
+#      -DBUILD_qtimageformats=ON
+       -DBUILD_qtlanguageserver=OFF
        -DBUILD_qtlocation=OFF
        -DBUILD_qtlottie=OFF
        -DBUILD_qtmqtt=OFF
        -DBUILD_qtmultimedia=OFF
-#       -DBUILD_qtnetworkauth=OFF
+#      -DBUILD_qtnetworkauth=ON
        -DBUILD_qtopcua=OFF
+       -DBUILD_qtopenapi=OFF
        -DBUILD_qtpositioning=OFF
        -DBUILD_qtquick3d=OFF
        -DBUILD_qtquick3dphysics=OFF
@@ -224,9 +291,10 @@ function(find_or_build_qt)
        -DBUILD_qtsensors=OFF
        -DBUILD_qtserialbus=OFF
        -DBUILD_qtserialport=OFF
-#       -DBUILD_qtshadertools=OFF
+#      -DBUILD_qtshadertools=ON
        -DBUILD_qtspeech=OFF
        -DBUILD_qtsvg=OFF
+       -DBUILD_qttasktree=OFF
        -DBUILD_qttools=OFF
        -DBUILD_qttranslations=OFF
        -DBUILD_qtvirtualkeyboard=OFF
@@ -235,6 +303,8 @@ function(find_or_build_qt)
        -DBUILD_qtwebengine=OFF
        -DBUILD_qtwebsockets=OFF
        -DBUILD_qtwebview=OFF
+
+       ${QT6_BUILD_ARGS}
 
        -DMySQL_INCLUDE_DIR=${MARIADB_INCLUDE_DIR}
        -DMySQL_LIBRARY=${MARIADB_LIBRARY}

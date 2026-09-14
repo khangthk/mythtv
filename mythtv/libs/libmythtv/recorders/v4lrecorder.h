@@ -4,22 +4,12 @@
 
 #include "libmythbase/mthread.h"
 
-#include "libmythtv/captions/cc608decoder.h"
 #include "libmythtv/recorders/dtvrecorder.h"
-#include "libmythtv/recorders/vbitext/vt.h"
 #include "libmythtv/tv.h" // for VBIMode
 
 class VBI608Extractor;
 class VBIThread;
 class TVRec;
-
-struct vbi;
-struct VBIData
-{
-    RecorderBase *nvr;
-    vt_page teletextpage;
-    bool foundteletextpage;
-};
 
 /// Abstract base class for Video4Linux based recorders.
 class MTV_PUBLIC V4LRecorder : public DTVRecorder
@@ -40,21 +30,17 @@ class MTV_PUBLIC V4LRecorder : public DTVRecorder
     void RunVBIDevice(void);
 
     virtual bool IsHelperRequested(void) const;
-    virtual void FormatTT(struct VBIData */*vbidata*/) {}
     virtual void FormatCC(uint /*code1*/, uint /*code2*/) {}
 
   protected:
     QString          m_audioDeviceName;
     QString          m_vbiDeviceName;
     int              m_vbiMode                {VBIMode::None};
-    struct VBIData  *m_palVbiCb               {nullptr};
-    struct vbi      *m_palVbiTt               {nullptr};
     uint             m_ntscVbiWidth           {0};
     uint             m_ntscVbiStartLine       {0};
     uint             m_ntscVbiLineCount       {0};
     VBI608Extractor *m_vbi608                 {nullptr};
     VBIThread       *m_vbiThread              {nullptr};
-    QList<struct txtbuffertype*> m_textBuffer;
     int              m_vbiFd                  {-1};
     volatile bool    m_requestHelper          {false};
 };
@@ -77,6 +63,7 @@ class VBIThread : public MThread
         }
     }
 
+  protected:
     void run(void) override // MThread
     {
         RunProlog();

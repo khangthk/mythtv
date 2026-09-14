@@ -1,3 +1,6 @@
+// Standard UNIX C headers
+#include <algorithm>
+
 // MythTV
 #include "libmythbase/http/mythhttpmetaservice.h"
 #include "libmythbase/mythcorecontext.h"
@@ -5,14 +8,15 @@
 #include "libmythbase/mythdbcon.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythmiscutil.h"
+#include "libmythbase/mythsorthelper.h"
 #include "libmythbase/mythversion.h"
-#include "libmythbase/programinfo.h"
 #include "libmythbase/storagegroup.h"
 #include "libmythmetadata/bluraymetadata.h"
 #include "libmythmetadata/globals.h"
 #include "libmythmetadata/metadatafactory.h"
 #include "libmythmetadata/videometadata.h"
 #include "libmythtv/mythavutil.h"
+#include "libmythtv/programinfo.h"
 
 // MythBackend
 #include "v2artworkInfoList.h"
@@ -45,6 +49,8 @@ void V2Video::RegisterCustomTypes()
     qRegisterMetaType<V2ArtworkItem*>("V2ArtworkItem");
     qRegisterMetaType<V2CutList*>("V2CutList");
     qRegisterMetaType<V2Cutting*>("V2Cutting");
+    qRegisterMetaType<V2VideoCategory*>("V2VideoCategory");
+    qRegisterMetaType<V2VideoCategoryList*>("V2VideoCategoryList");
 }
 
 V2Video::V2Video()
@@ -108,7 +114,9 @@ long V2Video::GetSavedBookmark( int  Id )
     QString fileName;
 
     if (query.next())
+    {
         fileName = query.value(0).toString();
+    }
     else
     {
         LOG(VB_GENERAL, LOG_ERR, QString("V2Video/GetSavedBookmark Video id %1 Not found.").arg(Id));
@@ -155,7 +163,9 @@ long V2Video::GetLastPlayPos( int  Id )
     QString fileName;
 
     if (query.next())
+    {
         fileName = query.value(0).toString();
+    }
     else
     {
         LOG(VB_GENERAL, LOG_ERR, QString("V2Video/GetLastPlayPos Video id %1 Not found.").arg(Id));
@@ -201,6 +211,8 @@ long V2Video::GetLastPlayPos( int  Id )
 
 V2VideoMetadataInfoList* V2Video::GetVideoList( const QString &Folder,
                                                  const QString &Sort,
+                                                 const QString &TitleRegEx,
+                                                 int Category,
                                                  bool bDescending,
                                                  int nStartIndex,
                                                  int nCount,
@@ -218,15 +230,42 @@ V2VideoMetadataInfoList* V2Video::GetVideoList( const QString &Folder,
 
     QString sql = "";
     QString folder;
-    QString bindValue;
+    QStringList bindValues;
+
     if (!Folder.isEmpty())
     {
         if (Folder.endsWith('/'))
             folder = Folder;
         else
             folder = Folder + "/";
-        bindValue = folder + "%";
-        sql.append(" WHERE filename LIKE :BINDVALUE ");
+        sql.append(" WHERE filename LIKE :BIND0 ");
+        bindValues.append(folder + "%");
+    }
+    if (!TitleRegEx.isEmpty())
+    {
+        if (bindValues.empty())
+        {
+            sql.append(" WHERE ");
+        }
+        else
+        {
+            sql.append(" AND ");
+        }
+        sql.append(" title REGEXP :BIND" + QString::number(bindValues.size()) + " ");
+        bindValues.append(TitleRegEx);
+    }
+    if (HAS_PARAMv2("Category") && Category != -1)
+    {
+        if (bindValues.empty())
+        {
+            sql.append(" WHERE ");
+        }
+        else
+        {
+            sql.append(" AND ");
+        }
+        sql.append(" category = :BIND" + QString::number(bindValues.size()) + " ");
+        bindValues.append( QString::number(Category) );
     }
     sql.append(" ORDER BY ");
     QString defSeq = " ASC";
@@ -249,6 +288,18 @@ V2VideoMetadataInfoList* V2Video::GetVideoList( const QString &Folder,
         {
             if (next)
                 sql.append(",");
+            if (sort == "title")
+            {
+                std::shared_ptr<MythSortHelper>sh = getMythSortHelper();
+                QString prefixes = sh->getPrefixes();
+                sort = "REGEXP_REPLACE(title,'" + prefixes + "','')";
+            }
+            else if (sort == "subtitle")
+            {
+                std::shared_ptr<MythSortHelper>sh = getMythSortHelper();
+                QString prefixes = sh->getPrefixes();
+                sort = "REGEXP_REPLACE(subtitle,'" + prefixes + "','')";
+            }
             sql.append(sort);
             if (partList.length() > 1 && partList[1].compare("DESC",Qt::CaseInsensitive) == 0)
                 sql.append(" DESC");
@@ -265,7 +316,7 @@ V2VideoMetadataInfoList* V2Video::GetVideoList( const QString &Folder,
         sql.append(defSeq);
     }
 
-    VideoMetadataListManager::loadAllFromDatabase(videolist, sql, bindValue);
+    VideoMetadataListManager::loadAllFromDatabase(videolist, sql, bindValues);
     std::vector<VideoMetadataListManager::VideoMetadataPtr> videos(videolist.begin(), videolist.end());
 
     // ----------------------------------------------------------------------
@@ -293,26 +344,17 @@ V2VideoMetadataInfoList* V2Video::GetVideoList( const QString &Folder,
             if (slashPos >= 0)
             {
                 dir = fnPart.mid(0, slashPos);
-                if (!map.contains(dir))
-                {
-                    // use toLower here so that lower case are sorted in with
-                    // upper case rather than separately at the end.
-                    map.insert(dir.toLower(), dir);
-                }
+                QString key = dir.toLower();
+                std::shared_ptr<MythSortHelper>sh = getMythSortHelper();
+                key = sh->doTitle(key);
+                if (!map.contains(key))
+                    map.insert(key, dir);
             }
         }
         // Insert directory entries at the front of the list, ordered ascending
         // or descending, depending on the value of bDescending
-        QMapIterator<QString, QString> it(map);
-        if (bDescending)
-            it.toBack();
-
-        while (bDescending? it.hasPrevious() : it.hasNext())
+        auto addMetadata = [&](const auto it)
         {
-            if (bDescending)
-                it.previous();
-            else
-                it.next();
             if (totalCount >= nStartIndex && (nCount == 0 || selectedCount < nCount)) {
                 V2VideoMetadataInfo *pVideoMetadataInfo =
                     pVideoMetadataInfos->AddNewVideoMetadataInfo();
@@ -322,6 +364,23 @@ V2VideoMetadataInfoList* V2Video::GetVideoList( const QString &Folder,
                 selectedCount++;
             }
             totalCount++;
+        };
+        if (bDescending)
+        {
+            if (!map.empty())
+            {
+                for (auto it = map.cend(); it != map.cbegin(); )
+                {
+                    --it;
+                    addMetadata(it);
+                }
+            }
+        }
+        else
+        {
+            for (auto it = map.cbegin(); it != map.cend(); it++) {
+                addMetadata(it);
+            }
         }
     }
 
@@ -354,7 +413,9 @@ V2VideoMetadataInfoList* V2Video::GetVideoList( const QString &Folder,
         totalPages = (int)ceil((float)totalCount / nCount);
 
     if (totalPages == 1)
+    {
         curPage = 1;
+    }
     else
     {
         curPage = (int)ceil((float)nStartIndex / nCount) + 1;
@@ -416,9 +477,16 @@ V2VideoLookupList* V2Video::LookupVideo( const QString    &Title,
             pVideoLookup->setInetref(lookup->GetInetref());
             pVideoLookup->setCollectionref(lookup->GetCollectionref());
             pVideoLookup->setHomePage(lookup->GetHomepage());
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
             pVideoLookup->setReleaseDate(
                 QDateTime(lookup->GetReleaseDate(),
                           QTime(0,0),Qt::LocalTime).toUTC());
+#else
+            pVideoLookup->setReleaseDate(
+                QDateTime(lookup->GetReleaseDate(),
+                          QTime(0,0),
+                          QTimeZone(QTimeZone::LocalTime)).toUTC());
+#endif
             pVideoLookup->setUserRating(lookup->GetUserRating());
             pVideoLookup->setLength(lookup->GetRuntime().count());
             pVideoLookup->setLanguage(lookup->GetLanguage());
@@ -862,7 +930,7 @@ bool V2Video::UpdateVideoMetadata ( int           nId,
     {
         VideoMetadata::genre_list genres;
         QStringList genresList = sGenres.split(',', Qt::SkipEmptyParts);
-        std::transform(genresList.cbegin(), genresList.cend(), std::back_inserter(genres),
+        std::ranges::transform(std::as_const(genresList), std::back_inserter(genres),
                        [](const QString& name)
                            {return VideoMetadata::genre_list::value_type(-1, name.simplified());} );
 
@@ -874,7 +942,7 @@ bool V2Video::UpdateVideoMetadata ( int           nId,
     {
         VideoMetadata::cast_list cast;
         QStringList castList = sCast.split(',', Qt::SkipEmptyParts);
-        std::transform(castList.cbegin(), castList.cend(), std::back_inserter(cast),
+        std::ranges::transform(std::as_const(castList), std::back_inserter(cast),
                        [](const QString& name)
                            {return VideoMetadata::cast_list::value_type(-1, name.simplified());} );
 
@@ -886,7 +954,7 @@ bool V2Video::UpdateVideoMetadata ( int           nId,
     {
         VideoMetadata::country_list countries;
         QStringList countryList = sCountries.split(',', Qt::SkipEmptyParts);
-        std::transform(countryList.cbegin(), countryList.cend(), std::back_inserter(countries),
+        std::ranges::transform(std::as_const(countryList), std::back_inserter(countries),
                        [](const QString& name)
                            {return VideoMetadata::country_list::value_type(-1, name.simplified());} );
 
@@ -922,7 +990,9 @@ bool V2Video::SetSavedBookmark( int  Id, long Offset )
     QString fileName;
 
     if (query.next())
+    {
         fileName = query.value(0).toString();
+    }
     else
     {
         LOG(VB_GENERAL, LOG_ERR, QString("Video/SetSavedBookmark Video id %1 Not found.").arg(Id));
@@ -969,7 +1039,9 @@ bool V2Video::SetLastPlayPos( int  Id, long Offset )
     QString fileName;
 
     if (query.next())
+    {
         fileName = query.value(0).toString();
+    }
     else
     {
         LOG(VB_GENERAL, LOG_ERR, QString("Video/SetLastPlayPos Video id %1 Not found.").arg(Id));
@@ -1103,7 +1175,8 @@ V2VideoStreamInfoList* V2Video::GetStreamInfo
 /////////////////////////////////////////////////////////////////////////////
 
 V2CutList* V2Video::GetVideoCutList ( int Id,
-                                          const QString &offsettype )
+                                          const QString &offsettype,
+                                          bool includeFps )
 {
     MSqlQuery query(MSqlQuery::InitCon());
 
@@ -1121,7 +1194,9 @@ V2CutList* V2Video::GetVideoCutList ( int Id,
     QString fileName;
 
     if (query.next())
+    {
         fileName = query.value(0).toString();
+    }
     else
     {
         LOG(VB_GENERAL, LOG_ERR, QString("V2Video/GetVideoCommBreak Video id %1 Not found.").arg(Id));
@@ -1153,7 +1228,7 @@ V2CutList* V2Video::GetVideoCutList ( int Id,
     else
         marktype = 0;
 
-    V2FillCutList(pCutList, &pi, marktype);
+    V2FillCutList(pCutList, &pi, marktype, includeFps);
 
     return pCutList;
 }
@@ -1164,7 +1239,8 @@ V2CutList* V2Video::GetVideoCutList ( int Id,
 /////////////////////////////////////////////////////////////////////////////
 
 V2CutList* V2Video::GetVideoCommBreak ( int Id,
-                                          const QString &offsettype )
+                                          const QString &offsettype,
+                                          bool includeFps )
 {
     MSqlQuery query(MSqlQuery::InitCon());
 
@@ -1182,7 +1258,9 @@ V2CutList* V2Video::GetVideoCommBreak ( int Id,
     QString fileName;
 
     if (query.next())
+    {
         fileName = query.value(0).toString();
+    }
     else
     {
         LOG(VB_GENERAL, LOG_ERR, QString("V2Video/GetVideoCommBreak Video id %1 Not found.").arg(Id));
@@ -1214,7 +1292,33 @@ V2CutList* V2Video::GetVideoCommBreak ( int Id,
     else
         marktype = 0;
 
-    V2FillCommBreak(pCutList, &pi, marktype);
+    V2FillCommBreak(pCutList, &pi, marktype, includeFps);
 
     return pCutList;
 }
+
+V2VideoCategoryList*  V2Video::GetCategoryList (  )
+{
+    auto* pCatList = new V2VideoCategoryList();
+    MSqlQuery query(MSqlQuery::InitCon());
+
+    query.prepare("SELECT intid,category "
+                  "FROM videocategory ");
+
+    if (!query.exec())
+    {
+        MythDB::DBError("V2Video::GetCategoryList", query);
+        throw QString("Database Error.");
+    }
+
+    while (query.next())
+    {
+        auto *cat = pCatList->AddNewCategory();
+        cat->setId(query.value(0).toInt());
+        cat->setName(query.value(1).toString());
+    }
+
+    return pCatList;
+}
+
+#include "moc_v2video.cpp"

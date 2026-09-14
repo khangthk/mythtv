@@ -2,9 +2,7 @@ include ( ../../settings.pro )
 
 QT += xml sql network widgets
 using_opengl: QT += opengl
-using_qtwebkit: contains(QT_MAJOR_VERSION, 5): {
-    QT += webkitwidgets
-}
+using_qtwebengine: QT += webenginewidgets quick
 android: QT += androidextras
 
 TEMPLATE = lib
@@ -13,7 +11,7 @@ CONFIG += thread dll
 target.path = $${LIBDIR}
 INSTALLS = target
 
-INCLUDEPATH += ../.. ../
+INCLUDEPATH += ..
 
 LIBS += -L../libmythbase -lmythbase-$$LIBVERSION
 
@@ -52,6 +50,14 @@ HEADERS += mythvrr.h
 HEADERS += mythcolourspace.h
 HEADERS += devices/mythinputdevicehandler.h
 HEADERS += mythuiprocedural.h
+HEADERS += dbsettings.h
+HEADERS += langsettings.h
+HEADERS += mediamonitor.h
+HEADERS += mythterminal.h
+HEADERS += rawsettingseditor.h
+HEADERS += schemawizard.h
+HEADERS += standardsettings.h
+HEADERS += storagegroupeditor.h
 
 SOURCES  = mythmainwindowprivate.cpp mythmainwindow.cpp mythpainter.cpp mythimage.cpp mythrect.cpp
 SOURCES += mythpainterwindow.cpp mythpainterwindowqt.cpp
@@ -87,8 +93,16 @@ SOURCES += mythvrr.cpp
 SOURCES += mythcolourspace.cpp
 SOURCES += devices/mythinputdevicehandler.cpp
 SOURCES += mythuiprocedural.cpp
+SOURCES += dbsettings.cpp
+SOURCES += langsettings.cpp
+SOURCES += mediamonitor.cpp
+SOURCES += mythterminal.cpp
+SOURCES += rawsettingseditor.cpp
+SOURCES += schemawizard.cpp
+SOURCES += standardsettings.cpp
+SOURCES += storagegroupeditor.cpp
 
-using_qtwebkit {
+using_qtwebengine {
 HEADERS += mythuiwebbrowser.h
 SOURCES += mythuiwebbrowser.cpp
 }
@@ -113,6 +127,12 @@ inc.files += mythuiexp.h mythuisimpletext.h mythuiactions.h
 inc.files += mythuistatetracker.h mythuianimation.h mythuiscrollbar.h
 inc.files += mythnotificationcenter.h mythnotification.h mythuicomposite.h
 inc.files += mythhdr.h mythcolourspace.h
+inc.files += langsettings.h
+inc.files += mediamonitor.h
+inc.files += schemawizard.h
+inc.files += standardsettings.h
+inc.files += storagegroupeditor.h
+inc.files += mythterminal.h
 
 INSTALLS += inc
 
@@ -122,7 +142,6 @@ INSTALLS += inc
 #
 
 using_x11 {
-    DEFINES += USING_X11
     HEADERS += platforms/mythxdisplay.h
     HEADERS += platforms/mythdisplayx11.h
     HEADERS += platforms/mythscreensaverx11.h
@@ -135,7 +154,6 @@ using_x11 {
 }
 
 using_drm {
-    DEFINES += USING_DRM
     HEADERS += platforms/mythdisplaydrm.h
     HEADERS += platforms/mythscreensaverdrm.h
     HEADERS += platforms/mythdrmdevice.h
@@ -170,10 +188,8 @@ using_drm {
 
 using_qtprivateheaders {
     QT += gui-private
-    DEFINES += USING_QTPRIVATEHEADERS
 
     using_waylandextras {
-        DEFINES += USING_WAYLANDEXTRAS
         HEADERS += platforms/mythscreensaverwayland.h
         HEADERS += platforms/mythwaylandextras.h
         HEADERS += platforms/waylandprotocols/idle_inhibit_unstable_v1.h
@@ -186,7 +202,6 @@ using_qtprivateheaders {
 
 # Use MMAL as a proxy for Raspberry Pi support
 using_mmal {
-    DEFINES += USING_MMAL
     HEADERS += platforms/mythdisplayrpi.h
     SOURCES += platforms/mythdisplayrpi.cpp
     LIBS    += -L/opt/vc/lib -lvchostif -lvchiq_arm
@@ -195,11 +210,23 @@ using_mmal {
 
 using_qtdbus {
     QT      += dbus
-    DEFINES += USING_DBUS
     HEADERS += platforms/mythscreensaverdbus.h
     SOURCES += platforms/mythscreensaverdbus.cpp
     HEADERS += platforms/mythdisplaymutter.h
     SOURCES += platforms/mythdisplaymutter.cpp
+}
+
+unix:!cygwin {
+    SOURCES += mediamonitor-unix.cpp
+    HEADERS += mediamonitor-unix.h
+    !android {
+        using_qtdbus: QT += dbus
+    }
+}
+
+mingw {
+    SOURCES += mediamonitor-windows.cpp
+    HEADERS += mediamonitor-windows.h
 }
 
 macx {
@@ -221,6 +248,14 @@ macx {
         !using_lirc: HEADERS += devices/lircevent.h
         !using_lirc: SOURCES += devices/lircevent.cpp
     }
+
+    darwin_da {
+        SOURCES -= mediamonitor-unix.cpp
+        HEADERS -= mediamonitor-unix.h
+        HEADERS += mediamonitor-darwin.h
+        SOURCES += mediamonitor-darwin.cpp
+        LIBS += -framework DiskArbitration
+    }
 }
 
 android {
@@ -231,38 +266,30 @@ android {
 }
 
 using_joystick_menu {
-    DEFINES += USE_JOYSTICK_MENU
     HEADERS += devices/jsmenu.h devices/jsmenuevent.h
     SOURCES += devices/jsmenu.cpp devices/jsmenuevent.cpp
 }
 
 using_lirc {
-    DEFINES += USE_LIRC
     HEADERS += devices/lirc.h   devices/lircevent.h   devices/lirc_client.h
     SOURCES += devices/lirc.cpp devices/lircevent.cpp devices/lirc_client.cpp
 }
 
 using_libcec {
-    DEFINES += USING_LIBCEC
     HEADERS += devices/mythcecadapter.h
     SOURCES += devices/mythcecadapter.cpp
 }
 
-cygwin:DEFINES += _WIN32
-mingw :DEFINES += USING_MINGW
-
-mingw | win32-msvc*{
+mingw {
 #   HEADERS += mythpainter_d3d9.h   mythrender_d3d9.h
 #   SOURCES += mythpainter_d3d9.cpp mythrender_d3d9.cpp
     HEADERS += platforms/mythdisplaywindows.h
     SOURCES += platforms/mythdisplaywindows.cpp
     DEFINES += NODRAWTEXT
     LIBS    += -luser32  -lgdi32
-    using_dxva2: DEFINES += USING_DXVA2
 }
 
 using_vulkan {
-    DEFINES += USING_VULKAN
     HEADERS += vulkan/mythpainterwindowvulkan.h
     HEADERS += vulkan/mythpaintervulkan.h
     HEADERS += vulkan/mythrendervulkan.h
@@ -284,11 +311,9 @@ using_vulkan {
     SOURCES += vulkan/mythcombobuffervulkan.cpp
     SOURCES += vulkan/mythdebugvulkan.cpp
     SOURCES += vulkan/mythvertexbuffervulkan.cpp
-    using_libglslang: DEFINES += USING_GLSLANG
 }
 
 using_opengl {
-    DEFINES += USING_OPENGL
     HEADERS += opengl/mythpainterwindowopengl.h
     HEADERS += opengl/mythpainteropengl.h
     HEADERS += opengl/mythrenderopengl.h
@@ -304,13 +329,11 @@ using_opengl {
 
     using_egl {
         LIBS    += -lEGL
-        DEFINES += USING_EGL
     }
 
-    mingw|win32-msvc*:LIBS += -lopengl32
+    mingw:LIBS += -lopengl32
 }
 
-DEFINES += USING_QTWEBKIT
 DEFINES += MUI_API
 
 use_hidesyms {

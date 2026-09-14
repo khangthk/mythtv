@@ -2,11 +2,21 @@
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
 #include "mythdisplayx11.h"
+#include "mythxdisplay.h"
 
 // X11
+#if defined(_X11_XLIB_H_) && !defined(Bool)
+#define Bool int
+#endif
 #include <X11/Xatom.h>
+#define pointer Xpointer // Prevent conflicts with Qt6.
+#include <X11/extensions/Xrandr.h>
+#undef pointer
 
 #define LOC QString("DisplayX11: ")
+
+static XRROutputInfo* GetOutput(XRRScreenResources* Resources, MythXDisplay* mDisplay,
+                                QScreen* qScreen, RROutput* Output = nullptr);
 
 MythDisplayX11::MythDisplayX11()
 {
@@ -156,7 +166,7 @@ const MythDisplayModes& MythDisplayX11::GetVideoModes()
             QSize resolution(width, height);
             QSize physical(mmwidth, mmheight);
             auto key = MythDisplayMode::CalcKey(resolution, 0.0);
-            if (screenmap.find(key) == screenmap.end())
+            if (!screenmap.contains(key))
                 screenmap[key] = MythDisplayMode(resolution, physical, -1.0, rate);
             else
                 screenmap[key].AddRefreshRate(rate);
@@ -230,7 +240,7 @@ bool MythDisplayX11::SwitchToVideoMode(QSize Size, double DesiredRate)
     return RRSetConfigSuccess == status;
 }
 
-XRROutputInfo* MythDisplayX11::GetOutput(XRRScreenResources* Resources,
+static XRROutputInfo* GetOutput(XRRScreenResources* Resources,
                                          MythXDisplay* mDisplay,
                                          QScreen* qScreen, RROutput* Output)
 {
@@ -319,6 +329,10 @@ void MythDisplayX11::GetEDID(MythXDisplay *mDisplay)
         {
             if (actualtype == XA_INTEGER && actualformat == 8)
                 m_edid = MythEDID(reinterpret_cast<const char*>(data), static_cast<int>(nitems));
+            if (data)
+            {
+                XFree(data);
+            }
         }
         break;
     }

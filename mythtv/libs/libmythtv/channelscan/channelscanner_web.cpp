@@ -24,18 +24,26 @@
  */
 
 // Qt headers
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QCoreApplication>
 #include <iostream>
 
 // MythTv headers
 #include "channelscanner_web.h"
+
+#include "libmythbase/mythconfig.h"
+#include "libmythbase/mythlogging.h"
+
 #include "channelscan_sm.h"
 #include "channelimporter.h"
 #include "libmythtv/cardutil.h"
 #include "libmythtv/channelscan/scanwizardconfig.h"
-#ifdef USING_SATIP
+#if CONFIG_SATIP
 #include "recorders/satiputils.h"
-#endif // USING_SATIP
+#endif // CONFIG_SATIP
 
 #define LOC QString("ChScanWeb: ")
 
@@ -91,34 +99,34 @@ bool  ChannelScannerWeb::StartScan (uint cardid,
     QString subType = CardUtil::ProbeSubTypeName(cardid);
     CardUtil::INPUT_TYPES inputType = CardUtil::toInputType(subType);
 
-#ifdef USING_SATIP
-    if (inputType == CardUtil::SATIP)
+#if CONFIG_SATIP
+    if (inputType == CardUtil::INPUT_TYPES::SATIP)
     {
         inputType = SatIP::toDVBInputType(CardUtil::GetVideoDevice(cardid));
     }
-#endif // USING_SATIP
+#endif // CONFIG_SATIP
 
     int nScanType = -99;
     if (ScanType == "FULL")
     {
         switch(inputType) {
-            case CardUtil::ATSC:
+            case CardUtil::INPUT_TYPES::ATSC:
                 nScanType = ScanTypeSetting::FullScan_ATSC;
                 break;
-            case CardUtil::DVBT:
+            case CardUtil::INPUT_TYPES::DVBT:
                 nScanType = ScanTypeSetting::FullScan_DVBT;
                 break;
-            case CardUtil::V4L:
-            case CardUtil::MPEG:
+            case CardUtil::INPUT_TYPES::V4L:
+            case CardUtil::INPUT_TYPES::MPEG:
                 nScanType = ScanTypeSetting::FullScan_Analog;
                 break;
-            case CardUtil::DVBT2:
+            case CardUtil::INPUT_TYPES::DVBT2:
                 nScanType = ScanTypeSetting::FullScan_DVBT2;
                 break;
-            case CardUtil::DVBC:
+            case CardUtil::INPUT_TYPES::DVBC:
                 nScanType = ScanTypeSetting::FullScan_DVBC;
                 break;
-            case  CardUtil::HDHOMERUN:
+            case  CardUtil::INPUT_TYPES::HDHOMERUN:
                 if (CardUtil::HDHRdoesDVBC(CardUtil::GetVideoDevice(cardid)))
                     nScanType = ScanTypeSetting::FullScan_DVBC;
                 else if (CardUtil::HDHRdoesDVB(CardUtil::GetVideoDevice(cardid)))
@@ -133,22 +141,22 @@ bool  ChannelScannerWeb::StartScan (uint cardid,
     else if (ScanType == "FULLTUNED")
     {
         switch(inputType) {
-            case CardUtil::DVBT:
+            case CardUtil::INPUT_TYPES::DVBT:
                 nScanType = ScanTypeSetting::NITAddScan_DVBT;
                 break;
-            case CardUtil::DVBT2:
+            case CardUtil::INPUT_TYPES::DVBT2:
                 nScanType = ScanTypeSetting::NITAddScan_DVBT2;
                 break;
-            case CardUtil::DVBS:
+            case CardUtil::INPUT_TYPES::DVBS:
                 nScanType = ScanTypeSetting::NITAddScan_DVBS;
                 break;
-            case CardUtil::DVBS2:
+            case CardUtil::INPUT_TYPES::DVBS2:
                 nScanType = ScanTypeSetting::NITAddScan_DVBS2;
                 break;
-            case CardUtil::DVBC:
+            case CardUtil::INPUT_TYPES::DVBC:
                 nScanType = ScanTypeSetting::NITAddScan_DVBC;
                 break;
-            case CardUtil::HDHOMERUN:
+            case CardUtil::INPUT_TYPES::HDHOMERUN:
                 if (CardUtil::HDHRdoesDVBC(CardUtil::GetVideoDevice(cardid)))
                     nScanType = ScanTypeSetting::NITAddScan_DVBC;
                 else if (CardUtil::HDHRdoesDVB(CardUtil::GetVideoDevice(cardid)))
@@ -479,13 +487,13 @@ void ChannelScannerWeb::HandleEvent(const ScannerEvent *scanEvent)
         }
 
         bool success = (m_iptvScanner != nullptr);
-#ifdef USING_VBOX
+#if CONFIG_VBOX
         success |= (m_vboxScanner != nullptr);
 #endif
-#if !defined( USING_MINGW ) && !defined( _MSC_VER )
+#ifndef Q_OS_WINDOWS
         success |= (m_externRecScanner != nullptr);
 #endif
-#ifdef USING_HDHOMERUN
+#if CONFIG_HDHOMERUN
         success |= (m_hdhrScanner != nullptr);
 #endif
         Teardown();

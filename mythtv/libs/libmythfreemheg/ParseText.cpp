@@ -39,17 +39,6 @@ This is very basic and is only there to enable some test programs to be run.
 #include "Engine.h"
 #include "Logging.h"
 
-
-#ifndef WIN32
-#define stricmp strcasecmp
-#endif
-
-
-MHParseText::~MHParseText()
-{
-    free(m_string);
-}
-
 // Get the next character.
 void MHParseText::GetNextChar()
 {
@@ -68,7 +57,7 @@ void MHParseText::GetNextChar()
 #if QT_VERSION < QT_VERSION_CHECK(6,0,0)
 static constexpr int MAX_TAG_LENGTH { 30 };
 #else
-static constexpr size_t MAX_TAG_LENGTH { 30 };
+static constexpr ssize_t MAX_TAG_LENGTH { 30 };
 #endif
 
 const std::array<const QString,253> rchTagNames
@@ -338,19 +327,19 @@ struct colourTable
 };
 static std::array<const struct colourTable,13> colourTable
 {{
-    { "black",          0,  0,  0,  0   },
-    { "transparent",    0,  0,  0,  255 },
-    { "gray"/*sic*/,    128, 128, 128, 0 },
-    { "darkgray"/*sic*/, 192, 192, 192, 0 },
-    { "red",            255, 0,  0,  0 },
-    { "darkred",        128, 0,  0,  0 },
-    { "blue",           0,  0,  255, 0 },
-    { "darkblue",       0,  0,  128, 0 },
-    { "green",          0,  255, 0,  0 },
-    { "darkgreen",      0,  128, 0,  0 },
-    { "yellow",         255, 255, 0,  0 },
-    { "cyan",           0,  255, 255, 0 },
-    { "magenta",        255, 0,  255, 0 }
+    { .m_name="black",           .m_r=0,   .m_g=0,   .m_b=0,   .m_t=0   },
+    { .m_name="transparent",     .m_r=0,   .m_g=0,   .m_b=0,   .m_t=255 },
+    { .m_name="gray"/*sic*/,     .m_r=128, .m_g=128, .m_b=128, .m_t=0 },
+    { .m_name="darkgray"/*sic*/, .m_r=192, .m_g=192, .m_b=192, .m_t=0 },
+    { .m_name="red",             .m_r=255, .m_g=0,   .m_b=0,   .m_t=0 },
+    { .m_name="darkred",         .m_r=128, .m_g=0,   .m_b=0,   .m_t=0 },
+    { .m_name="blue",            .m_r=0,   .m_g=0,   .m_b=255, .m_t=0 },
+    { .m_name="darkblue",        .m_r=0,   .m_g=0,   .m_b=128, .m_t=0 },
+    { .m_name="green",           .m_r=0,   .m_g=255, .m_b=0,   .m_t=0 },
+    { .m_name="darkgreen",       .m_r=0,   .m_g=128, .m_b=0,   .m_t=0 },
+    { .m_name="yellow",          .m_r=255, .m_g=255, .m_b=0,   .m_t=0 },
+    { .m_name="cyan",            .m_r=0,   .m_g=255, .m_b=255, .m_t=0 },
+    { .m_name="magenta",         .m_r=255, .m_g=0,   .m_b=255, .m_t=0 }
 }};
 
 
@@ -373,7 +362,7 @@ static int FindTag(const QString& str)
 #if QT_VERSION < QT_VERSION_CHECK(6,0,0)
 static constexpr int    MAX_ENUM { 30 };
 #else
-static constexpr size_t MAX_ENUM { 30 };
+static constexpr ssize_t MAX_ENUM { 30 };
 #endif
 
 void MHParseText::Error(const char *str) const
@@ -410,11 +399,10 @@ void MHParseText::NextSym()
                     Error("Malformed comment");
                 }
 
-                do
+                while (m_ch != '\n' && m_ch != '\f' && m_ch != '\r')
                 {
                     GetNextChar();
                 }
-                while (m_ch != '\n' && m_ch != '\f' && m_ch != '\r');
 
                 continue; // Next symbol
             }
@@ -425,17 +413,13 @@ void MHParseText::NextSym()
                 QString buff {};
                 buff.reserve(MAX_TAG_LENGTH);
 
-                do
+                buff += m_ch;
+                GetNextChar();
+                while (isalpha(m_ch) && (buff.size() < MAX_TAG_LENGTH))
                 {
                     buff += m_ch;
                     GetNextChar();
-
-                    if (buff.size() == MAX_TAG_LENGTH)
-                    {
-                        break;
-                    }
                 }
-                while ((m_ch >= 'a' && m_ch <= 'z') || (m_ch >= 'A' && m_ch <= 'Z'));
 
                 // Look it up and return it if it's found.
                 m_nTag = FindTag(buff);
@@ -453,9 +437,7 @@ void MHParseText::NextSym()
             case '"': // Start of a string
             {
                 m_nType = PTString;
-                // MHEG strings can include NULs.  For the moment we pass back the length and also
-                // null-terminate the strings.
-                m_nStringLength = 0;
+                m_string.clear();
 
                 while (true)
                 {
@@ -477,26 +459,18 @@ void MHParseText::NextSym()
                     }
 
                     // We grow the buffer to the largest string in the input.
-                    auto *str = (unsigned char *)realloc(m_string, m_nStringLength + 2);
-
-                    if (str == nullptr)
-                    {
-                        Error("Insufficient memory");
-                    }
-
-                    m_string = str;
-                    m_string[m_nStringLength++] = m_ch;
+                    m_string.reserve(m_string.size() + 2);
+                    m_string.push_back(m_ch);
                 }
 
                 GetNextChar(); // Skip the closing quote
-                m_string[m_nStringLength] = 0;
                 return;
             }
 
             case '\'': // Start of a string using quoted printable
             {
                 m_nType = PTString;
-                m_nStringLength = 0;
+                m_string.clear();
 
                 // Quotable printable strings contain escape sequences beginning with the
                 // escape character '='.  The strings can span lines but each line must
@@ -579,19 +553,11 @@ void MHParseText::NextSym()
                     }
 
                     // We grow the buffer to the largest string in the input.
-                    auto *str = (unsigned char *)realloc(m_string, m_nStringLength + 2);
-
-                    if (str == nullptr)
-                    {
-                        Error("Insufficient memory");
-                    }
-
-                    m_string = str;
-                    m_string[m_nStringLength++] = m_ch;
+                    m_string.reserve(m_string.size() + 2);
+                    m_string.push_back(m_ch);
                 }
 
                 GetNextChar(); // Skip the closing quote
-                m_string[m_nStringLength] = 0;
                 return;
             }
 
@@ -641,7 +607,7 @@ void MHParseText::NextSym()
 
                 while (m_ch >= '0' && m_ch <= '9')
                 {
-                    m_nInt = m_nInt * 10 + m_ch - '0';
+                    m_nInt = (m_nInt * 10) + m_ch - '0';
                     // TODO: What about overflow?
                     GetNextChar();
                 }
@@ -712,17 +678,14 @@ void MHParseText::NextSym()
                 QString buff;
                 buff.reserve(MAX_ENUM);
 
-                do
+                buff += m_ch;
+                GetNextChar();
+                while ((isalpha(m_ch) || m_ch == '-')
+                       && (buff.size() < MAX_ENUM))
                 {
                     buff += m_ch;
                     GetNextChar();
-
-                    if (buff.size() == MAX_ENUM)
-                    {
-                        break;
-                    }
                 }
-                while ((m_ch >= 'a' && m_ch <= 'z') || (m_ch >= 'A' && m_ch <= 'Z') || m_ch == '-');
 
                 if (buff.compare("NULL", Qt::CaseInsensitive) == 0)
                 {
@@ -794,20 +757,11 @@ void MHParseText::NextSym()
                     if (buff.compare(colour.m_name, Qt::CaseInsensitive) == 0)
                     {
                         m_nType = PTString;
-                        auto *str = (unsigned char *)realloc(m_string, 4 + 1);
-
-                        if (str == nullptr)
-                        {
-                            Error("Insufficient memory");
-                        }
-
-                        m_string = str;
+                        m_string.resize(4);
                         m_string[0] = colour.m_r;
                         m_string[1] = colour.m_g;
                         m_string[2] = colour.m_b;
                         m_string[3] = colour.m_t;
-                        m_nStringLength = 4;
-                        m_string[m_nStringLength] = 0;
                         return;
                     }
                 }
@@ -1068,7 +1022,7 @@ MHParseNode *MHParseText::DoParse()
             case PTString:
             {
                 MHOctetString str;
-                str.Copy(MHOctetString((const char *)m_string, m_nStringLength));
+                str.Copy(MHOctetString((const char *)m_string.data(), m_string.size()));
                 pRes = new MHPString(str);
                 NextSym();
                 break;
@@ -1111,7 +1065,7 @@ MHParseNode *MHParseText::DoParse()
     }
     catch (...)
     {
-        delete(pRes);
+        delete pRes;
         throw;
     }
 }

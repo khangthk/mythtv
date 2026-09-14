@@ -4,14 +4,14 @@
 // Purpose - uPnp Microsoft Media Receiver Registrar "fake" Service 
 //                                                                            
 //////////////////////////////////////////////////////////////////////////////
-
-#include <cmath>
+#include "upnpmsrr.h"
 
 #include "libmythbase/configuration.h"
 #include "libmythbase/mythlogging.h"
 
-#include "upnp.h"
-#include "upnpmsrr.h"
+#include "httprequest.h"
+#include "upnpresultcode.h"
+#include "upnputil.h"
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -104,12 +104,12 @@ bool UPnpMSRR::ProcessRequest( HTTPRequest *pRequest )
                 HandleIsValidated( pRequest );
                 break;
             default:
-                UPnp::FormatErrorResponse( pRequest, UPnPResult_InvalidAction );
+                pRequest->FormatErrorResponse(UPnPResult_InvalidAction);
                 break;
         }       
     }
 
-    return( true );
+    return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////

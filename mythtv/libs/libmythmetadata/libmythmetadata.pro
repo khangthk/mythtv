@@ -21,7 +21,7 @@ HEADERS += bluraymetadata.h mythmetaexp.h metadatafactory.h mythuimetadataresult
 HEADERS += mythuiimageresults.h
 HEADERS += musicmetadata.h musicutils.h metaio.h metaiotaglib.h
 HEADERS += metaioflacvorbis.h metaioavfcomment.h metaiomp4.h
-HEADERS += metaiowavpack.h metaioid3.h metaiooggvorbis.h
+HEADERS += metaiowavpack.h metaioid3.h metaiooggopus.h metaiooggvorbis.h
 HEADERS += imagetypes.h imagemetadata.h imagethumbs.h imagescanner.h imagemanager.h
 HEADERS += musicfilescanner.h metadatagrabber.h lyricsdata.h
 
@@ -33,7 +33,7 @@ SOURCES += bluraymetadata.cpp metadatafactory.cpp mythuimetadataresults.cpp
 SOURCES += mythuiimageresults.cpp
 SOURCES += musicmetadata.cpp musicutils.cpp metaio.cpp metaiotaglib.cpp
 SOURCES += metaioflacvorbis.cpp metaioavfcomment.cpp metaiomp4.cpp
-SOURCES += metaiowavpack.cpp metaioid3.cpp metaiooggvorbis.cpp
+SOURCES += metaiowavpack.cpp metaioid3.cpp metaiooggopus.cpp metaiooggvorbis.cpp
 SOURCES += imagemetadata.cpp imagethumbs.cpp imagescanner.cpp imagemanager.cpp
 SOURCES += musicfilescanner.cpp metadatagrabber.cpp lyricsdata.cpp
 
@@ -44,13 +44,10 @@ INCLUDEPATH += $${CONFIG_TAGLIB_INCLUDES}
 
 LIBS += -L../libmythbase           -lmythbase-$${LIBVERSION}
 LIBS += -L../libmythui           -lmythui-$${LIBVERSION}
-LIBS += -L../libmythservicecontracts -lmythservicecontracts-$${LIBVERSION}
-LIBS += -L../libmythfreesurround -lmythfreesurround-$${LIBVERSION}
 LIBS += -L../../external/FFmpeg/libswresample -lmythswresample
 LIBS += -L../../external/FFmpeg/libavutil -lmythavutil
 LIBS += -L../../external/FFmpeg/libavcodec -lmythavcodec
 LIBS += -L../../external/FFmpeg/libavformat -lmythavformat
-LIBS += -L../libmyth              -lmyth-$${LIBVERSION}
 LIBS += -L../libmythtv              -lmythtv-$${LIBVERSION}
 LIBS += -L../../external/FFmpeg/libswscale -lmythswscale
 
@@ -68,8 +65,6 @@ LIBS += -L../../external/FFmpeg/libswscale -lmythswscale
     INCLUDEPATH += ../../external/libmythbluray/src
     DEPENDPATH += ../../external/libmythbluray
     LIBS += -L../../external/libmythbluray     -lmythbluray-$${LIBVERSION}
-} else {
-    DEFINES += HAVE_LIBBLURAY
 }
 
 using_system_libbluray:android {
@@ -79,19 +74,10 @@ using_system_libbluray:android {
 # for TagLib
 LIBS += $${CONFIG_TAGLIB_LIBS}
 
-win32-msvc*:LIBS += -ltag
-
 using_mheg:LIBS += -L../libmythfreemheg        -lmythfreemheg-$${LIBVERSION}
 
 mingw:LIBS += -lws2_32
 mingw:LIBS += libbluray
-
-win32-msvc* {
-
-    LIBS += -lws2_32
-    LIBS += -ltag
-    INCLUDEPATH += $$SRC_PATH_BARE/../platform/win32/msvc/external/taglib/include/taglib
-}
 
 inc.path = $${PREFIX}/include/mythtv/libmythmetadata/
 
@@ -103,7 +89,7 @@ inc.files += mythuiimageresults.h metadataimagehelper.h
 inc.files += musicmetadata.h musicutils.h
 inc.files += metaio.h metaiotaglib.h
 inc.files += metaioflacvorbis.h metaioavfcomment.h metaiomp4.h
-inc.files += metaiowavpack.h metaioid3.h metaiooggvorbis.h
+inc.files += metaiowavpack.h metaioid3.h metaiooggopus.h metaiooggvorbis.h
 inc.files += imagetypes.h imagemetadata.h imagemanager.h
 inc.files += musicfilescanner.h metadatagrabber.h lyricsdata.h
 

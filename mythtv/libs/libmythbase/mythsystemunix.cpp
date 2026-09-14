@@ -12,11 +12,11 @@
 #include <csignal>  // for kill()
 #include <cstdlib>
 #include <cstring> // for strerror()
-#include <ctime>
 #include <fcntl.h>
 #include <iostream> // for cerr()
 #include <sys/select.h>
 #include <sys/wait.h>
+#include <thread>
 #include <unistd.h>
 
 // QT headers
@@ -27,18 +27,16 @@
 #include <QStringList>
 
 // libmythbase headers
-#include "mythcorecontext.h"
+#include "mythconfig.h"
 #include "mythevent.h"
 #include "exitcodes.h"
 #include "mythlogging.h"
+#include "mythchrono.h"
 
-#if !defined(__syscall_slong_t)
-using __syscall_slong_t = long int;
-#endif
 // Run the IO handler ~100x per second (every 10ms), for ~3MBps throughput
-static constexpr __syscall_slong_t kIOHandlerInterval {static_cast<__syscall_slong_t>(10)*1000*1000};
+static constexpr std::chrono::milliseconds kIOHandlerInterval {10ms};
 // Run the Signal handler ~20x per second (every 50ms).
-static constexpr __syscall_slong_t kSignalHandlerInterval {static_cast<__syscall_slong_t>(50)*1000*1000};
+static constexpr std::chrono::milliseconds kSignalHandlerInterval {50ms};
 
 struct FDType_t
 {
@@ -50,7 +48,7 @@ using FDMap_t = QMap<int, FDType_t*>;
 /**********************************
  * MythSystemLegacyManager method defines
  *********************************/
-static bool                     run_system = true;
+static volatile bool                  run_system = true;
 static MythSystemLegacyManager       *manager = nullptr;
 static MythSystemLegacySignalManager *smanager = nullptr;
 static MythSystemLegacyIOHandler     *readThread = nullptr;
@@ -104,8 +102,7 @@ void MythSystemLegacyIOHandler::run(void)
 
         while( run_system )
         {
-            struct timespec ts { 0, kIOHandlerInterval };
-            nanosleep(&ts, nullptr);
+            std::this_thread::sleep_for(kIOHandlerInterval);
             m_pLock.lock();
             if( m_pMap.isEmpty() )
             {
@@ -113,7 +110,7 @@ void MythSystemLegacyIOHandler::run(void)
                 break;
             }
 
-            timeval tv {0, 0};
+            timeval tv {.tv_sec=0, .tv_usec=0};
 
             int retval = -1;
             fd_set fds = m_fds;
@@ -232,7 +229,7 @@ void MythSystemLegacyIOHandler::Wait(int fd)
     while (m_pMap.contains(fd))
     {
         locker.unlock();
-        usleep(10ms);
+        std::this_thread::sleep_for(10ms);
         locker.relock();
     }
 }
@@ -504,8 +501,7 @@ void MythSystemLegacySignalManager::run(void)
     LOG(VB_GENERAL, LOG_INFO, "Starting process signal handler");
     while (run_system)
     {
-        struct timespec ts {0, kSignalHandlerInterval};
-        nanosleep(&ts, nullptr);
+        std::this_thread::sleep_for(kSignalHandlerInterval);
 
         while (run_system)
         {
@@ -899,32 +895,19 @@ void MythSystemLegacyUnix::Fork(std::chrono::seconds timeout)
     SetArgs( args );
 
     QByteArray cmdUTF8 = GetCommand().toUtf8();
-    char *command = strdup(cmdUTF8.constData());
 
-    char **cmdargs = (char **)malloc((args.size() + 1) * sizeof(char *));
+    // Convert args from QString to utf8 encoding.
+    QByteArrayList bargs;
+    bargs.reserve(args.size());
+    for (const auto& arg : std::as_const(args))
+        bargs.push_back(arg.toUtf8());
 
-    if (cmdargs)
-    {
-        int i = 0;
-        for (auto it = args.constBegin(); it != args.constEnd(); ++it)
-        {
-            cmdargs[i++] = strdup(it->toUtf8().constData());
-        }
-        cmdargs[i] = (char *)nullptr;
-    }
-    else
-    {
-        LOG(VB_GENERAL, LOG_CRIT, LOC_ERR +
-                        "Failed to allocate memory for cmdargs " +
-                        ENO);
-        free(command);
-        return;
-    }
-
-    char *directory = nullptr;
-    QString dir = GetDirectory();
-    if (GetSetting("SetDirectory") && !dir.isEmpty())
-        directory = strdup(dir.toUtf8().constData());
+    // Build null terminated array of pointers to utf8 strings.
+    std::vector<char*>cmdargs;
+    cmdargs.reserve(args.size() + 1);
+    for (const auto& barg : std::as_const(bargs))
+        cmdargs.push_back((char*)barg.data());
+    cmdargs.push_back(nullptr);
 
     int niceval = m_parent->GetNice();
     int ioprioval = m_parent->GetIOPrio();
@@ -995,7 +978,7 @@ void MythSystemLegacyUnix::Fork(std::chrono::seconds timeout)
             {
                 std::cerr << locerr
                           << "Cannot redirect input pipe to standard input: "
-                          << strerror(errno) << std::endl;
+                          << strerror(errno) << '\n';
                 _exit(GENERIC_EXIT_PIPE_FAILURE);
             }
         }
@@ -1010,7 +993,7 @@ void MythSystemLegacyUnix::Fork(std::chrono::seconds timeout)
                     std::cerr << locerr
                               << "Cannot redirect /dev/null to standard input,"
                                  "\n\t\t\tfailed to duplicate file descriptor: "
-                              << strerror(errno) << std::endl;
+                              << strerror(errno) << '\n';
                 }
                 if (fd != 0)    // if fd was zero, do not close
                 {
@@ -1018,7 +1001,7 @@ void MythSystemLegacyUnix::Fork(std::chrono::seconds timeout)
                     {
                         std::cerr << locerr
                                   << "Unable to close stdin redirect /dev/null: "
-                                  << strerror(errno) << std::endl;
+                                  << strerror(errno) << '\n';
                     }
                 }
             }
@@ -1027,7 +1010,7 @@ void MythSystemLegacyUnix::Fork(std::chrono::seconds timeout)
                 std::cerr << locerr
                           << "Cannot redirect /dev/null to standard input, "
                              "failed to open: "
-                          << strerror(errno) << std::endl;
+                          << strerror(errno) << '\n';
             }
         }
 
@@ -1039,7 +1022,7 @@ void MythSystemLegacyUnix::Fork(std::chrono::seconds timeout)
             {
                 std::cerr << locerr
                           << "Cannot redirect output pipe to standard output: "
-                          << strerror(errno) << std::endl;
+                          << strerror(errno) << '\n';
                 _exit(GENERIC_EXIT_PIPE_FAILURE);
             }
         }
@@ -1054,7 +1037,7 @@ void MythSystemLegacyUnix::Fork(std::chrono::seconds timeout)
                     std::cerr << locerr
                               << "Cannot redirect standard output to /dev/null,"
                                  "\n\t\t\tfailed to duplicate file descriptor: "
-                              << strerror(errno) << std::endl;
+                              << strerror(errno) << '\n';
                 }
                 if (fd != 1)    // if fd was one, do not close
                 {
@@ -1062,7 +1045,7 @@ void MythSystemLegacyUnix::Fork(std::chrono::seconds timeout)
                    {
                        std::cerr << locerr
                                  << "Unable to close stdout redirect /dev/null: "
-                                 << strerror(errno) << std::endl;
+                                 << strerror(errno) << '\n';
                    }
                 }
             }
@@ -1071,7 +1054,7 @@ void MythSystemLegacyUnix::Fork(std::chrono::seconds timeout)
                 std::cerr << locerr
                           << "Cannot redirect standard output to /dev/null, "
                              "failed to open: "
-                          << strerror(errno) << std::endl;
+                          << strerror(errno) << '\n';
             }
         }
 
@@ -1083,7 +1066,7 @@ void MythSystemLegacyUnix::Fork(std::chrono::seconds timeout)
             {
                 std::cerr << locerr
                           << "Cannot redirect error pipe to standard error: "
-                          << strerror(errno) << std::endl;
+                          << strerror(errno) << '\n';
                 _exit(GENERIC_EXIT_PIPE_FAILURE);
             }
         }
@@ -1098,7 +1081,7 @@ void MythSystemLegacyUnix::Fork(std::chrono::seconds timeout)
                     std::cerr << locerr
                               << "Cannot redirect standard error to /dev/null,"
                                  "\n\t\t\tfailed to duplicate file descriptor: "
-                              << strerror(errno) << std::endl;
+                              << strerror(errno) << '\n';
                 }
                 if (fd != 2)    // if fd was two, do not close
                 {
@@ -1106,7 +1089,7 @@ void MythSystemLegacyUnix::Fork(std::chrono::seconds timeout)
                    {
                        std::cerr << locerr
                                  << "Unable to close stderr redirect /dev/null: "
-                                 << strerror(errno) << std::endl;
+                                 << strerror(errno) << '\n';
                    }
                 }
             }
@@ -1115,7 +1098,7 @@ void MythSystemLegacyUnix::Fork(std::chrono::seconds timeout)
                 std::cerr << locerr
                           << "Cannot redirect standard error to /dev/null, "
                              "failed to open: "
-                          << strerror(errno) << std::endl;
+                          << strerror(errno) << '\n';
             }
         }
 
@@ -1128,11 +1111,15 @@ void MythSystemLegacyUnix::Fork(std::chrono::seconds timeout)
 #endif
 
         /* set directory */
-        if( directory && chdir(directory) < 0 )
+        if (GetSetting("SetDirectory"))
         {
-            std::cerr << locerr
-                      << "chdir() failed: "
-                      << strerror(errno) << std::endl;
+            QByteArray directory = GetDirectory().toUtf8();
+            if( !directory.isEmpty() && chdir(directory.constData()) < 0 )
+            {
+                std::cerr << locerr
+                          << "chdir() failed: "
+                          << strerror(errno) << '\n';
+            }
         }
 
         /* Set nice and ioprio values if non-default */
@@ -1142,12 +1129,12 @@ void MythSystemLegacyUnix::Fork(std::chrono::seconds timeout)
             myth_ioprio(ioprioval);
 
         /* run command */
-        if( execv(command, cmdargs) < 0 )
+        if( execv(cmdUTF8.constData(), cmdargs.data()) < 0 )
         {
             // Can't use LOG due to locking fun.
             std::cerr << locerr
                       << "execv() failed: "
-                      << strerror(errno) << std::endl;
+                      << strerror(errno) << '\n';
         }
 
         /* Failed to exec */
@@ -1155,18 +1142,6 @@ void MythSystemLegacyUnix::Fork(std::chrono::seconds timeout)
     }
 
     /* Parent */
-
-    // clean up the memory use
-    free(command);
-
-    free(directory);
-
-    if( cmdargs )
-    {
-        for (int i = 0; cmdargs[i]; i++)
-            free( cmdargs[i] );
-        free( reinterpret_cast<void*>(cmdargs) );
-    }
 
     if( GetStatus() != GENERIC_EXIT_RUNNING )
     {
@@ -1193,6 +1168,4 @@ void MythSystemLegacyUnix::JumpAbort(void)
     manager->jumpAbort();
 }
 
-/*
- * vim:ts=4:sw=4:ai:et:si:sts=4
- */
+#include "moc_mythsystemunix.cpp"

@@ -10,18 +10,24 @@
 
 // Qt headers
 #include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QCoreApplication>
 #include <QDir>
 #include <QEvent>
 #include <utility>
 
 // MythTV headers
-#include "libmyth/audio/audiooutpututil.h"
+#include "libmythtv/audio/audiooutput.h"
+#include "libmythtv/audio/audiooutputsettings.h"
 #include "libmythbase/mythconfig.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdbcon.h"
 #include "libmythbase/mythlogging.h"
+#ifndef __cpp_size_t_suffix
 #include "libmythbase/sizetliteral.h"
+#endif
 #include "libmythui/mythdialogbox.h"
 #include "libmythui/mythmainwindow.h"
 
@@ -38,13 +44,13 @@ AudioDeviceComboBox::AudioDeviceComboBox(AudioConfigSettings *parent) :
     setLabel(tr("Audio output device"));
 #ifdef Q_OS_ANDROID
     QString dflt = "OpenSLES:";
-#elif USING_ALSA
+#elif CONFIG_AUDIO_ALSA
     QString dflt = "ALSA:default";
-#elif USING_PULSEOUTPUT
+#elif CONFIG_AUDIO_PULSEOUTPUT
     QString dflt = "PulseAudio:default";
 #elif defined(Q_OS_DARWIN)
     QString dflt = "CoreAudio:";
-#elif defined(_WIN32)
+#elif defined(Q_OS_WINDOWS)
     QString dflt = "Windows:";
 #else
     QString dflt = "NULL";
@@ -159,7 +165,7 @@ AudioConfigSettings::AudioConfigSettings()
     addChild(srcqualityoverride);
 
     advancedSettings->addChild(Audio48kOverride());
-#ifdef USING_ALSA
+#if CONFIG_AUDIO_ALSA
     advancedSettings->addChild(SPDIFRateOverride());
 #endif
 
@@ -168,6 +174,7 @@ AudioConfigSettings::AudioConfigSettings()
     advancedSettings->addChild(m_mpcm = MPCM());
 
     addChild(m_audioTest = new AudioTest());
+    UpdateAudioTest();
 
         // Set slots
     connect(m_maxAudioChannels, qOverload<StandardSetting *>(&StandardSetting::valueChanged),
@@ -572,7 +579,7 @@ bool AudioConfigSettings::CheckPassthrough()
     return ok;
 }
 
-#ifdef USING_OSS
+#if CONFIG_AUDIO_OSS
 static void fillSelectionsFromDir(HostComboBoxSetting *comboBox,
                                   const QDir& dir, bool absPath = true)
 
@@ -623,7 +630,7 @@ AudioTestThread::AudioTestThread(QObject *parent,
                                            AV_CODEC_ID_NONE, m_samplerate,
                                            AUDIOOUTPUT_VIDEO,
                                            true, false, 0, &settings);
-    if (result().isEmpty())
+    if (isOutputOpen())
     {
         m_audioOutput->Pause(true);
     }
@@ -642,16 +649,6 @@ AudioTestThread::~AudioTestThread()
 void AudioTestThread::cancel()
 {
     m_interrupted = true;
-}
-
-QString AudioTestThread::result()
-{
-    QString errMsg;
-    if (!m_audioOutput)
-        errMsg = tr("Unable to create AudioOutput.");
-    else
-        errMsg = m_audioOutput->GetError();
-    return errMsg;
 }
 
 void AudioTestThread::setChannel(int channel)
@@ -673,9 +670,13 @@ void AudioTestThread::run()
         { 0, 2, 1, 7, 5, 4, 6, 3 },     //7.1
     }};
 
-    if (m_audioOutput && (m_audioOutput->GetError().isEmpty()))
+    if (isOutputOpen())
     {
+#ifdef __cpp_size_t_suffix
+        char *frames = new (std::align_val_t(16)) char[m_channels * 1024UZ * sizeof(int32_t)];
+#else
         char *frames = new (std::align_val_t(16)) char[m_channels * 1024_UZ * sizeof(int32_t)];
+#endif
 
         m_audioOutput->Pause(false);
 
@@ -747,10 +748,9 @@ void AudioTestThread::run()
                 int top = m_samplerate / 1000 * 3;
                 for (int j = 0; j < top && !m_interrupted; j++)
                 {
-                    AudioOutputUtil::GeneratePinkFrames(frames, m_channels,
+                    if (!m_audioOutput->playPinkNoise(frames, m_channels,
                                                         current, 1000,
-                                                        m_hd ? 32 : 16);
-                    if (!m_audioOutput->AddFrames(frames, 1000 , -1ms))
+                                                        m_hd ? 32 : 16))
                     {
                         LOG(VB_AUDIO, LOG_ERR, "AddData() Audio buffer "
                                                "overflow, audio data lost!");
@@ -767,7 +767,7 @@ void AudioTestThread::run()
         }
         m_audioOutput->Pause(true);
 
-        delete[] frames;
+        ::operator delete[] (frames, std::align_val_t(16));
     }
     RunEpilog();
 }
@@ -905,7 +905,9 @@ void AudioTest::toggle()
     if (this->sender() == m_startButton)
     {
         if (m_at && m_at->isRunning())
+        {
             cancelTest();
+        }
         else
         {
             prepareTest();
@@ -927,13 +929,21 @@ void AudioTest::toggle()
     int channel = 1;
 
     if (this->sender() == m_frontleft)
+    {
         channel = 0;
+    }
     else if (this->sender() == m_frontright)
+    {
         channel = (m_channels == 2) ? 1 : 2;
+    }
     else if (this->sender() == m_rearleft)
+    {
         channel = 5;
+    }
     else if (this->sender() == m_rearright)
+    {
         channel = 4;
+    }
     else if (this->sender() == m_lfe)
     {
         if (m_channels == 6)
@@ -993,7 +1003,7 @@ void AudioTest::prepareTest()
 
     m_at = new AudioTestThread(this, m_main, m_passthrough, m_channels,
                                m_settings, m_quality);
-    if (!m_at->result().isEmpty())
+    if (!m_at->isOutputOpen())
     {
         QString msg = tr("Audio device is invalid or not useable.");
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
@@ -1109,7 +1119,7 @@ HostComboBoxSetting *AudioConfigSettings::MixerDevice()
     auto *gc = new HostComboBoxSetting("MixerDevice", true);
     gc->setLabel(tr("Mixer device"));
 
-#ifdef USING_OSS
+#if CONFIG_AUDIO_OSS
     QDir dev("/dev", "mixer*", QDir::Name, QDir::System);
     fillSelectionsFromDir(gc, dev);
 
@@ -1119,17 +1129,17 @@ HostComboBoxSetting *AudioConfigSettings::MixerDevice()
         fillSelectionsFromDir(gc, dev);
     }
 #endif
-#ifdef USING_ALSA
+#if CONFIG_AUDIO_ALSA
     gc->addSelection("ALSA:default", "ALSA:default");
 #endif
-#ifdef _WIN32
+#ifdef Q_OS_WINDOWS
     gc->addSelection("DirectX:", "DirectX:");
     gc->addSelection("Windows:", "Windows:");
 #endif
 #ifdef Q_OS_ANDROID
     gc->addSelection("OpenSLES:", "OpenSLES:");
 #endif
-#if !defined(_WIN32)
+#ifndef Q_OS_WINDOWS
     gc->addSelection(tr("software"), "software");
 #endif
 
@@ -1271,7 +1281,7 @@ HostComboBoxSetting *AudioConfigSettings::PassThroughOutputDevice()
     //PassThruDeviceOverridedsetting could be removed
     gc->addSelection(QCoreApplication::translate("(Common)", "Default"),
                      "Default");
-#ifdef _WIN32
+#ifdef Q_OS_WINDOWS
     gc->addSelection("DirectX:Primary Sound Driver");
 #else
     gc->addSelection("ALSA:iec958:{ AES0 0x02 }",
@@ -1322,4 +1332,5 @@ void AudioConfigSettings::setMPCMEnabled(bool flag)
 {
     m_mpcm->setEnabled(flag);
 }
-// vim:set sw=4 ts=4 expandtab:
+
+#include "moc_audiogeneralsettings.cpp"

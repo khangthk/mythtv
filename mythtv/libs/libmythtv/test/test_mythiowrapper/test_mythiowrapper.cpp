@@ -36,12 +36,15 @@ void TestMythIOWrapper::local_directory_test(void)
     int dirid = MythDirOpen(qPrintable(dirname));
     QVERIFY2(dirid != 0, "MythDirOpen failed");
 
-    char *name = nullptr;
+    std::string name;
     QSet<QString> found;
-    while ((name = MythDirRead(dirid)) != nullptr) {
-        if (name[0] != '.')
-            found += name;
-        free(name);
+    while (true) {
+        name = MythDirRead(dirid);
+        if (name.empty())
+            break;
+        if (name[0] == '.')
+            continue;
+        found += QString::fromStdString(name);
     }
     QVERIFY(known == found);
 
@@ -54,3 +57,5 @@ void TestMythIOWrapper::cleanupTestCase(void)
 }
 
 QTEST_APPLESS_MAIN(TestMythIOWrapper)
+
+#include "moc_test_mythiowrapper.cpp"

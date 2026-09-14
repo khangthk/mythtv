@@ -4,7 +4,9 @@
 #include "Bluray/mythbddecoder.h"
 #include "Bluray/mythbdplayer.h"
 
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
+#include "libmythbase/mythlogging.h"
 
 // Std
 #include <unistd.h>
@@ -427,3 +429,5 @@ void MythBDPlayer::CreateDecoder(TestBufferVec & TestBuffer)
     if (MythBDDecoder::CanHandle(TestBuffer, m_playerCtx->m_buffer->GetFilename()))
         SetDecoder(new MythBDDecoder(this, *m_playerCtx->m_playingInfo, m_playerFlags));
 }
+
+#include "moc_mythbdplayer.cpp"

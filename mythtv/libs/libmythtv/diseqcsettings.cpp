@@ -11,7 +11,6 @@
 
 // MythTV headers
 #include "libmythbase/mythdbcon.h"
-#include "libmythbase/mythlogging.h"
 #include "diseqcsettings.h"
 
 /* Lat/Long items relocated from videosource.cpp */
@@ -320,8 +319,7 @@ bool DiseqcConfigBase::keyPressEvent(QKeyEvent *e)
     if (GetMythMainWindow()->TranslateKeyPress("Global", e, actions))
         return true;
 
-    auto isdelete = [](const QString & action) { return action == "DELETE"; };
-    if (std::any_of(actions.cbegin(), actions.cend(), isdelete))
+    if (actions.contains("DELETE"))
     {
         emit DeleteClicked();
         return true;
@@ -456,11 +454,15 @@ static double AngleToFloat(const QString &angle, bool translated = true)
     if (angle.length() < 2)
         return 0.0;
 
-    double pos = NAN;
+    double pos = __builtin_nan("");
     QChar postfix = angle.at(angle.length() - 1);
     if (postfix.isLetter())
     {
-        pos = angle.left(angle.length() - 1).toDouble();
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+        pos = angle.leftRef(angle.length() - 1).toDouble();
+#else
+        pos = QStringView(angle).left(angle.length() - 1).toDouble();
+#endif
         if ((translated &&
              (postfix.toUpper() ==
               DeviceTree::tr("W", "Western Hemisphere").at(0))) ||
@@ -745,7 +747,7 @@ class LNBPresetSetting : public MythUIComboBoxSetting
 
         uint i = 0;
         for (; !lnb_presets[i].m_name.isEmpty(); i++)
-                        addSelection(DeviceTree::tr( lnb_presets[i].m_name.toUtf8() ),
+                        addSelection(DeviceTree::tr( lnb_presets[i].m_name.toUtf8().constData() ),
                          QString::number(i));
         addSelection(DeviceTree::tr("Custom"), QString::number(i));
     }
@@ -1146,8 +1148,7 @@ void DeviceTree::ConnectToValueChanged(DeviceTypeSetting *devtype,
     };
 
     connect(devtype,
-            static_cast<void (StandardSetting::*)(const QString&)>(
-                                                &StandardSetting::valueChanged),
+            qOverload<const QString&>(&StandardSetting::valueChanged),
             this,
             slot);
 }
@@ -1445,3 +1446,5 @@ void DTVDeviceConfigGroup::AddChild(
     else
         group->addChild(setting);
 }
+
+#include "moc_diseqcsettings.cpp"

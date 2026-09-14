@@ -58,16 +58,26 @@ void MythUDPListener::DoEnable(bool Enable)
 void MythUDPListener::Process(const QByteArray& Buffer, const QHostAddress& /*Sender*/,
                               quint16 /*SenderPort*/)
 {
+    QDomDocument doc;
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     QString errormsg;
     int line = 0;
     int column = 0;
-    QDomDocument doc;
     if (!doc.setContent(Buffer, false, &errormsg, &line, &column))
     {
         LOG(VB_GENERAL, LOG_ERR, LOC + QString("Error parsing xml: Line: %1 Column: %2 Error: %3")
             .arg(line).arg(column).arg(errormsg));
         return;
     }
+#else
+    auto parseResult = doc.setContent(Buffer);
+    if (!parseResult)
+    {
+        LOG(VB_GENERAL, LOG_ERR, LOC + QString("Error parsing xml: Line: %1 Column: %2 Error: %3")
+            .arg(parseResult.errorLine).arg(parseResult.errorColumn).arg(parseResult.errorMessage));
+        return;
+    }
+#endif
 
     auto element = doc.documentElement();
     bool notification = false;
@@ -109,36 +119,33 @@ void MythUDPListener::Process(const QByteArray& Buffer, const QHostAddress& /*Se
         if (!dom.isNull())
         {
             auto tagname = dom.tagName();
-            if (tagname == "text")
+            if (tagname == "text") {
                 msg = dom.text();
-            else if (tagname == "timeout")
+            } else if (tagname == "timeout") {
                 timeout = std::chrono::seconds(dom.text().toUInt());
-            else if (notification && tagname == "image")
+            } else if (notification && tagname == "image") {
                 image = dom.text();
-            else if (notification && tagname == "origin")
+            } else if (notification && tagname == "origin") {
                 origin = dom.text();
-            else if (notification && tagname == "description")
+            } else if (notification && tagname == "description") {
                 description = dom.text();
-            else if (notification && tagname == "extra")
+            } else if (notification && tagname == "extra") {
                 extra = dom.text();
-            else if (notification && tagname == "progress_text")
+            } else if (notification && tagname == "progress_text") {
                 progress_text = dom.text();
-            else if (notification && tagname == "fullscreen")
+            } else if (notification && tagname == "fullscreen") {
                 fullscreen = dom.text().toLower() == "true";
-            else if (notification && tagname == "error")
+            } else if (notification && tagname == "error") {
                 error = dom.text().toLower() == "true";
-            else if (tagname == "visibility")
+            } else if (tagname == "visibility") {
                 visibility = dom.text().toInt();
-            else if (tagname == "type")
+            } else if (tagname == "type") {
                 type = dom.text();
-            else if (notification && tagname == "progress")
-            {
+            } else if (notification && tagname == "progress") {
                 bool ok = false;
                 if (progress = dom.text().toFloat(&ok); !ok)
                     progress = -1.0F;
-            }
-            else
-            {
+            } else {
                 LOG(VB_GENERAL, LOG_ERR, LOC + QString("Unknown element: %1")
                     .arg(tagname));
             }
@@ -195,8 +202,10 @@ MythUDP::MythUDP()
 {
     m_listener->moveToThread(m_thread->qthread());
     m_thread->start();
-    do { std::this_thread::sleep_for(5us); }
-    while (!m_thread->qthread()->isRunning());
+    while (!m_thread->qthread()->isRunning())
+    {
+        std::this_thread::sleep_for(5us);
+    }
 }
 
 MythUDP::~MythUDP()
@@ -223,3 +232,5 @@ void MythUDP::StopUDPListener()
     delete Instance().m_listener;
     Instance().m_listener = nullptr;
 }
+
+#include "moc_mythudplistener.cpp"

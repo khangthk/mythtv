@@ -36,7 +36,7 @@
 #include "mythuiscrollbar.h"
 #include "mythuigroup.h"
 
-#if CONFIG_QTWEBKIT
+#if CONFIG_QTWEBENGINE
 #include "mythuiwebbrowser.h"
 #endif
 
@@ -239,7 +239,7 @@ QBrush XMLParseBase::parseGradient(const QDomElement &element)
         QDomElement childElem = child.toElement();
         if (childElem.tagName() == "stop")
         {
-            float position = childElem.attribute("position", "0").toFloat();
+            double position = childElem.attribute("position", "0").toDouble();
             QString color = childElem.attribute("color", "");
             int alpha = childElem.attribute("alpha", "-1").toInt();
             if (alpha < 0)
@@ -263,9 +263,9 @@ QBrush XMLParseBase::parseGradient(const QDomElement &element)
     {
         QRadialGradient gradient;
         gradient.setCoordinateMode(QGradient::ObjectBoundingMode);
-        float x1 = 0.5;
-        float y1 = 0.5;
-        float radius = 0.5;
+        double x1 = 0.5;
+        double y1 = 0.5;
+        double radius = 0.5;
         gradient.setCenter(x1,y1);
         gradient.setFocalPoint(x1,y1);
         gradient.setRadius(radius);
@@ -276,10 +276,10 @@ QBrush XMLParseBase::parseGradient(const QDomElement &element)
     {
         QLinearGradient gradient;
         gradient.setCoordinateMode(QGradient::ObjectBoundingMode);
-        float x1 = 0.0;
-        float y1 = 0.0;
-        float x2 = 0.0;
-        float y2 = 0.0;
+        double x1 = 0.0;
+        double y1 = 0.0;
+        double x2 = 0.0;
+        double y2 = 0.0;
         if (direction == "vertical")
         {
             x1 = 0.5;
@@ -479,35 +479,37 @@ MythUIType *XMLParseBase::ParseUIType(
         }
     }
 
-    if (type == "imagetype")
+    QString shadow = element.attribute("shadow", "");
+
+    if (type == "imagetype") {
         uitype = new MythUIImage(parent, name);
-    else if (type == "procedural")
+    } else if (type == "procedural") {
         uitype = new MythUIProcedural(parent, name);
-    else if (type == "textarea")
+    } else if (type == "textarea") {
         uitype = new MythUIText(parent, name);
-    else if (type == "group")
+    } else if (type == "group") {
         uitype = new MythUIGroup(parent, name);
-    else if (type == "textedit")
+    } else if (type == "textedit") {
         uitype = new MythUITextEdit(parent, name);
-    else if (type == "button")
+    } else if (type == "button") {
         uitype = new MythUIButton(parent, name);
-    else if (type == "buttonlist2" || type == "buttonlist")
-        uitype = new MythUIButtonList(parent, name);
-    else if (type == "buttontree")
+    } else if (type == "buttonlist2" || type == "buttonlist") {
+        uitype = new MythUIButtonList(parent, name, shadow);
+    } else if (type == "buttontree") {
         uitype = new MythUIButtonTree(parent, name);
-    else if (type == "spinbox")
+    } else if (type == "spinbox") {
         uitype = new MythUISpinBox(parent, name);
-    else if (type == "checkbox")
+    } else if (type == "checkbox") {
         uitype = new MythUICheckBox(parent, name);
-    else if (type == "statetype")
+    } else if (type == "statetype") {
         uitype = new MythUIStateType(parent, name);
-    else if (type == "clock")
+    } else if (type == "clock") {
         uitype = new MythUIClock(parent, name);
-    else if (type == "progressbar")
+    } else if (type == "progressbar") {
         uitype = new MythUIProgressBar(parent, name);
-    else if (type == "scrollbar") {
+    } else if (type == "scrollbar") {
         uitype = new MythUIScrollBar(parent, name);
-#if CONFIG_QTWEBKIT
+#if CONFIG_QTWEBENGINE
     } else if (type == "webbrowser") {
         uitype = new MythUIWebBrowser(parent, name);
 #endif
@@ -646,6 +648,7 @@ bool XMLParseBase::WindowExists(const QString &xmlfile,
             continue;
 
         QDomDocument doc;
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
         QString errorMsg;
         int errorLine = 0;
         int errorColumn = 0;
@@ -660,7 +663,20 @@ bool XMLParseBase::WindowExists(const QString &xmlfile,
             f.close();
             continue;
         }
-
+#else
+        auto parseResult = doc.setContent(&f);
+        if (!parseResult)
+        {
+            LOG(VB_GENERAL, LOG_ERR, LOC +
+                QString("Location: '%1' @ %2 column: %3"
+                        "\n\t\t\tError: %4")
+                    .arg(qPrintable(themefile)).arg(parseResult.errorLine)
+                    .arg(parseResult.errorColumn)
+                    .arg(qPrintable(parseResult.errorMessage)));
+            f.close();
+            continue;
+        }
+#endif
         f.close();
 
         QDomElement docElem = doc.documentElement();
@@ -723,6 +739,7 @@ bool XMLParseBase::doLoad(const QString &windowname,
     if (!f.open(QIODevice::ReadOnly))
         return false;
 
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     QString errorMsg;
     int errorLine = 0;
     int errorColumn = 0;
@@ -737,6 +754,20 @@ bool XMLParseBase::doLoad(const QString &windowname,
         f.close();
         return false;
     }
+#else
+    auto parseResult = doc.setContent(&f);
+    if (!parseResult)
+    {
+        LOG(VB_GENERAL, LOG_ERR, LOC +
+            QString("Location: '%1' @ %2 column: %3"
+                    "\n\t\t\tError: %4")
+                .arg(qPrintable(filename)).arg(parseResult.errorLine)
+                .arg(parseResult.errorColumn)
+                .arg(qPrintable(parseResult.errorMessage)));
+        f.close();
+        return false;
+    }
+#endif
 
     f.close();
 

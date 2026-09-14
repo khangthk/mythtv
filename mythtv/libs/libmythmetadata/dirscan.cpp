@@ -3,10 +3,8 @@
 #include <QDir>
 #include <QUrl>
 
-#include "libmyth/mythcontext.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
-#include "libmythbase/remoteutil.h"
 #include "libmythbase/storagegroup.h"
 
 #include "dbaccess.h"
@@ -137,7 +135,7 @@ namespace
         }
         else
         {
-            ok = RemoteGetFileList(host, start_path, &list, "Videos");
+            ok = StorageGroup::remoteGetFileList(host, start_path, &list, "Videos");
         }
 
         if (!ok || (!list.isEmpty() && list.at(0).startsWith("SLAVE UNREACHABLE")))
@@ -253,7 +251,7 @@ bool ScanVideoDirectory(const QString &start_path, DirectoryHandler *handler,
         LOG(VB_GENERAL, LOG_INFO,
             QString("MythVideo::ScanVideoDirectory Scanning Group (%1)")
                 .arg(start_path));
-        QUrl sgurl = start_path;
+        QUrl sgurl { start_path };
         QString host = sgurl.host();
         QString path = sgurl.path();
 

@@ -13,21 +13,19 @@
 #include <QtGlobal>
 
 // MythTV
-#include "libmyth/langsettings.h"
+#include "libmythui/langsettings.h"
 #include "libmyth/mythcontext.h"
-#include "libmyth/storagegroupeditor.h"
-#include "libmythbase/cleanupguard.h"
+#include "libmythui/storagegroupeditor.h"
 #include "libmythbase/dbutil.h"
 #include "libmythbase/exitcodes.h"
-#include "libmythbase/mythconfig.h"
+#include "libmythbase/mythappname.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdbcon.h"
 #include "libmythbase/mythdirs.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythmiscutil.h"
 #include "libmythbase/mythtranslation.h"
 #include "libmythbase/mythversion.h"
-#include "libmythbase/remoteutil.h"
-#include "libmythbase/signalhandling.h"
 #include "libmythtv/cardutil.h"
 #include "libmythtv/channelscan/channelimporter.h"
 #include "libmythtv/channelscan/channelscanner_cli.h"
@@ -56,17 +54,6 @@ ExitPrompter   *exitPrompt  = nullptr;
 StartPrompter  *startPrompt = nullptr;
 
 static MythThemedMenu *menu;
-static QString  logfile;
-
-static void cleanup()
-{
-    DestroyMythMainWindow();
-
-    delete gContext;
-    gContext = nullptr;
-
-    SignalHandler::Done();
-}
 
 static void SetupMenuCallback(void* /* data */, QString& selection)
 {
@@ -180,7 +167,7 @@ static bool RunMenu(const QString& themedir, const QString& themename)
 
     if (menu->foundTheme())
     {
-        menu->setCallback(SetupMenuCallback, gContext);
+        menu->setCallback(SetupMenuCallback, nullptr);
         GetMythMainWindow()->GetMainStack()->AddScreen(menu);
         return true;
     }
@@ -290,7 +277,6 @@ int main(int argc, char *argv[])
     }
 
     std::unique_ptr<QCoreApplication> app {nullptr};
-    CleanupGuard callCleanup(cleanup);
 
     if (use_display)
     {
@@ -302,10 +288,6 @@ int main(int argc, char *argv[])
         app = std::make_unique<QCoreApplication>(argc, argv);
     }
     QCoreApplication::setApplicationName(MYTH_APPNAME_MYTHTV_SETUP);
-
-#ifndef _WIN32
-    SignalHandler::Init();
-#endif
 
     if (cmdline.toBool("geometry"))
         geometry = cmdline.toString("geometry");
@@ -374,10 +356,10 @@ int main(int argc, char *argv[])
     if (!geometry.isEmpty())
         MythMainWindow::ParseGeometryOverride(geometry);
 
-    gContext = new MythContext(MYTH_BINARY_VERSION);
+    MythContext context {MYTH_BINARY_VERSION};
 
     cmdline.ApplySettingsOverride();
-    if (!gContext->Init(use_display,false,true)) // No Upnp, Prompt for db
+    if (!context.Init(use_display,false,true)) // No Upnp, Prompt for db
     {
         LOG(VB_GENERAL, LOG_ERR, "Failed to init MythContext, exiting.");
         return GENERIC_EXIT_NO_MYTHCONTEXT;
@@ -415,15 +397,14 @@ int main(int argc, char *argv[])
 
         if (!okCardID)
         {
-            std::cerr << "You must enter a valid cardid to scan." << std::endl;
+            std::cerr << "You must enter a valid cardid to scan.\n";
             std::vector<unsigned int> cardids = CardUtil::GetInputIDs();
             if (cardids.empty())
             {
-                std::cerr << "But no cards have been defined on this host"
-                          << std::endl;
+                std::cerr << "But no cards have been defined on this host\n";
                 return GENERIC_EXIT_INVALID_CMDLINE;
             }
-            std::cerr << "Valid cards: " << std::endl;
+            std::cerr << "Valid cards:\n";
             for (uint id : cardids)
             {
                 fprintf(stderr, "%5u: %s %s\n", id,
@@ -435,11 +416,10 @@ int main(int argc, char *argv[])
 
         if (!okInputName)
         {
-            std::cerr << "You must enter a valid input to scan this card."
-                      << std::endl;
+            std::cerr << "You must enter a valid input to scan this card.\n";
             std::cerr << "Valid input: "
                       << CardUtil::GetInputName(scanCardId).toLatin1().constData()
-                      << std::endl;
+                      << '\n';
             return GENERIC_EXIT_INVALID_CMDLINE;
         }
     }
@@ -455,11 +435,17 @@ int main(int argc, char *argv[])
 
             int scantype { ScanTypeSetting::FullScan_ATSC };
             if (frequencyStandard == "atsc")
-                scantype = ScanTypeSetting::FullScan_ATSC; // NOLINT(bugprone-branch-clone)
+            { // NOLINT(bugprone-branch-clone)
+                scantype = ScanTypeSetting::FullScan_ATSC;
+            }
             else if (frequencyStandard == "dvbt")
+            {
                 scantype = ScanTypeSetting::FullScan_DVBT;
+            }
             else if (frequencyStandard == "mpeg")
+            {
                 scantype = ScanTypeSetting::CurrentTransportScan;
+            }
             else if (frequencyStandard == "iptv")
             {
                 scantype = ScanTypeSetting::IPTVImportMPTS;
@@ -493,14 +479,14 @@ int main(int argc, char *argv[])
                          startChan, frequencyStandard, modulation, region);
             ret = QCoreApplication::exec();
         }
-        return (ret) ? GENERIC_EXIT_NOT_OK : GENERIC_EXIT_OK;
+        return ret ? GENERIC_EXIT_NOT_OK : GENERIC_EXIT_OK;
     }
 
     if (doScanList)
     {
         std::vector<ScanInfo> scans = LoadScanList();
 
-        std::cout<<" scanid cardid sourceid processed        date"<<std::endl;
+        std::cout<<" scanid cardid sourceid processed        date\n";
         for (auto & scan : scans)
         {
             printf("%5i %6i %8i %8s    %20s\n",
@@ -509,14 +495,14 @@ int main(int argc, char *argv[])
                    scan.m_scandate.toString(Qt::ISODate)
                    .toLatin1().constData());
         }
-        std::cout<<std::endl;
+        std::cout<<'\n';
 
         return GENERIC_EXIT_OK;
     }
 
     if (scanImport)
     {
-        std::cout<<"*** SCAN IMPORT START ***"<<std::endl;
+        std::cout<<"*** SCAN IMPORT START ***\n";
         {
             ScanDTVTransportList list = LoadScan(scanImport);
             ChannelImporter ci(false, true, true, true, false,
@@ -527,7 +513,7 @@ int main(int argc, char *argv[])
                                scanServiceRequirements);
             ci.Process(list);
         }
-        std::cout<<"*** SCAN IMPORT END ***"<<std::endl;
+        std::cout<<"*** SCAN IMPORT END ***\n";
         return GENERIC_EXIT_OK;
     }
 
@@ -589,7 +575,9 @@ int main(int argc, char *argv[])
         expertEditor =
             new ExpertSettingsEditor(mainStack, "Expert Settings Editor");
         if (expertEditor->Create())
+        {
             mainStack->AddScreen(expertEditor);
+        }
         else
         {
             delete expertEditor;

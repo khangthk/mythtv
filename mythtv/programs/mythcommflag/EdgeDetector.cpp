@@ -2,8 +2,6 @@
 #include <algorithm>
 #include <cstdlib>
 
-#include "libmythbase/mythconfig.h"
-
 // avlib/ffmpeg headers
 extern "C" {
 #include "libavcodec/avcodec.h"        // AVFrame
@@ -48,7 +46,7 @@ sgm_init_exclude(unsigned int *sgm, const AVFrame *src, int srcheight,
                 uchar *rr1 = &src->data[0][((rr + 1) * srcwidth) + cc];
                 int dx = rr1[1] - rr0[0];   /* southeast - northwest */
                 int dy = rr1[0] - rr0[1];   /* southwest - northeast */
-                sgm[(rr * srcwidth) + cc] = dx * dx + dy * dy;
+                sgm[(rr * srcwidth) + cc] = (dx * dx) + (dy * dy);
             }
         }
     }

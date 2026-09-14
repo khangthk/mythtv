@@ -105,7 +105,7 @@ class PlaybackBox : public ScheduleCommon
 
     enum DeleteFlags : std::uint8_t
     {
-        kNoFlags       = 0x00,
+        kNoDelFlags    = 0x00,
         kForgetHistory = 0x01,
         kForce         = 0x02,
         kIgnore        = 0x04,
@@ -126,10 +126,8 @@ class PlaybackBox : public ScheduleCommon
    ~PlaybackBox(void) override;
 
     bool Create(void) override; // MythScreenType
-    void Load(void) override; // MythScreenType
-    void Init(void) override; // MythScreenType
+    void ShowMenu(void) override; // MythScreenType
     bool keyPressEvent(QKeyEvent *event) override; // MythScreenType
-    void customEvent(QEvent *event) override; // ScheduleCommon
 
     void setInitialRecGroup(const QString& initialGroup) { m_recGroup = initialGroup; }
     static void * RunPlaybackBox(void *player, bool showTV);
@@ -138,8 +136,15 @@ class PlaybackBox : public ScheduleCommon
     void displayRecGroup(const QString &newRecGroup = "");
     void groupSelectorClosed(void);
 
+  protected:
+    void customEvent(QEvent *event) override; // ScheduleCommon
+    void Load(void) override; // MythScreenType
+    void Init(void) override; // MythScreenType
+    ProgramInfo *GetCurrentProgram(void) const override; // ScheduleCommon
+
   protected slots:
     void updateRecList(MythUIButtonListItem *sel_item);
+    void selectUIGroupsAlphabet(MythUIButtonListItem *item);
     void ItemSelected(MythUIButtonListItem *item)
         { UpdateUIListItem(item, true); }
     void ItemVisible(MythUIButtonListItem *item);
@@ -194,7 +199,7 @@ class PlaybackBox : public ScheduleCommon
     void askDelete();
     void Undelete(void);
     void Delete(PlaybackBox::DeleteFlags flags);
-    void Delete() { Delete(kNoFlags); }
+    void Delete() { Delete(kNoDelFlags); }
     void DeleteForgetHistory(void)      { Delete(kForgetHistory); }
     void DeleteForce(void)              { Delete(kForce);         }
     void DeleteIgnore(void)             { Delete(kIgnore);        }
@@ -301,8 +306,6 @@ class PlaybackBox : public ScheduleCommon
               bool ignoreLastPlayPos,
               bool underNetworkControl);
 
-    ProgramInfo *GetCurrentProgram(void) const override; // ScheduleCommon
-
     void togglePlayListItem(ProgramInfo *pginfo);
     void randomizePlayList(void);
 
@@ -341,7 +344,6 @@ class PlaybackBox : public ScheduleCommon
     void HandleUpdateItemEvent(uint recordingId, uint flags);
 
     void ScheduleUpdateUIList(void);
-    void ShowMenu(void) override; // MythScreenType
     bool CreatePopupMenu(const QString &title);
     void DisplayPopupMenu(void);
     //bool CreatePopupMenu(const QString &title, const ProgramInfo &pginfo)
@@ -355,6 +357,7 @@ class PlaybackBox : public ScheduleCommon
 
 
     MythUIButtonList *m_recgroupList          {nullptr};
+    MythUIButtonList *m_groupAlphaList       {nullptr};
     MythUIButtonList *m_groupList             {nullptr};
     MythUIButtonList *m_recordingList         {nullptr};
 
@@ -391,6 +394,10 @@ class PlaybackBox : public ScheduleCommon
     int                 m_allOrder;
     /// listOrder controls the ordering of the recordings in the list
     int                 m_listOrder           {1};
+
+    // Group alphabet support
+    QString              m_currentLetter;
+    QMap<QString, QString> m_groupAlphabet;
 
     // Recording Group settings
     QString             m_groupDisplayName;
@@ -580,6 +587,9 @@ class RecMetadataEdit : public MythScreenType
     void result(const QString &, const QString &, const QString &,
                 const QString &, uint, uint);
 
+  protected:
+    void customEvent(QEvent *event) override; // MythUIType
+
   protected slots:
     void SaveChanges(void);
     void ClearInetref();
@@ -587,7 +597,6 @@ class RecMetadataEdit : public MythScreenType
     void OnSearchListSelection(const RefCountHandler<MetadataLookup>& lookup);
 
   private:
-    void customEvent(QEvent *event) override; // MythUIType
     void QueryComplete(MetadataLookup *lookup);
 
     MythUITextEdit     *m_titleEdit       {nullptr};

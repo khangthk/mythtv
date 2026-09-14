@@ -1,10 +1,12 @@
+#include <thread>
+
 // qt
 #include <QApplication>
 #include <QDir>
 #include <QFontMetrics>
 
 // MythTV
-#include <libmyth/mythcontext.h>
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythdbcon.h>
 #include <libmythbase/mythlogging.h>
 #include <libmythbase/remotefile.h>
@@ -489,8 +491,7 @@ bool ImportMusicDialog::copyFile(const QString &src, const QString &dst)
 
     while (!copy->isFinished())
     {
-        const struct timespec halfms {0, 500000};
-        nanosleep(&halfms, nullptr);
+        std::this_thread::sleep_for(500us);
         QCoreApplication::processEvents();
     }
 
@@ -529,8 +530,7 @@ void ImportMusicDialog::startScan()
 
     while (!scanner->isFinished())
     {
-        const struct timespec halfms {0, 500000};
-        nanosleep(&halfms, nullptr);
+        std::this_thread::sleep_for(500us);
         QCoreApplication::processEvents();
     }
 
@@ -570,7 +570,9 @@ void ImportMusicDialog::scanDirectory(QString &directory, std::vector<TrackInfo*
         ++it;
         QString filename = fi->absoluteFilePath();
         if (fi->isDir())
+        {
             scanDirectory(filename, tracks);
+        }
         else
         {
             MetaIO *tagger = MetaIO::createTagger(filename);
@@ -637,7 +639,9 @@ void ImportMusicDialog::ShowMenu()
     auto *menu = new MythDialogBox("", popupStack, "importmusicmenu");
 
     if (menu->Create())
+    {
         popupStack->AddScreen(menu);
+    }
     else
     {
         delete menu;
@@ -671,7 +675,9 @@ void ImportMusicDialog::chooseBackend(void) const
                   "FROM storagegroup "
                   "WHERE groupname = 'Music'";
     if (!query.exec(sql) || !query.isActive())
+    {
         MythDB::DBError("ImportMusicDialog::chooseBackend get host list", query);
+    }
     else
     {
         while(query.next())
@@ -1144,3 +1150,5 @@ void ImportCoverArtDialog::updateTypeSelector()
     else
         m_typeList->SetValue(tr("<Unknown>"));
 }
+
+#include "moc_importmusic.cpp"

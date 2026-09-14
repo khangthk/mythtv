@@ -1,5 +1,7 @@
 // MythTV
 #include "libmythbase/iso639.h"
+#include "libmythbase/mythlogging.h"
+
 #include "Bluray/mythbdplayer.h"
 #include "Bluray/mythbdbuffer.h"
 #include "Bluray/mythbddecoder.h"
@@ -68,7 +70,6 @@ void MythBDDecoder::StreamChangeCheck(void)
         QMutexLocker locker(&m_trackLock);
         Reset(true, false, false);
         CloseCodecs();
-        FindStreamInfo();
         ScanStreams(false);
         m_streamsChanged=false;
     }

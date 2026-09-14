@@ -36,6 +36,7 @@
 #include "libmythbase/storagegroup.h"
 #include "libmythtv/channelgroup.h"
 #include "libmythtv/channelutil.h"
+#include "libmythtv/programinfo.h"
 
 // MythBackend
 #include "autoexpire.h"
@@ -65,6 +66,7 @@ Q_GLOBAL_STATIC_WITH_ARGS(MythHTTPMetaService, s_service,
 
 void V2Guide::RegisterCustomTypes()
 {
+    qRegisterMetaType< QFileInfo >();
     qRegisterMetaType<V2ProgramGuide*>("V2ProgramGuide");
     qRegisterMetaType<V2ProgramList*>("V2ProgramList");
     qRegisterMetaType<V2Program*>("V2Program");
@@ -217,7 +219,8 @@ V2ProgramList* V2Guide::GetProgramList(int              nStartIndex,
                                         const QString   &sSort,
                                         bool             bDescending,
                                         bool             bWithInvisible,
-                                        const QString& sCatType)
+                                        const QString& sCatType,
+                                        const QString& sGroupBy)
 {
     if (!rawStartTime.isNull() && !rawStartTime.isValid())
         throw QString( "StartTime is invalid" );
@@ -230,6 +233,17 @@ V2ProgramList* V2Guide::GetProgramList(int              nStartIndex,
 
     if (!rawEndTime.isNull() && dtEndTime < dtStartTime)
         throw QString( "EndTime is before StartTime");
+
+    ProgGroupBy::Type nGroupBy = ProgGroupBy::ChanNum;
+    if (!sGroupBy.isEmpty())
+    {
+        // Handle ProgGroupBy enum name
+        auto meta = QMetaEnum::fromType<ProgGroupBy::Type>();
+        bool ok = false;
+        nGroupBy = ProgGroupBy::Type(meta.keyToValue(sGroupBy.toLocal8Bit().constData(), &ok));
+        if (!ok)
+            throw QString( "GroupBy is invalid" );
+    }
 
     MSqlQuery query(MSqlQuery::InitCon());
 
@@ -352,7 +366,8 @@ V2ProgramList* V2Guide::GetProgramList(int              nStartIndex,
 
     uint nTotalAvailable = 0;
     LoadFromProgram( progList, sSQL, bindings, schedList,
-                     (uint)nStartIndex, (uint)nCount, nTotalAvailable);
+                     (uint)nStartIndex, (uint)nCount, nTotalAvailable,
+                     nGroupBy);
 
     // ----------------------------------------------------------------------
     // Build Response
@@ -672,4 +687,22 @@ bool V2Guide::RemoveFromChannelGroup ( int nChannelGroupId,
     return bResult;
 }
 
+int V2Guide::AddChannelGroup       ( const QString &Name)
+{
+    return ChannelGroup::AddChannelGroup(Name);
+}
+
+bool V2Guide::RemoveChannelGroup  ( const QString &Name )
+{
+    return ChannelGroup::RemoveChannelGroup(Name);
+}
+
+bool V2Guide::UpdateChannelGroup  ( const QString & oldName, const QString & newName)
+{
+    return ChannelGroup::UpdateChannelGroup(oldName, newName);
+}
+
+
 // NOLINTEND(modernize-return-braced-init-list)
+
+#include "moc_v2guide.cpp"

@@ -2,13 +2,12 @@
 
 #include <climits>
 
-#include "libmythbase/mythcorecontext.h"
+extern "C" {
+#include "libavutil/mem.h"
+}
+
 #include "libmythbase/mythrandom.h"
 #include "libmythtv/mythframe.h"
-
-void TestCopyFrames::initTestCase(void)
-{
-}
 
 void TestCopyFrames::TestInvalidFrames()
 {
@@ -250,3 +249,5 @@ void TestCopyFrames::TestCopy()
 }
 
 QTEST_APPLESS_MAIN(TestCopyFrames)
+
+#include "moc_test_copyframes.cpp"

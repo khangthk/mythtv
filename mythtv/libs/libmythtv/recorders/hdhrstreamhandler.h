@@ -10,6 +10,7 @@
 #include <QMap>
 #include <QRecursiveMutex>
 
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythdate.h"
 
 #include "DeviceReadBuffer.h"
@@ -23,7 +24,7 @@ class HDHRChannel;
 class DeviceReadBuffer;
 
 // HDHomeRun headers
-#ifdef USING_HDHOMERUN
+#if CONFIG_HDHOMERUN
 #include HDHOMERUN_HEADERFILE
 #else
 struct hdhomerun_device_t { int dummy; };
@@ -68,6 +69,10 @@ class HDHRStreamHandler : public StreamHandler
     bool TuneProgram(uint mpeg_prog_num);
     bool TuneVChannel(const QString &vchn);
 
+  protected:
+    void run(void) override; // MThread
+    bool UpdateFilters(void) override; // StreamHandler
+
   private:
     explicit HDHRStreamHandler(const QString &device, int inputid, int majorid);
 
@@ -78,10 +83,6 @@ class HDHRStreamHandler : public StreamHandler
 
     bool Open(void);
     void Close(void);
-
-    void run(void) override; // MThread
-
-    bool UpdateFilters(void) override; // StreamHandler
 
   private:
     hdhomerun_device_t          *m_hdhomerunDevice  {nullptr};

@@ -20,9 +20,12 @@
 
 /* http://k.ylo.ph/2016/04/04/loudnorm.html */
 
+#include "libavutil/file_open.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "avfilter.h"
-#include "internal.h"
+#include "filters.h"
+#include "formats.h"
 #include "audio.h"
 #include "ebur128.h"
 
@@ -61,7 +64,9 @@ typedef struct LoudNormContext {
     double offset;
     int linear;
     int dual_mono;
-    enum PrintFormat print_format;
+    /* enum PrintFormat */
+    int print_format;
+    char *stats_file_str;
 
     double *buf;
     int buf_size;
@@ -85,7 +90,7 @@ typedef struct LoudNormContext {
     int attack_length;
     int release_length;
 
-    int64_t pts;
+    int64_t pts[30];
     enum FrameType frame_type;
     int above_threshold;
     int prev_nb_samples;
@@ -115,10 +120,11 @@ static const AVOption loudnorm_options[] = {
     { "offset",           "set offset gain",                   OFFSET(offset),           AV_OPT_TYPE_DOUBLE,  {.dbl =  0.},    -99.,       99.,  FLAGS },
     { "linear",           "normalize linearly if possible",    OFFSET(linear),           AV_OPT_TYPE_BOOL,    {.i64 =  1},        0,         1,  FLAGS },
     { "dual_mono",        "treat mono input as dual-mono",     OFFSET(dual_mono),        AV_OPT_TYPE_BOOL,    {.i64 =  0},        0,         1,  FLAGS },
-    { "print_format",     "set print format for stats",        OFFSET(print_format),     AV_OPT_TYPE_INT,     {.i64 =  NONE},  NONE,  PF_NB -1,  FLAGS, "print_format" },
-    {     "none",         0,                                   0,                        AV_OPT_TYPE_CONST,   {.i64 =  NONE},     0,         0,  FLAGS, "print_format" },
-    {     "json",         0,                                   0,                        AV_OPT_TYPE_CONST,   {.i64 =  JSON},     0,         0,  FLAGS, "print_format" },
-    {     "summary",      0,                                   0,                        AV_OPT_TYPE_CONST,   {.i64 =  SUMMARY},  0,         0,  FLAGS, "print_format" },
+    { "print_format",     "set print format for stats",        OFFSET(print_format),     AV_OPT_TYPE_INT,     {.i64 =  NONE},  NONE,  PF_NB -1,  FLAGS, .unit = "print_format" },
+    {     "none",         0,                                   0,                        AV_OPT_TYPE_CONST,   {.i64 =  NONE},     0,         0,  FLAGS, .unit = "print_format" },
+    {     "json",         0,                                   0,                        AV_OPT_TYPE_CONST,   {.i64 =  JSON},     0,         0,  FLAGS, .unit = "print_format" },
+    {     "summary",      0,                                   0,                        AV_OPT_TYPE_CONST,   {.i64 =  SUMMARY},  0,         0,  FLAGS, .unit = "print_format" },
+    { "stats_file",       "set stats output file",             OFFSET(stats_file_str),   AV_OPT_TYPE_STRING,  {.str =  NULL},     0,         0,  FLAGS },
     { NULL }
 };
 
@@ -431,10 +437,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         av_frame_copy_props(out, in);
     }
 
-    if (s->pts == AV_NOPTS_VALUE)
-        s->pts = in->pts;
+    out->pts = s->pts[0];
+    memmove(s->pts, &s->pts[1], (FF_ARRAY_ELEMS(s->pts) - 1) * sizeof(s->pts[0]));
 
-    out->pts = s->pts;
     src = (const double *)in->data[0];
     dst = (double *)out->data[0];
     buf = s->buf;
@@ -455,7 +460,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
         offset    = pow(10., (s->target_i - global) / 20.);
         offset_tp = true_peak * offset;
-        s->offset = offset_tp < s->target_tp ? offset : s->target_tp - true_peak;
+        s->offset = offset_tp < s->target_tp ? offset : s->target_tp / true_peak;
         s->frame_type = LINEAR_MODE;
     }
 
@@ -501,10 +506,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         true_peak_limiter(s, dst, subframe_length, inlink->ch_layout.nb_channels);
         ff_ebur128_add_frames_double(s->r128_out, dst, subframe_length);
 
-        s->pts +=
-        out->nb_samples =
-        inlink->min_samples =
-        inlink->max_samples = subframe_length;
+        out->nb_samples = subframe_length;
 
         s->frame_type = INNER_FRAME;
         break;
@@ -568,7 +570,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         if (s->index >= 30)
             s->index -= 30;
         s->prev_nb_samples = in->nb_samples;
-        s->pts += in->nb_samples;
         break;
 
     case FINAL_FRAME:
@@ -626,25 +627,22 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
         dst = (double *)out->data[0];
         ff_ebur128_add_frames_double(s->r128_out, dst, in->nb_samples);
-        s->pts += in->nb_samples;
         break;
     }
 
     if (in != out)
         av_frame_free(&in);
-
     return ff_filter_frame(outlink, out);
 }
 
-static int request_frame(AVFilterLink *outlink)
+static int flush_frame(AVFilterLink *outlink)
 {
-    int ret;
     AVFilterContext *ctx = outlink->src;
     AVFilterLink *inlink = ctx->inputs[0];
     LoudNormContext *s = ctx->priv;
+    int ret = 0;
 
-    ret = ff_request_frame(inlink);
-    if (ret == AVERROR_EOF && s->frame_type == INNER_FRAME) {
+    if (s->frame_type == INNER_FRAME) {
         double *src;
         double *buf;
         int nb_samples, n, c, offset;
@@ -681,37 +679,78 @@ static int request_frame(AVFilterLink *outlink)
     return ret;
 }
 
-static int query_formats(AVFilterContext *ctx)
+static int activate(AVFilterContext *ctx)
 {
-    LoudNormContext *s = ctx->priv;
-    AVFilterFormats *formats;
     AVFilterLink *inlink = ctx->inputs[0];
     AVFilterLink *outlink = ctx->outputs[0];
-    static const int input_srate[] = {192000, -1};
-    static const enum AVSampleFormat sample_fmts[] = {
-        AV_SAMPLE_FMT_DBL,
-        AV_SAMPLE_FMT_NONE
-    };
-    int ret = ff_set_common_all_channel_counts(ctx);
+    LoudNormContext *s = ctx->priv;
+    AVFrame *in = NULL;
+    int ret = 0, status;
+    int64_t pts;
+
+    FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
+
+    if (s->frame_type != LINEAR_MODE) {
+        int nb_samples;
+
+        if (s->frame_type == FIRST_FRAME) {
+            nb_samples = frame_size(inlink->sample_rate, 3000);
+        } else {
+            nb_samples = frame_size(inlink->sample_rate, 100);
+        }
+
+        ret = ff_inlink_consume_samples(inlink, nb_samples, nb_samples, &in);
+    } else {
+        ret = ff_inlink_consume_frame(inlink, &in);
+    }
+
+    if (ret < 0)
+        return ret;
+    if (ret > 0) {
+        if (s->frame_type == FIRST_FRAME) {
+            const int nb_samples = frame_size(inlink->sample_rate, 100);
+
+            for (int i = 0; i < FF_ARRAY_ELEMS(s->pts); i++)
+                s->pts[i] = in->pts + i * nb_samples;
+        } else if (s->frame_type == LINEAR_MODE) {
+            s->pts[0] = in->pts;
+        } else {
+            s->pts[FF_ARRAY_ELEMS(s->pts) - 1] = in->pts;
+        }
+        ret = filter_frame(inlink, in);
+    }
     if (ret < 0)
         return ret;
 
-    ret = ff_set_common_formats_from_list(ctx, sample_fmts);
+    if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
+        ff_outlink_set_status(outlink, status, pts);
+        return flush_frame(outlink);
+    }
+
+    FF_FILTER_FORWARD_WANTED(outlink, inlink);
+
+    return FFERROR_NOT_READY;
+}
+
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
+{
+    LoudNormContext *s = ctx->priv;
+    static const int input_srate[] = {192000, -1};
+    static const enum AVSampleFormat sample_fmts[] = {
+            AV_SAMPLE_FMT_DBL,
+            AV_SAMPLE_FMT_NONE
+    };
+    int ret;
+
+    ret = ff_set_sample_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
     if (ret < 0)
         return ret;
 
     if (s->frame_type != LINEAR_MODE) {
-        formats = ff_make_format_list(input_srate);
-        if (!formats)
-            return AVERROR(ENOMEM);
-        ret = ff_formats_ref(formats, &inlink->outcfg.samplerates);
-        if (ret < 0)
-            return ret;
-        ret = ff_formats_ref(formats, &outlink->incfg.samplerates);
-        if (ret < 0)
-            return ret;
+        return ff_set_common_samplerates_from_list2(ctx, cfg_in, cfg_out, input_srate);
     }
-
     return 0;
 }
 
@@ -739,7 +778,7 @@ static int config_input(AVFilterLink *inlink)
         return AVERROR(ENOMEM);
 
     s->limiter_buf_size = frame_size(inlink->sample_rate, 210) * inlink->ch_layout.nb_channels;
-    s->limiter_buf = av_malloc_array(s->buf_size, sizeof(*s->limiter_buf));
+    s->limiter_buf = av_malloc_array(s->limiter_buf_size, sizeof(*s->limiter_buf));
     if (!s->limiter_buf)
         return AVERROR(ENOMEM);
 
@@ -749,12 +788,6 @@ static int config_input(AVFilterLink *inlink)
 
     init_gaussian_filter(s);
 
-    if (s->frame_type != LINEAR_MODE) {
-        inlink->min_samples =
-        inlink->max_samples = frame_size(inlink->sample_rate, 3000);
-    }
-
-    s->pts = AV_NOPTS_VALUE;
     s->buf_index =
     s->prev_buf_index =
     s->limiter_buf_index = 0;
@@ -773,6 +806,11 @@ static av_cold int init(AVFilterContext *ctx)
 {
     LoudNormContext *s = ctx->priv;
     s->frame_type = FIRST_FRAME;
+
+    if (s->stats_file_str && s->print_format == NONE) {
+        av_log(ctx, AV_LOG_ERROR, "stats_file requested but print_format not specified\n");
+        return AVERROR(EINVAL);
+    }
 
     if (s->linear) {
         double offset, offset_tp;
@@ -795,6 +833,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     LoudNormContext *s = ctx->priv;
     double i_in, i_out, lra_in, lra_out, thresh_in, thresh_out, tp_in, tp_out;
     int c;
+    FILE *stats_file = NULL;
 
     if (!s->r128_in || !s->r128_out)
         goto end;
@@ -819,13 +858,30 @@ static av_cold void uninit(AVFilterContext *ctx)
             tp_out = tmp;
     }
 
+
+    if (s->stats_file_str) {
+        if (!strcmp(s->stats_file_str, "-")) {
+            stats_file = stdout;
+        } else {
+            stats_file = avpriv_fopen_utf8(s->stats_file_str, "w");
+            if (!stats_file) {
+                int err = AVERROR(errno);
+                av_log(ctx, AV_LOG_ERROR, "Could not open stats file %s: %s\n",
+                       s->stats_file_str, av_err2str(err));
+                goto end;
+            }
+        }
+    }
+
     switch(s->print_format) {
     case NONE:
         break;
 
     case JSON:
-        av_log(ctx, AV_LOG_INFO,
-            "\n{\n"
+    case SUMMARY: {
+        char stats[1024];
+        const char *const format = s->print_format == JSON ?
+            "{\n"
             "\t\"input_i\" : \"%.2f\",\n"
             "\t\"input_tp\" : \"%.2f\",\n"
             "\t\"input_lra\" : \"%.2f\",\n"
@@ -836,23 +892,7 @@ static av_cold void uninit(AVFilterContext *ctx)
             "\t\"output_thresh\" : \"%.2f\",\n"
             "\t\"normalization_type\" : \"%s\",\n"
             "\t\"target_offset\" : \"%.2f\"\n"
-            "}\n",
-            i_in,
-            20. * log10(tp_in),
-            lra_in,
-            thresh_in,
-            i_out,
-            20. * log10(tp_out),
-            lra_out,
-            thresh_out,
-            s->frame_type == LINEAR_MODE ? "linear" : "dynamic",
-            s->target_i - i_out
-        );
-        break;
-
-    case SUMMARY:
-        av_log(ctx, AV_LOG_INFO,
-            "\n"
+            "}\n" :
             "Input Integrated:   %+6.1f LUFS\n"
             "Input True Peak:    %+6.1f dBTP\n"
             "Input LRA:          %6.1f LU\n"
@@ -864,7 +904,9 @@ static av_cold void uninit(AVFilterContext *ctx)
             "Output Threshold:   %+6.1f LUFS\n"
             "\n"
             "Normalization Type:   %s\n"
-            "Target Offset:      %+6.1f LU\n",
+            "Target Offset:      %+6.1f LU\n";
+
+        snprintf(stats, sizeof(stats), format,
             i_in,
             20. * log10(tp_in),
             lra_in,
@@ -873,13 +915,20 @@ static av_cold void uninit(AVFilterContext *ctx)
             20. * log10(tp_out),
             lra_out,
             thresh_out,
-            s->frame_type == LINEAR_MODE ? "Linear" : "Dynamic",
+            s->frame_type == LINEAR_MODE ? (s->print_format == JSON ? "linear"  : "Linear")
+                                         : (s->print_format == JSON ? "dynamic" : "Dynamic"),
             s->target_i - i_out
         );
+        av_log(ctx, AV_LOG_INFO, "\n%s", stats);
+        if (stats_file)
+            fprintf(stats_file, "%s", stats);
         break;
+    }
     }
 
 end:
+    if (stats_file && stats_file != stdout)
+        fclose(stats_file);
     if (s->r128_in)
         ff_ebur128_destroy(&s->r128_in);
     if (s->r128_out)
@@ -894,26 +943,18 @@ static const AVFilterPad avfilter_af_loudnorm_inputs[] = {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
         .config_props = config_input,
-        .filter_frame = filter_frame,
     },
 };
 
-static const AVFilterPad avfilter_af_loudnorm_outputs[] = {
-    {
-        .name          = "default",
-        .request_frame = request_frame,
-        .type          = AVMEDIA_TYPE_AUDIO,
-    },
-};
-
-const AVFilter ff_af_loudnorm = {
-    .name          = "loudnorm",
-    .description   = NULL_IF_CONFIG_SMALL("EBU R128 loudness normalization"),
+const FFFilter ff_af_loudnorm = {
+    .p.name        = "loudnorm",
+    .p.description = NULL_IF_CONFIG_SMALL("EBU R128 loudness normalization"),
+    .p.priv_class  = &loudnorm_class,
     .priv_size     = sizeof(LoudNormContext),
-    .priv_class    = &loudnorm_class,
     .init          = init,
+    .activate      = activate,
     .uninit        = uninit,
     FILTER_INPUTS(avfilter_af_loudnorm_inputs),
-    FILTER_OUTPUTS(avfilter_af_loudnorm_outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_OUTPUTS(ff_audio_default_filterpad),
+    FILTER_QUERY_FUNC2(query_formats),
 };

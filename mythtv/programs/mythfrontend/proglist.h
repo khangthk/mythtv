@@ -6,11 +6,13 @@
 #include <QString>
 
 // MythTV headers
-#include "libmythbase/programinfo.h" // for ProgramList
+#include "libmythtv/programinfo.h" // for ProgramList
 
 // MythFrontend
 #include "proglist_helpers.h"
 #include "schedulecommon.h"
+
+class TV;
 
 enum ProgListType : std::uint8_t {
     plUnknown = 0,
@@ -43,13 +45,26 @@ class ProgLister : public ScheduleCommon
     ProgLister(MythScreenStack *parent, ProgListType pltype,
                QString view, QString extraArg,
                QDateTime selectedTime = QDateTime());
+    ProgLister(MythScreenStack *parent, TV* player,
+               ProgListType pltype, const QString & extraArg);
     explicit ProgLister(MythScreenStack *parent, uint recid = 0,
                         QString title = QString());
-    ~ProgLister() override;
+    ~ProgLister(void) override;
+
+    static void * RunProgramList(void *player, ProgListType pltype,
+                                 const QString & extraArg);
 
     bool Create(void) override; // MythScreenType
+    void ShowMenu(void) override; // MythScreenType
     bool keyPressEvent(QKeyEvent *event) override; // MythScreenType
+
+  public slots:
+    void Close(void) override; // MythScreenType
+
+  protected:
     void customEvent(QEvent *event) override; // ScheduleCommon
+    void Load(void) override; // MythScreenType
+    ProgramInfo *GetCurrentProgram(void) const override; // ScheduleCommon
 
   protected slots:
     void HandleSelected(MythUIButtonListItem *item);
@@ -67,8 +82,6 @@ class ProgLister : public ScheduleCommon
     void ShowOldRecordedMenu(void);
 
   private:
-    void Load(void) override; // MythScreenType
-
     void FillViewList(const QString &view);
     void FillItemList(bool restorePosition, bool updateDisp = true);
 
@@ -78,7 +91,6 @@ class ProgLister : public ScheduleCommon
     void UpdateButtonList(void);
     void UpdateKeywordInDB(const QString &text, const QString &oldValue);
 
-    void ShowMenu(void) override; // MythScreenType
     void ShowDeleteItemMenu(void);
     void ShowDeleteOldSeriesMenu(void);
 
@@ -88,8 +100,6 @@ class ProgLister : public ScheduleCommon
     enum SortBy : std::uint8_t { kTimeSort, kPrevTitleSort, kTitleSort, };
     SortBy GetSortBy(void) const;
     void SortList(SortBy sortby, bool reverseSort);
-
-    ProgramInfo *GetCurrentProgram(void) const override; // ScheduleCommon
 
     static bool PowerStringToSQL(
         const QString &qphrase, QString &output, MSqlBindings &bindings) ;
@@ -129,8 +139,11 @@ class ProgLister : public ScheduleCommon
     MythUIText       *m_positionText    {nullptr};
     MythUIButtonList *m_progList        {nullptr};
     MythUIText       *m_messageText     {nullptr};
+    MythUIText       *m_groupByText     {nullptr};
 
     bool              m_allowViewDialog {true};
+
+    TV               *m_player          {nullptr};
 };
 
 #endif

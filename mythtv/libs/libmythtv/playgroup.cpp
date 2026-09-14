@@ -2,10 +2,11 @@
 #include <QCoreApplication>
 
 // MythTV headers
-#include "libmyth/standardsettings.h"
+#include "libmythui/standardsettings.h"
 #include "libmythbase/mythdb.h"
-#include "libmythbase/programinfo.h"
+
 #include "playgroup.h"
+#include "programinfo.h"
 
 // A parameter associated with the profile itself
 class PlayGroupDBStorage : public SimpleDBStorage
@@ -18,8 +19,10 @@ class PlayGroupDBStorage : public SimpleDBStorage
     {
     }
 
+  protected:
     QString GetWhereClause(MSqlBindings &bindings) const override; // SimpleDBStorage
 
+  private:
     const PlayGroupConfig &m_parent;
 };
 
@@ -47,6 +50,11 @@ class TitleMatch : public MythUITextEditSetting
                                          "match any title in which \"News\" or "
                                          "\"CNN\" appears."));
     };
+
+    ~TitleMatch() override
+    {
+        delete GetStorage();
+    }
 };
 
 class SkipAhead : public MythUISpinBoxSetting
@@ -61,6 +69,11 @@ class SkipAhead : public MythUISpinBoxSetting
         setHelpText(PlayGroupConfig::tr("How many seconds to skip forward on "
                                         "a fast forward."));
     };
+
+    ~SkipAhead() override
+    {
+        delete GetStorage();
+    }
 };
 
 class SkipBack : public MythUISpinBoxSetting
@@ -74,6 +87,11 @@ class SkipBack : public MythUISpinBoxSetting
         setHelpText(PlayGroupConfig::tr("How many seconds to skip backward on "
                                         "a rewind."));
     };
+
+    ~SkipBack() override
+    {
+        delete GetStorage();
+    }
 };
 
 class JumpMinutes : public MythUISpinBoxSetting
@@ -88,6 +106,11 @@ class JumpMinutes : public MythUISpinBoxSetting
                                         "backward when the jump keys are "
                                         "pressed."));
     };
+
+    ~JumpMinutes() override
+    {
+        delete GetStorage();
+    }
 };
 
 class TimeStretch : public MythUISpinBoxSetting
@@ -95,16 +118,20 @@ class TimeStretch : public MythUISpinBoxSetting
   public:
     explicit TimeStretch(const PlayGroupConfig& _parent):
         MythUISpinBoxSetting(new PlayGroupDBStorage(this, _parent, "timestretch"),
-                             45, 200, 5, 0,
-                             PlayGroupConfig::tr("(default)"))
+                             50, 200, 5, 1)
     {
-        setValue(45);
+        setValue(100);
         setLabel(PlayGroupConfig::tr("Time stretch (speed x 100)"));
         setHelpText(PlayGroupConfig::tr("Initial playback speed with adjusted "
                                         "audio. Use 100 for normal speed, 50 "
                                         "for half speed and 200 for double "
                                         "speed."));
     };
+
+    ~TimeStretch() override
+    {
+        delete GetStorage();
+    }
 
     void Load(void) override // StandardSetting
     {
@@ -151,6 +178,9 @@ void PlayGroupConfig::Save()
 {
     if (m_isNew)
     {
+        QString titleMatch = m_titleMatch->getValue();
+        if (titleMatch.isNull())
+            titleMatch = "";
         MSqlQuery query(MSqlQuery::InitCon());
 
         query.prepare("INSERT playgroup "
@@ -159,7 +189,7 @@ void PlayGroupConfig::Save()
                         "(:NEWNAME, :TITLEMATCH, :SKIPAHEAD, :SKIPBACK, :JUMP, :TIMESTRETCH);");
 
         query.bindValue(":NEWNAME",     getName());
-        query.bindValue(":TITLEMATCH",  m_titleMatch->getValue());
+        query.bindValue(":TITLEMATCH",  titleMatch);
         query.bindValue(":SKIPAHEAD",   m_skipAhead->intValue());
         query.bindValue(":SKIPBACK",    m_skipBack->intValue());
         query.bindValue(":JUMP",        m_jumpMinutes->intValue());
@@ -213,7 +243,9 @@ QStringList PlayGroup::GetNames(void)
     query.prepare("SELECT name FROM playgroup "
                   "WHERE name <> 'Default' ORDER BY name;");
     if (!query.exec())
+    {
         MythDB::DBError("PlayGroupConfig::GetNames()", query);
+    }
     else
     {
         while (query.next())
@@ -343,3 +375,5 @@ void PlayGroupEditor::Load()
     //TODO select the new one or the edited one
     emit settingsChanged(nullptr);
 }
+
+#include "moc_playgroup.cpp"

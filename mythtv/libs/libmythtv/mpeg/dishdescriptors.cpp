@@ -6,7 +6,6 @@
 // MythTV headers
 #include "dishdescriptors.h"
 #include "atsc_huffman.h"
-#include "libmythbase/programinfo.h" // for subtitle types and audio and video properties
 #include "dvbtables.h"
 
 QString DishEventNameDescriptor::Name(uint compression_type) const
@@ -24,7 +23,7 @@ const unsigned char *DishEventDescriptionDescriptor::DescriptionRaw(void) const
         return nullptr;
 
     bool offset = (m_data[3] & 0xf8) == 0x80;
-    return m_data + ((offset) ? 4 : 3);
+    return m_data + (offset ? 4 : 3);
 }
 
 uint DishEventDescriptionDescriptor::DescriptionRawLength(void) const
@@ -33,7 +32,7 @@ uint DishEventDescriptionDescriptor::DescriptionRawLength(void) const
         return 0;
 
     bool offset = (m_data[3] & 0xf8) == 0x80;
-    return DescriptorLength() - ((offset) ? 2 : 1);
+    return DescriptorLength() - (offset ? 2 : 1);
 }
 
 QString DishEventDescriptionDescriptor::Description(
@@ -97,9 +96,13 @@ QString DishEventTagsDescriptor::programid(void) const
     uint episode = ((m_data[6] & 0x3f) << 0x08) | m_data[7];
 
     if (m_data[2] == 0x7c)
+    {
         prefix = "MV";
+    }
     else if (m_data[2] == 0x7d)
+    {
         prefix = "SP";
+    }
     else if (m_data[2] == 0x7e)
     {
         if (episode > 0)

@@ -2,7 +2,6 @@
 #define MYTHMAINWINDOWPRIVATE_H
 
 // MythTV
-#include "libmythbase/mythconfig.h"
 #include "mythmainwindow.h"
 #include "mythgesture.h"
 
@@ -19,7 +18,7 @@ class KeyContext
 
     bool GetMapping(int key, QStringList &actions)
     {
-        if (m_actionMap.count(key) > 0)
+        if (m_actionMap.contains(key))
         {
             actions += m_actionMap[key];
             return true;

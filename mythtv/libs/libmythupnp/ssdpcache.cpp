@@ -9,13 +9,15 @@
 // Licensed under the GPL v2 or later, see LICENSE for details
 //
 //////////////////////////////////////////////////////////////////////////////
+#include "ssdpcache.h"
+
+#include <chrono>
 
 #include "libmythbase/mythevent.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/portchecker.h"
 
-#include "upnp.h"
-#include "upnptaskcache.h"
+#include "taskqueue.h"
 
 SSDPCache* SSDPCache::g_pSSDPCache = nullptr;
 
@@ -140,7 +142,7 @@ void SSDPCacheEntries::Remove( const QString &sUSN )
 }
 
 /// Removes expired cache entries, returning the number removed.
-uint SSDPCacheEntries::RemoveStale(const TaskTime ttNow)
+uint SSDPCacheEntries::RemoveStale(const std::chrono::microseconds ttNow)
 {
     QMutexLocker locker(&m_mutex);
     uint nCount = 0;
@@ -225,6 +227,52 @@ QString SSDPCacheEntries::GetNormalizedUSN(const QString &sUSN)
         return sUSN.left(uuid_end_loc).toLower() + sUSN.mid(uuid_end_loc);
     return sUSN;
 }
+
+class SSDPCacheTask : public Task
+{
+    protected:
+
+        std::chrono::milliseconds m_nInterval     {30s}; // Number of ms between executing.
+        int                       m_nExecuteCount {0};   // Used for debugging.
+
+        // Destructor protected to force use of Release Method
+
+        ~SSDPCacheTask() override = default;
+
+    public:
+
+        SSDPCacheTask() : Task("SSDPCacheTask")
+        {
+            m_nInterval     = 30s;
+// TODO: Rework when separating upnp/ssdp stack
+//               XmlConfiguration().GetDuration<std::chrono::seconds>("UPnP/SSDP/CacheInterval", 30s);
+        }
+
+        QString Name() override // Task
+        {
+            return "SSDPCache";
+        }
+
+        void Execute( TaskQueue *pQueue ) override // Task
+        {
+            m_nExecuteCount++;
+
+            int nCount = SSDPCache::Instance()->RemoveStale();
+
+            if (nCount > 0)
+            {
+                LOG(VB_UPNP, LOG_INFO,
+                    QString("SSDPCacheTask - Removed %1 stale entries.")
+                        .arg(nCount));
+            }
+
+            if ((m_nExecuteCount % 60) == 0)
+                SSDPCache::Instance()->Dump();
+
+            pQueue->AddTask( m_nInterval, (Task *)this  );
+        }
+
+};
 
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
@@ -356,7 +404,7 @@ void SSDPCache::Add( const QString &sURI,
     DeviceLocation *pEntry = pEntries->Find(sUSN);
     if (pEntry == nullptr)
     {
-        QUrl url = sLocation;
+        QUrl url { sLocation };
         QString host = url.host();
         QString hostport = QString("%1:%2").arg(host).arg(url.port(80));
         // Check if the port can be reached. If not we won't use it.
@@ -367,7 +415,9 @@ void SSDPCache::Add( const QString &sURI,
         {
             bool isGoodUrl = false;
             if (m_goodUrlList.contains(hostport))
+            {
                 isGoodUrl = true;
+            }
             else
             {
                 PortChecker checker;
@@ -610,3 +660,5 @@ void SSDPCache::Dump(void)
     LOG(VB_UPNP, LOG_DEBUG, "========================================"
                             "=======================================" );
 }
+
+#include "moc_ssdpcache.cpp"

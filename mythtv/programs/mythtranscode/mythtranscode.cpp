@@ -3,6 +3,7 @@
 #include <fcntl.h> // for open flags
 #include <fstream>
 #include <iostream>
+#include <thread>
 
 // Qt headers
 #include <QtGlobal>
@@ -12,19 +13,18 @@
 
 // MythTV headers
 #include "libmyth/mythcontext.h"
-#include "libmythbase/cleanupguard.h"
 #include "libmythbase/exitcodes.h"
+#include "libmythbase/mythappname.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythmiscutil.h"
 #include "libmythbase/mythtranslation.h"
 #include "libmythbase/mythversion.h"
-#include "libmythbase/programinfo.h"
 #include "libmythbase/remotefile.h"
-#include "libmythbase/signalhandling.h"
-#include "libmythtv/HLS/httplivestream.h"
 #include "libmythtv/jobqueue.h"
+#include "libmythtv/programinfo.h"
 #include "libmythtv/recordinginfo.h"
 
 // MythTranscode
@@ -135,16 +135,6 @@ static int QueueTranscodeJob(ProgramInfo *pginfo, const QString& profile,
     return GENERIC_EXIT_DB_ERROR;
 }
 
-namespace
-{
-    void cleanup()
-    {
-        delete gContext;
-        gContext = nullptr;
-        SignalHandler::Done();
-    }
-}
-
 int main(int argc, char *argv[])
 {
     uint chanid = 0;
@@ -238,7 +228,7 @@ int main(int argc, char *argv[])
         useCutlist = true;
         if (!cmdline.toString("usecutlist").isEmpty())
         {
-            if (!cmdline.toBool("inputfile") && !cmdline.toBool("hls"))
+            if (!cmdline.toBool("inputfile"))
             {
                 LOG(VB_GENERAL, LOG_CRIT, "External cutlists are only allowed "
                                           "when using the --infile option.");
@@ -327,8 +317,8 @@ int main(int argc, char *argv[])
         }
         else if (cmdline.toBool("inversecut"))
         {
-            std::cerr << "Cutlist inversion requires an external cutlist be" << std::endl
-                      << "provided using the --honorcutlist option." << std::endl;
+            std::cerr << "Cutlist inversion requires an external cutlist be\n"
+                      << "provided using the --honorcutlist option.\n";
             return GENERIC_EXIT_INVALID_CMDLINE;
         }
     }
@@ -352,17 +342,16 @@ int main(int argc, char *argv[])
         mpeg2 = true;
     if (cmdline.toBool("ostream"))
     {
-        if (cmdline.toString("ostream") == "dvd")
+        if (cmdline.toString("ostream") == "dvd") {
             otype = REPLEX_DVD;
-        else if (cmdline.toString("ostream") == "ps")
+        } else if (cmdline.toString("ostream") == "ps") {
             otype = REPLEX_MPEG2;
-        else if (cmdline.toString("ostream") == "ts")
+        } else if (cmdline.toString("ostream") == "ts") {
             otype = REPLEX_TS_SD;
-        else
-        {
+        } else {
             std::cerr << "Invalid 'ostream' type: "
                       << cmdline.toString("ostream").toLocal8Bit().constData()
-                      << std::endl;
+                      << '\n';
             return GENERIC_EXIT_INVALID_CMDLINE;
         }
     }
@@ -373,15 +362,9 @@ int main(int argc, char *argv[])
     // Set if we want to delete the original file once conversion succeeded.
     bool deleteOriginal = cmdline.toBool("delete");
 
-    CleanupGuard callCleanup(cleanup);
-
-#ifndef _WIN32
-    SignalHandler::Init();
-#endif
-
     //  Load the context
-    gContext = new MythContext(MYTH_BINARY_VERSION);
-    if (!gContext->Init(false))
+    MythContext context {MYTH_BINARY_VERSION};
+    if (!context.Init(false))
     {
         LOG(VB_GENERAL, LOG_ERR, "Failed to init MythContext, exiting.");
         return GENERIC_EXIT_NO_MYTHCONTEXT;
@@ -401,57 +384,55 @@ int main(int argc, char *argv[])
         else
         {
             std::cerr << "mythtranscode: ERROR: Unable to find DB info for "
-                      << "JobQueue ID# " << jobID << std::endl;
+                      << "JobQueue ID# " << jobID << '\n';
             return GENERIC_EXIT_NO_RECORDING_DATA;
         }
     }
 
     if (((!found_infile && !(found_chanid && found_starttime)) ||
-         (found_infile && (found_chanid || found_starttime))) &&
-        (!cmdline.toBool("hls")))
+         (found_infile && (found_chanid || found_starttime))))
     {
-         std::cerr << "Must specify -i OR -c AND -s options!" << std::endl;
+         std::cerr << "Must specify -i OR -c AND -s options!\n";
          return GENERIC_EXIT_INVALID_CMDLINE;
     }
-    if (isVideo && !found_infile && !cmdline.toBool("hls"))
+    if (isVideo && !found_infile)
     {
-         std::cerr << "Must specify --infile to use --video" << std::endl;
+         std::cerr << "Must specify --infile to use --video\n";
          return GENERIC_EXIT_INVALID_CMDLINE;
     }
     if (jobID >= 0 && (found_infile || build_index))
     {
-         std::cerr << "Can't specify -j with --buildindex, --video or --infile"
-                   << std::endl;
+         std::cerr << "Can't specify -j with --buildindex, --video or --infile\n";
          return GENERIC_EXIT_INVALID_CMDLINE;
     }
     if ((jobID >= 0) && build_index)
     {
-         std::cerr << "Can't specify both -j and --buildindex" << std::endl;
+         std::cerr << "Can't specify both -j and --buildindex\n";
          return GENERIC_EXIT_INVALID_CMDLINE;
     }
     if (keyframesonly && !fifodir.isEmpty())
     {
-         std::cerr << "Cannot specify both --fifodir and --allkeys" << std::endl;
+         std::cerr << "Cannot specify both --fifodir and --allkeys\n";
          return GENERIC_EXIT_INVALID_CMDLINE;
     }
     if (fifosync && fifodir.isEmpty())
     {
-         std::cerr << "Must specify --fifodir to use --fifosync" << std::endl;
+         std::cerr << "Must specify --fifodir to use --fifosync\n";
          return GENERIC_EXIT_INVALID_CMDLINE;
     }
     if (fifo_info && !fifodir.isEmpty())
     {
-        std::cerr << "Cannot specify both --fifodir and --fifoinfo" << std::endl;
+        std::cerr << "Cannot specify both --fifodir and --fifoinfo\n";
         return GENERIC_EXIT_INVALID_CMDLINE;
     }
     if (cleanCut && fifodir.isEmpty() && !fifo_info)
     {
-        std::cerr << "Clean cutting works only in fifodir mode" << std::endl;
+        std::cerr << "Clean cutting works only in fifodir mode\n";
         return GENERIC_EXIT_INVALID_CMDLINE;
     }
     if (cleanCut && !useCutlist)
     {
-        std::cerr << "--cleancut is pointless without --honorcutlist" << std::endl;
+        std::cerr << "--cleancut is pointless without --honorcutlist\n";
         return GENERIC_EXIT_INVALID_CMDLINE;
     }
 
@@ -469,17 +450,7 @@ int main(int argc, char *argv[])
     }
 
     ProgramInfo *pginfo = nullptr;
-    if (cmdline.toBool("hls"))
-    {
-        if (cmdline.toBool("hlsstreamid"))
-        {
-            HTTPLiveStream hls(cmdline.toInt("hlsstreamid"));
-            pginfo = new ProgramInfo(hls.GetSourceFile());
-        }
-        if (pginfo == nullptr)
-            pginfo = new ProgramInfo();
-    }
-    else if (isVideo)
+    if (isVideo)
     {
         // We want the absolute file path for the filemarkup table
         QFileInfo inf(infile);
@@ -527,7 +498,7 @@ int main(int argc, char *argv[])
     }
 
     if (infile.startsWith("myth://") && (outfile.isEmpty() || outfile != "-") &&
-        fifodir.isEmpty() && !cmdline.toBool("hls") && !cmdline.toBool("avf"))
+        fifodir.isEmpty() && !cmdline.toBool("avf"))
     {
         LOG(VB_GENERAL, LOG_ERR,
             QString("Attempted to transcode %1. Mythtranscode is currently "
@@ -546,13 +517,7 @@ int main(int argc, char *argv[])
 
     if (!build_index)
     {
-        if (cmdline.toBool("hlsstreamid"))
-        {
-            LOG(VB_GENERAL, LOG_NOTICE,
-                QString("Transcoding HTTP Live Stream ID %1")
-                        .arg(cmdline.toInt("hlsstreamid")));
-        }
-        else if (fifodir.isEmpty())
+        if (fifodir.isEmpty())
         {
             LOG(VB_GENERAL, LOG_NOTICE, QString("Transcoding from %1 to %2")
                     .arg(infile, outfile));
@@ -575,19 +540,8 @@ int main(int argc, char *argv[])
         if (cmdline.toBool("vcodec"))
             transcode->SetCMDVideoCodec(cmdline.toString("vcodec"));
     }
-    else if (cmdline.toBool("hls"))
-    {
-        transcode->SetHLSMode();
 
-        if (cmdline.toBool("hlsstreamid"))
-            transcode->SetHLSStreamID(cmdline.toInt("hlsstreamid"));
-        if (cmdline.toBool("maxsegments"))
-            transcode->SetHLSMaxSegments(cmdline.toInt("maxsegments"));
-        if (cmdline.toBool("noaudioonly"))
-            transcode->DisableAudioOnlyHLS();
-    }
-
-    if (cmdline.toBool("avf") || cmdline.toBool("hls"))
+    if (cmdline.toBool("avf"))
     {
         if (cmdline.toBool("width"))
             transcode->SetCMDWidth(cmdline.toInt("width"));
@@ -599,12 +553,17 @@ int main(int argc, char *argv[])
             transcode->SetCMDAudioBitrate(cmdline.toInt("audiobitrate") * 1000);
     }
 
+    if (!cmdline.toBool("avf") && fifodir.isEmpty())
+    {
+        mpeg2 = true;
+    }
+
     if (showprogress)
         transcode->ShowProgress(true);
     if (!recorderOptions.isEmpty())
         transcode->SetRecorderOptions(recorderOptions);
     int result = 0;
-    if ((!mpeg2 && !build_index) || cmdline.toBool("hls"))
+    if ((!mpeg2 && !build_index))
     {
         result = transcode->TranscodeFile(infile, outfile,
                                           profilename, useCutlist,
@@ -629,7 +588,7 @@ int main(int argc, char *argv[])
     }
 
     int exitcode = GENERIC_EXIT_OK;
-    if ((result == REENCODE_MPEG2TRANS) || mpeg2 || build_index)
+    if (mpeg2 || build_index)
     {
         void (*update_func)(float) = nullptr;
         int (*check_func)() = nullptr;
@@ -851,11 +810,11 @@ static void WaitToDelete(ProgramInfo *pginfo)
 
         if (inUse)
         {
-            const unsigned kSecondsToWait = 10;
+            constexpr std::chrono::seconds kSecondsToWait = 10s;
             LOG(VB_GENERAL, LOG_NOTICE,
                 QString("Transcode: program in use, rechecking in %1 seconds.")
-                    .arg(kSecondsToWait));
-            sleep(kSecondsToWait);
+                    .arg(kSecondsToWait.count()));
+            std::this_thread::sleep_for(kSecondsToWait);
         }
     }
     LOG(VB_GENERAL, LOG_NOTICE, "Transcode: program is no longer in use.");

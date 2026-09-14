@@ -1,12 +1,24 @@
 // Std
 #include <algorithm>
+#include <ranges>
 
 //Qt
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtEnvironmentVariables>
+#include <QtSystemDetection>
+#endif
 #include <QTimer>
 #include <QThread>
 #include <QApplication>
 #include <QElapsedTimer>
 #include <QWindow>
+
+#include "libmythbase/mythconfig.h"
+
+#if CONFIG_QTWEBENGINE
+#include <QQuickWindow>
+#endif
 
 // MythTV
 #include "libmythbase/compat.h"
@@ -17,10 +29,10 @@
 #include "opengl/mythegl.h"
 #include "mythmainwindow.h"
 
-#ifdef USING_DBUS
+#if CONFIG_QTDBUS
 #include "platforms/mythdisplaymutter.h"
 #endif
-#ifdef USING_WAYLANDEXTRAS
+#if CONFIG_WAYLANDEXTRAS
 #include "platforms/mythwaylandextras.h"
 #endif
 #ifdef Q_OS_ANDROID
@@ -29,18 +41,19 @@
 #ifdef Q_OS_DARWIN
 #include "platforms/mythdisplayosx.h"
 #endif
-#ifdef USING_X11
+#if CONFIG_X11
 #include "platforms/mythdisplayx11.h"
 #include "platforms/mythnvcontrol.h"
+#include "platforms/mythxdisplay.h"
 #endif
-#ifdef USING_DRM
+#if CONFIG_DRM
 #include "platforms/mythdisplaydrm.h"
 #include "platforms/drm/mythdrmvrr.h"
 #endif
-#if defined(Q_OS_WIN)
+#ifdef Q_OS_WINDOWS
 #include "platforms/mythdisplaywindows.h"
 #endif
-#ifdef USING_MMAL
+#if CONFIG_MMAL
 #include "platforms/mythdisplayrpi.h"
 #endif
 
@@ -83,14 +96,14 @@
 MythDisplay* MythDisplay::Create([[maybe_unused]] MythMainWindow* MainWindow)
 {
     MythDisplay* result = nullptr;
-#ifdef USING_X11
+#if CONFIG_X11
     if (MythDisplayX11::IsAvailable())
         result = new MythDisplayX11();
 #endif
-#ifdef USING_DBUS
+#if CONFIG_QTDBUS
     // Disabled for now as org.gnome.Mutter.DisplayConfig.ApplyConfiguration does
     // not seem to be actually implemented by anyone.
-#ifdef USING_WAYLANDEXTRAS
+#if CONFIG_WAYLANDEXTRAS
     //if (MythWaylandDevice::IsAvailable())
 #endif
     //{
@@ -98,12 +111,12 @@ MythDisplay* MythDisplay::Create([[maybe_unused]] MythMainWindow* MainWindow)
     //        result = MythDisplayMutter::Create();
     //}
 #endif
-#ifdef USING_DRM
+#if CONFIG_DRM
     if (!result)
     {
         result = new MythDisplayDRM(MainWindow);
         // On the Pi, use MythDisplayRPI if mode switching is not available via DRM
-#ifdef USING_MMAL
+#if CONFIG_MMAL
         if (!result->VideoModesAvailable())
         {
             delete result;
@@ -112,7 +125,7 @@ MythDisplay* MythDisplay::Create([[maybe_unused]] MythMainWindow* MainWindow)
 #endif
     }
 #endif
-#ifdef USING_MMAL
+#if CONFIG_MMAL
     if (!result)
         result = new MythDisplayRPI();
 #endif
@@ -124,7 +137,7 @@ MythDisplay* MythDisplay::Create([[maybe_unused]] MythMainWindow* MainWindow)
     if (!result)
         result = new MythDisplayAndroid();
 #endif
-#if defined(Q_OS_WIN)
+#ifdef Q_OS_WINDOWS
     if (!result)
         result = new MythDisplayWindows();
 #endif
@@ -136,6 +149,7 @@ MythDisplay* MythDisplay::Create([[maybe_unused]] MythMainWindow* MainWindow)
 QStringList MythDisplay::GetDescription()
 {
     QStringList result;
+    result.reserve(7);
     bool spanall = false;
     int screencount = MythDisplay::GetScreenCount();
     if (MythDisplay::SpanAllScreens() && screencount > 1)
@@ -169,6 +183,8 @@ QStringList MythDisplay::GetDescription()
     auto * current = GetCurrentScreen();
     const auto screens = QGuiApplication::screens();
     bool first = true;
+    // This reservation is an approximation.  One screen, four video modes.
+    result.reserve(result.size() + (9 * screens.size()));
     for (auto *screen : std::as_const(screens))
     {
         if (!first)
@@ -196,8 +212,8 @@ QStringList MythDisplay::GetDescription()
                 if (!modes.empty())
                 {
                     result.append(tr("Available modes:"));
-                    for (auto it = modes.crbegin(); it != modes.crend(); ++it)
-                        result.append("  " + it->ToString());
+                    for (const auto & mode : std::ranges::reverse_view(modes))
+                        result.append("  " + mode.ToString());
                 }
             }
         }
@@ -330,6 +346,11 @@ QScreen* MythDisplay::GetCurrentScreen()
     return m_screen;
 }
 
+QWindow* MythDisplay::GetCurrentWindow()
+{
+    return m_window;
+}
+
 QScreen *MythDisplay::GetDesiredScreen()
 {
     QScreen* newscreen = nullptr;
@@ -431,14 +452,14 @@ void MythDisplay::ScreenChanged(QScreen *qScreen)
     connect(m_screen, &QScreen::geometryChanged, this, &MythDisplay::GeometryChanged);
     connect(m_screen, &QScreen::physicalDotsPerInchChanged, this, &MythDisplay::PhysicalDPIChanged);
     Initialise();
-    emit CurrentScreenChanged(qScreen);
+    emit DisplayChanged();
 }
 
 void MythDisplay::PhysicalDPIChanged(qreal DPI)
 {
     LOG(VB_GENERAL, LOG_INFO, LOC + QString("Qt screen pixel ratio changed to %1")
         .arg(DPI, 2, 'f', 2, '0'));
-    emit CurrentDPIChanged(DPI);
+    emit DisplayChanged();
 }
 
 void MythDisplay::PrimaryScreenChanged(QScreen* qScreen)
@@ -987,6 +1008,8 @@ double MythDisplay::EstimateVirtualAspectRatio()
         return result;
 
     // N.B. This sorting may not be needed
+    // QList doesn't always play well with std::ranges
+    // NOLINTNEXTLINE(modernize-use-ranges)
     std::sort(screens.begin(), screens.end(), sortscreens);
     QList<double> aspectratios;
     QSize totalresolution;
@@ -1085,7 +1108,8 @@ void MythDisplay::WaitForScreenChange()
     QEventLoop loop;
     QTimer timer;
     timer.setSingleShot(true);
-    connect(&timer, &QTimer::timeout, [](){ LOG(VB_GENERAL, LOG_WARNING, LOC + "Timed out wating for screen change"); });
+    connect(&timer, &QTimer::timeout,
+            &timer, [](){ LOG(VB_GENERAL, LOG_WARNING, LOC + "Timed out waiting for screen change"); });
     QObject::connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
     QObject::connect(m_screen, &QScreen::geometryChanged, &loop, &QEventLoop::quit);
     // 500ms maximum wait
@@ -1105,7 +1129,8 @@ void MythDisplay::WaitForNewScreen()
     QEventLoop loop;
     QTimer timer;
     timer.setSingleShot(true);
-    connect(&timer, &QTimer::timeout, [](){ LOG(VB_GENERAL, LOG_WARNING, LOC + "Timed out waiting for new screen"); });
+    connect(&timer, &QTimer::timeout,
+            &timer, [](){ LOG(VB_GENERAL, LOG_WARNING, LOC + "Timed out waiting for new screen"); });
     QObject::connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
     QObject::connect(m_widget->windowHandle(), &QWindow::screenChanged, &loop, &QEventLoop::quit);
     // 500ms maximum wait
@@ -1136,16 +1161,18 @@ void MythDisplay::DebugModes() const
     if (VERBOSE_LEVEL_CHECK(VB_PLAYBACK, LOG_INFO))
     {
         LOG(VB_PLAYBACK, LOG_INFO, LOC + "Available modes:");
-        for (auto it = m_videoModes.crbegin(); it != m_videoModes.crend(); ++it)
+        QStringList rateslist;
+        for (const auto & videoMode : std::ranges::reverse_view(m_videoModes))
         {
-            auto rates = (*it).RefreshRates();
-            QStringList rateslist;
-            for (auto it2 = rates.crbegin(); it2 != rates.crend(); ++it2)
-                rateslist.append(QString("%1").arg(*it2, 2, 'f', 2, '0'));
+            auto rates = videoMode.RefreshRates();
+            rateslist.clear();
+            rateslist.reserve(rates.size());
+            for (double rate : std::ranges::reverse_view(rates))
+                rateslist.append(QString("%1").arg(rate, 2, 'f', 2, '0'));
             if (rateslist.empty())
-                rateslist.append("Variable rate?");
+                rateslist.append("Variable rate?"); // clazy:exclude=reserve-candidates
             LOG(VB_PLAYBACK, LOG_INFO, QString("%1x%2\t%3")
-                .arg((*it).Width()).arg((*it).Height()).arg(rateslist.join("\t")));
+                .arg(videoMode.Width()).arg(videoMode.Height()).arg(rateslist.join("\t")));
         }
     }
 }
@@ -1161,8 +1188,10 @@ void MythDisplay::ConfigureQtGUI(int SwapInterval, const MythCommandLineParser& 
     bool gsyncchanged = false;
     bool freesyncchanged = false;
 
-#ifdef USING_QTWEBENGINE
+#if CONFIG_QTWEBENGINE
     QApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
+    QQuickWindow::setSceneGraphBackend("software");
+    LOG(VB_GENERAL, LOG_INFO, LOC + "Using shared OpenGL Contexts");
 #endif
 
     // Set the default surface format. Explicitly required on some platforms.
@@ -1192,13 +1221,13 @@ void MythDisplay::ConfigureQtGUI(int SwapInterval, const MythCommandLineParser& 
     QApplication::setDesktopSettingsAware(false);
 #endif
 
-#if defined (USING_DRM) && defined (USING_QTPRIVATEHEADERS)
+#if CONFIG_DRM && CONFIG_QTPRIVATEHEADERS
     // Avoid trying to setup DRM if we are definitely not going to use it.
-#ifdef USING_X11
+#if CONFIG_X11
     if (!MythDisplayX11::IsAvailable())
 #endif
     {
-#ifdef USING_WAYLANDEXTRAS
+#if CONFIG_WAYLANDEXTRAS
         // When vt switching this still detects wayland servers, so disabled for now
         //if (!MythWaylandDevice::IsAvailable())
 #endif
@@ -1209,7 +1238,7 @@ void MythDisplay::ConfigureQtGUI(int SwapInterval, const MythCommandLineParser& 
     }
 #endif
 
-#if defined (Q_OS_LINUX) && defined (USING_EGL) && defined (USING_X11)
+#if defined (Q_OS_LINUX) && CONFIG_EGL && CONFIG_X11
     // We want to use EGL for VAAPI/MMAL/DRMPRIME rendering to ensure we
     // can use zero copy video buffers for the best performance.
     // To force Qt to use EGL we must set 'QT_XCB_GL_INTEGRATION' to 'xcb_egl'
@@ -1236,7 +1265,10 @@ void MythDisplay::ConfigureQtGUI(int SwapInterval, const MythCommandLineParser& 
         else if (!vendor.isEmpty() || force)
         {
             LOG(VB_GENERAL, LOG_INFO, LOC + QString("Requesting EGL for vendor '%1'").arg(vendor));
-            setenv("QT_XCB_GL_INTEGRATION", "xcb_egl", 0);
+            if (!qEnvironmentVariableIsSet("QT_XCB_GL_INTEGRATION"))
+            {
+                qputenv("QT_XCB_GL_INTEGRATION", "xcb_egl");
+            }
         }
     }
 #endif
@@ -1244,9 +1276,15 @@ void MythDisplay::ConfigureQtGUI(int SwapInterval, const MythCommandLineParser& 
 #if QT_VERSION < QT_VERSION_CHECK(6,0,0)
     // Ignore desktop scaling
     QApplication::setAttribute(Qt::AA_DisableHighDpiScaling);
+#else
+    // Disable high DPI scaling unless defined in the environment
+    if (qEnvironmentVariableIsEmpty("QT_ENABLE_HIGHDPI_SCALING"))
+    {
+        qputenv("QT_ENABLE_HIGHDPI_SCALING", "0");
+    }
 #endif
 
-#ifdef USING_X11
+#if CONFIG_X11
     if (auto display = CmdLine.toString("display"); !display.isEmpty())
         MythXDisplay::SetQtX11Display(display);
     // GSync support via libXNVCtrl
@@ -1261,3 +1299,5 @@ void MythDisplay::ConfigureQtGUI(int SwapInterval, const MythCommandLineParser& 
     if (forcevrr && !(gsyncchanged || freesyncchanged))
         LOG(VB_GENERAL, LOG_INFO, LOC + "Variable refresh rate not adjusted");
 }
+
+#include "moc_mythdisplay.cpp"

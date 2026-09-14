@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <chrono> // for milliseconds
 #include <cinttypes>
-#include <ctime>
 #include <fcntl.h>
 #include <thread> // for sleep_for
 #include <unistd.h>
@@ -17,18 +16,19 @@
 #include <sys/time.h>
 #include <sys/poll.h>
 
-#include <linux/videodev2.h>
+#include <QtGlobal>
 
-#include "libmythbase/mythconfig.h"
+#include <linux/videodev2.h>
 
 // MythTV headers
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
-#include "libmythbase/programinfo.h"
+#include "libmythbase/mythlogging.h"
 
 #include "cardutil.h"
 #include "io/mythmediabuffer.h"
 #include "mpegrecorder.h"
+#include "programinfo.h"
 #include "recordingprofile.h"
 #include "tv_rec.h"
 
@@ -103,20 +103,32 @@ static int find_index(const std::array<const int,14> &audio_rate, int value)
 void MpegRecorder::SetOption(const QString &opt, int value)
 {
     if (opt == "width")
+    {
         m_width = value;
+    }
     else if (opt == "height")
+    {
         m_height = value;
+    }
     else if (opt == "mpeg2bitrate")
+    {
         m_bitrate = value;
+    }
     else if (opt == "mpeg2maxbitrate")
+    {
         m_maxBitrate = value;
+    }
     else if (opt == "samplerate")
+    {
         m_audSampleRate = value;
+    }
     else if (opt == "mpeg2audbitratel1")
     {
         int index = find_index(kAudRateL1, value);
         if (index >= 0)
+        {
             m_audBitrateL1 = index + 1;
+        }
         else
         {
             LOG(VB_GENERAL, LOG_ERR, LOC + "Audiorate(L1): " +
@@ -127,7 +139,9 @@ void MpegRecorder::SetOption(const QString &opt, int value)
     {
         int index = find_index(kAudRateL2, value);
         if (index >= 0)
+        {
             m_audBitrateL2 = index + 1;
+        }
         else
         {
             LOG(VB_GENERAL, LOG_ERR, LOC + "Audiorate(L2): " +
@@ -138,7 +152,9 @@ void MpegRecorder::SetOption(const QString &opt, int value)
     {
         int index = find_index(kAudRateL3, value);
         if (index >= 0)
+        {
             m_audBitrateL3 = index + 1;
+        }
         else
         {
             LOG(VB_GENERAL, LOG_ERR, LOC + "Audiorate(L2): " +
@@ -245,11 +261,17 @@ void MpegRecorder::SetOption(const QString &opt, const QString &value)
     else if (opt == "mpeg2audtype")
     {
         if (value == "Layer I")
+        {
             m_audType = V4L2_MPEG_AUDIO_ENCODING_LAYER_1 + 1;
+        }
         else if (value == "Layer II")
+        {
             m_audType = V4L2_MPEG_AUDIO_ENCODING_LAYER_2 + 1;
+        }
         else if (value == "Layer III")
+        {
             m_audType = V4L2_MPEG_AUDIO_ENCODING_LAYER_3 + 1;
+        }
         else
         {
             LOG(VB_GENERAL, LOG_ERR, LOC + "MPEG2 audio layer: " +
@@ -560,7 +582,7 @@ bool MpegRecorder::SetRecordingVolume(int chanfd)
     int ctrl_volume = std::clamp(value, qctrl.minimum, qctrl.maximum);
 
     // Set recording volume
-    struct v4l2_control ctrl {V4L2_CID_AUDIO_VOLUME, ctrl_volume};
+    struct v4l2_control ctrl {.id=V4L2_CID_AUDIO_VOLUME, .value=ctrl_volume};
 
     if (ioctl(chanfd, VIDIOC_S_CTRL, &ctrl) < 0)
     {
@@ -918,7 +940,7 @@ void MpegRecorder::run(void)
 
     bool has_select = true;
 
-#if defined(__FreeBSD__)
+#ifdef Q_OS_FREEBSD
     // HACK. FreeBSD PVR150/500 driver doesn't currently support select()
     has_select = false;
 #endif
@@ -975,7 +997,9 @@ void MpegRecorder::run(void)
     fd_set rdset;
 
     if (m_deviceIsMpegFile)
+    {
         elapsedTimer.start();
+    }
     else if (m_deviceReadBuffer)
     {
         LOG(VB_RECORD, LOG_INFO, LOC + "Initial startup of recorder");
@@ -992,20 +1016,20 @@ void MpegRecorder::run(void)
         {
             if (dummyBPS && bytesRead)
             {
-                elapsed = (elapsedTimer.elapsed().count() / 1000.0) + 1;
+                elapsed = (elapsedTimer.elapsed().count() / 1000.0F) + 1;
                 while ((bytesRead / elapsed) > dummyBPS)
                 {
                     std::this_thread::sleep_for(50ms);
-                    elapsed = (elapsedTimer.elapsed().count() / 1000.0) + 1;
+                    elapsed = (elapsedTimer.elapsed().count() / 1000.0F) + 1;
                 }
             }
             else if (GetFramesWritten())
             {
-                elapsed = (elapsedTimer.elapsed().count() / 1000.0) + 1;
+                elapsed = (elapsedTimer.elapsed().count() / 1000.0F) + 1;
                 while ((GetFramesWritten() / elapsed) > 30)
                 {
                     std::this_thread::sleep_for(50ms);
-                    elapsed = (elapsedTimer.elapsed().count() / 1000.0) + 1;
+                    elapsed = (elapsedTimer.elapsed().count() / 1000.0F) + 1;
                 }
             }
         }
@@ -1215,7 +1239,7 @@ bool MpegRecorder::ProcessTSPacket(const TSPacket &tspacket_real)
         tspacket_fake->SetContinuityCounter(cc);
     }
 
-    const TSPacket &tspacket = (tspacket_fake)
+    const TSPacket &tspacket = tspacket_fake
         ? *tspacket_fake : tspacket_real;
 
     bool ret = DTVRecorder::ProcessTSPacket(tspacket);

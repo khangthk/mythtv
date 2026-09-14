@@ -11,10 +11,10 @@
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythlogging.h"      // for LOG
-#include "libmythbase/programinfo.h"      // for ProgramInfo
 #include "libmythbase/referencecounter.h"
 #include "libmythprotoserver/requesthandler/fileserverutil.h"
 #include "libmythtv/inputinfo.h"          // for InputInfo
+#include "libmythtv/programinfo.h"      // for ProgramInfo
 #include "libmythtv/tv_rec.h"
 
 // MythBackend
@@ -200,7 +200,9 @@ TVState EncoderLink::GetState(void)
         return retval;
 
     if (m_local)
+    {
         retval = m_tv->GetState();
+    }
     else if (HasSockAndIncrRef())
     {
         ReferenceLocker rlocker(m_sock);
@@ -227,7 +229,9 @@ uint EncoderLink::GetFlags(void)
         return retval;
 
     if (m_local)
+    {
         retval = m_tv->GetFlags();
+    }
     else if (HasSockAndIncrRef())
     {
         ReferenceLocker rlocker(m_sock);
@@ -304,7 +308,9 @@ void EncoderLink::RecordPending(const ProgramInfo *rec,
                                 bool hasLater)
 {
     if (m_local)
+    {
         m_tv->RecordPending(rec, secsleft, hasLater);
+    }
     else if (HasSockAndIncrRef())
     {
         ReferenceLocker rlocker(m_sock);
@@ -338,20 +344,6 @@ bool EncoderLink::CheckFile(ProgramInfo *pginfo)
     }
     pginfo->SetPathname(GetPlaybackURL(pginfo));
     return pginfo->IsLocal();
-}
-
-/**
- *  \brief Appends total and used disk space in Kilobytes
- *
- *  \param o_strlist list to append to
- */
-void EncoderLink::GetDiskSpace(QStringList &o_strlist)
-{
-    if (HasSockAndIncrRef())
-    {
-        ReferenceLocker rlocker(m_sock);
-        m_sock->GetDiskSpace(o_strlist);
-    }
 }
 
 /** \fn EncoderLink::GetMaxBitrate()
@@ -441,7 +433,9 @@ RecStatus::Type EncoderLink::StartRecording(ProgramInfo *rec)
     m_chanid = rec->GetChanID();
 
     if (m_local)
+    {
         retval = m_tv->StartRecording(rec);
+    }
     else if (HasSockAndIncrRef())
     {
         ReferenceLocker rlocker(m_sock);
@@ -472,7 +466,9 @@ RecStatus::Type EncoderLink::GetRecordingStatus(void)
     RecStatus::Type retval = RecStatus::Aborted;
 
     if (m_local)
+    {
         retval = m_tv->GetRecordingStatus();
+    }
     else if (HasSockAndIncrRef())
     {
         ReferenceLocker rlocker(m_sock);
@@ -509,7 +505,9 @@ ProgramInfo *EncoderLink::GetRecording(void)
     ProgramInfo *info = nullptr;
 
     if (m_local)
+    {
         info = m_tv->GetRecording();
+    }
     else if (HasSockAndIncrRef())
     {
         ReferenceLocker rlocker(m_sock);
@@ -678,7 +676,9 @@ void EncoderLink::FrontendReady(void)
 void EncoderLink::CancelNextRecording(bool cancel)
 {
     if (m_local)
+    {
         m_tv->CancelNextRecording(cancel);
+    }
     else if (HasSockAndIncrRef())
     {
         ReferenceLocker rlocker(m_sock);
@@ -764,7 +764,9 @@ void EncoderLink::SetLiveRecording(int recording)
 void EncoderLink::SetNextLiveTVDir(const QString& dir)
 {
     if (m_local)
+    {
         m_tv->SetNextLiveTVDir(dir);
+    }
     else if (HasSockAndIncrRef())
     {
         ReferenceLocker rlocker(m_sock);

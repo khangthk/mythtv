@@ -14,9 +14,9 @@
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythlogging.h"
-#include "libmythbase/programinfo.h"
 #include "libmythtv/channelutil.h"
 #include "libmythtv/mythcommflagplayer.h"
+#include "libmythtv/programinfo.h"
 
 // Commercial Flagging headers
 #include "BlankFrameDetector.h"
@@ -180,8 +180,11 @@ bool searchingForLogo(TemplateFinder *tf, const FrameAnalyzerItem &pass)
     if (!tf)
         return false;
 
-    auto it = std::find(pass.cbegin(), pass.cend(), tf);
-    return it != pass.end();
+#ifdef __cpp_lib_ranges_contains
+    return std::ranges::contains(pass, tf);
+#else
+    return std::ranges::find(pass, tf) != pass.cend();
+#endif
 }
 
 };  // namespace
@@ -405,7 +408,7 @@ void CommDetector2::reportState(int elapsedms, long long frameno,
     if (percentage % 10 == 0 && s_prevpercent != percentage)
     {
         s_prevpercent = percentage;
-        LOG(VB_GENERAL, LOG_INFO, QString("%1%% Completed @ %2 fps.")
+        LOG(VB_GENERAL, LOG_INFO, QString("%1% Completed @ %2 fps.")
             .arg(percentage) .arg(fps));
     }
 }
@@ -807,13 +810,13 @@ void CommDetector2::PrintFullMap(
     if (m_sceneChangeDetector)
         sceneMap = m_sceneChangeDetector->GetMap(0);
 
-    out << "Logo Break Map" << std::endl;
+    out << "Logo Break Map\n";
     PrintReportMap(out, logoMap);
-    out << "Blank Break Map" << std::endl;
+    out << "Blank Break Map\n";
     PrintReportMap(out, blankBreakMap);
-    out << "Blank Map" << std::endl;
+    out << "Blank Map\n";
     PrintReportMap(out, blankMap);
-    out << "Scene Break Map" << std::endl;
+    out << "Scene Break Map\n";
     PrintReportMap(out, sceneMap);
 }
 

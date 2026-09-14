@@ -2,6 +2,7 @@
 
 // ANSI C
 #include <cstdlib>
+#include <thread>
 
 // Qt
 #include <QCoreApplication>
@@ -160,7 +161,7 @@ bool MSqlDatabase::OpenDatabase(bool skipdb)
         int port = 3306;
         if (m_dbparms.m_dbPort)
             port = m_dbparms.m_dbPort;
-        PortChecker::resolveLinkLocal(m_dbparms.m_dbHostName, port);
+        PortChecker{}.resolveLinkLocal(m_dbparms.m_dbHostName, port);
         m_db.setHostName(m_dbparms.m_dbHostName);
 
         if (m_dbparms.m_dbPort)
@@ -175,7 +176,8 @@ bool MSqlDatabase::OpenDatabase(bool skipdb)
             m_db.setHostName("localhost");
 
         // Default read timeout is 10 mins - set a better value 300 seconds
-        m_db.setConnectOptions(QString("MYSQL_OPT_READ_TIMEOUT=300"));
+        if (m_dbparms.m_dbType != "QSQLITE")
+            m_db.setConnectOptions(QString("MYSQL_OPT_READ_TIMEOUT=300"));
 
         connected = m_db.open();
 
@@ -198,7 +200,7 @@ bool MSqlDatabase::OpenDatabase(bool skipdb)
                             .arg(m_dbparms.m_wolCommand));
                 }
 
-                sleep(m_dbparms.m_wolReconnect.count());
+                std::this_thread::sleep_for(m_dbparms.m_wolReconnect);
                 connected = m_db.open();
             }
 

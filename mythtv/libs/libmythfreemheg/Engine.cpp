@@ -38,6 +38,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 
 // External creation function.
 MHEG *MHCreateEngine(MHContext *context)
@@ -127,8 +128,11 @@ std::chrono::milliseconds MHEngine::RunAll()
 
     std::chrono::milliseconds nNextTime = 0ms;
 
-    do
+    bool at_least_once {true} ;
+    while (!m_eventQueue.isEmpty() || ! m_actionStack.isEmpty() || at_least_once)
     {
+        at_least_once = false;
+
         // Check to see if we need to close.
         if (m_context->CheckStop())
         {
@@ -178,7 +182,6 @@ std::chrono::milliseconds MHEngine::RunAll()
             delete pEvent;
         }
     }
-    while (! m_eventQueue.isEmpty() || ! m_actionStack.isEmpty());
 
     // Redraw the display if necessary.
     if (! m_redrawRegion.isEmpty())
@@ -204,49 +207,35 @@ MHGroup *MHEngine::ParseProgram(QByteArray &text)
     // or curly bracket.
     // This is only there for testing: all downloaded objects will be in ASN1
     unsigned char ch = text[0];
-    MHParseBase *parser = nullptr;
-    MHParseNode *pTree = nullptr;
-    MHGroup *pRes = nullptr;
+    std::unique_ptr<MHParseBase> parser;
+    std::unique_ptr<MHGroup> pRes;
 
     if (ch >= 128)
     {
-        parser = new MHParseBinary(text);
+        parser = std::make_unique<MHParseBinary>(text);
     }
     else
     {
-        parser = new MHParseText(text);
+        parser = std::make_unique<MHParseText>(text);
     }
 
-    try
+    // Parse the binary or text.
+    std::unique_ptr<MHParseNode> pTree ( parser->Parse() );
+
+    switch (pTree->GetTagNo())   // The parse node should be a tagged item.
     {
-        // Parse the binary or text.
-        pTree = parser->Parse();
-
-        switch (pTree->GetTagNo())   // The parse node should be a tagged item.
-        {
-            case C_APPLICATION:
-                pRes = new MHApplication;
-                break;
-            case C_SCENE:
-                pRes = new MHScene;
-                break;
-            default:
-                MHParseNode::Failure("Expected Application or Scene"); // throws exception.
-        }
-
-        pRes->Initialise(pTree, this); // Convert the parse tree.
-        delete(pTree);
-        delete(parser);
-    }
-    catch (...)
-    {
-        delete(parser);
-        delete(pTree);
-        delete(pRes);
-        throw;
+        case C_APPLICATION:
+            pRes = std::make_unique<MHApplication>();
+            break;
+        case C_SCENE:
+            pRes = std::make_unique<MHScene>();
+            break;
+        default:
+            MHParseNode::Failure("Expected Application or Scene"); // throws exception.
     }
 
-    return pRes;
+    pRes->Initialise(pTree.get(), this); // Convert the parse tree.
+    return pRes.release();
 }
 
 // Determine protocol for a file
@@ -389,7 +378,9 @@ void MHEngine::Quit()
     if (scene)
         scene->Destruction(this);
 
-    CurrentApp()->Destruction(this);
+    MHApplication *pApp = CurrentApp();
+    if (nullptr != pApp)
+        pApp->Destruction(this);
 
     // This isn't in the standard as far as I can tell but we have to do this because
     // we may have events referring to the old application.
@@ -405,10 +396,10 @@ void MHEngine::Quit()
     {
         m_fBooting = true;
     }
-    else
+    else if (nullptr != pApp)
     {
-        CurrentApp()->m_fRestarting = true;
-        CurrentApp()->Activation(this); // This will do any OnRestart actions.
+        pApp->m_fRestarting = true;
+        pApp->Activation(this); // This will do any OnRestart actions.
         // Note - this doesn't activate the previously active scene.
     }
 
@@ -457,6 +448,11 @@ void MHEngine::TransitionToScene(const MHObjectRef &target)
     // At this point we have managed to load the scene.
     // Deactivate any non-shared ingredients in the application.
     MHApplication *pApp = CurrentApp();
+    if (nullptr == pApp)
+    {
+        delete pProgram;
+        MHERROR("Application disappeared");
+    }
 
     for (int i = pApp->m_items.Size(); i > 0; i--)
     {
@@ -500,9 +496,13 @@ void MHEngine::TransitionToScene(const MHObjectRef &target)
     m_interacting = nullptr;
 
     // Switch to the new scene.
-    CurrentApp()->m_pCurrentScene = dynamic_cast< MHScene* >(pProgram);
-    SetInputRegister(CurrentScene()->m_nEventReg);
-    m_redrawRegion = QRegion(0, 0, CurrentScene()->m_nSceneCoordX, CurrentScene()->m_nSceneCoordY); // Redraw the whole screen
+    pApp->m_pCurrentScene = dynamic_cast< MHScene* >(pProgram);
+    MHScene *pScene = CurrentScene();
+    if (nullptr != pScene)
+    {
+        SetInputRegister(pScene->m_nEventReg);
+        m_redrawRegion = QRegion(0, 0, pScene->m_nSceneCoordX, pScene->m_nSceneCoordY); // Redraw the whole screen
+    }
 
     if ((gMHLogoptions & MHLogScenes) && gMHLogStream != nullptr)   // Print it so we know what's going on.
     {
@@ -545,9 +545,10 @@ QString MHEngine::GetPathName(const MHOctetString &str)
     if (!csPath.startsWith("//"))
     {
         // Add the current application's path name
-        if (CurrentApp())
+        MHApplication *pApp = CurrentApp();
+        if (nullptr != pApp)
         {
-            csPath = CurrentApp()->m_path + csPath;
+            csPath = pApp->m_path + csPath;
         }
     }
 
@@ -629,8 +630,13 @@ void MHEngine::RunActions()
 
             pAction->Perform(this);
         }
-        catch (...)
+        catch(const std::exception& ex)
         {
+            MHLOG(MHLogDetail, QString("Action - threw %1").arg(ex.what()));
+        }
+        catch(...)
+        {
+            MHLOG(MHLogDetail, QString("Action - threw unknown"));
         }
     }
 }
@@ -732,33 +738,42 @@ void MHEngine::AddActions(const MHActionSequence &actions)
 // Add a visible to the display stack if it isn't already there.
 void MHEngine::AddToDisplayStack(MHVisible *pVis)
 {
-    if (CurrentApp()->FindOnStack(pVis) != -1)
+    MHApplication *pApp = CurrentApp();
+    if (nullptr == pApp)
+        return;
+    if (pApp->FindOnStack(pVis) != -1)
     {
         return;    // Return if it's already there.
     }
 
-    CurrentApp()->m_displayStack.Append(pVis);
+    pApp->m_displayStack.Append(pVis);
     Redraw(pVis->GetVisibleArea()); // Request a redraw
 }
 
 // Remove a visible from the display stack if it is there.
 void MHEngine::RemoveFromDisplayStack(MHVisible *pVis)
 {
-    int nPos = CurrentApp()->FindOnStack(pVis);
+    MHApplication *pApp = CurrentApp();
+    if (nullptr == pApp)
+        return;
+    int nPos = pApp->FindOnStack(pVis);
 
     if (nPos == -1)
     {
         return;
     }
 
-    CurrentApp()->m_displayStack.RemoveAt(nPos);
+    pApp->m_displayStack.RemoveAt(nPos);
     Redraw(pVis->GetVisibleArea()); // Request a redraw
 }
 
 // Functions to alter the Z-order.
 void MHEngine::BringToFront(const MHRoot *p)
 {
-    int nPos = CurrentApp()->FindOnStack(p);
+    MHApplication *pApp = CurrentApp();
+    if (nullptr == pApp)
+        return;
+    int nPos = pApp->FindOnStack(p);
 
     if (nPos == -1)
     {
@@ -766,14 +781,17 @@ void MHEngine::BringToFront(const MHRoot *p)
     }
 
     auto *pVis = (MHVisible *)p; // Can now safely cast it.
-    CurrentApp()->m_displayStack.RemoveAt(nPos); // Remove it from its present posn
-    CurrentApp()->m_displayStack.Append(pVis); // Push it on the top.
+    pApp->m_displayStack.RemoveAt(nPos); // Remove it from its present posn
+    pApp->m_displayStack.Append(pVis); // Push it on the top.
     Redraw(pVis->GetVisibleArea()); // Request a redraw
 }
 
 void MHEngine::SendToBack(const MHRoot *p)
 {
-    int nPos = CurrentApp()->FindOnStack(p);
+    MHApplication *pApp = CurrentApp();
+    if (nullptr == pApp)
+        return;
+    int nPos = pApp->FindOnStack(p);
 
     if (nPos == -1)
     {
@@ -781,14 +799,17 @@ void MHEngine::SendToBack(const MHRoot *p)
     }
 
     auto *pVis = (MHVisible *)p; // Can now safely cast it.
-    CurrentApp()->m_displayStack.RemoveAt(nPos); // Remove it from its present posn
-    CurrentApp()->m_displayStack.InsertAt(pVis, 0); // Put it on the bottom.
+    pApp->m_displayStack.RemoveAt(nPos); // Remove it from its present posn
+    pApp->m_displayStack.InsertAt(pVis, 0); // Put it on the bottom.
     Redraw(pVis->GetVisibleArea()); // Request a redraw
 }
 
 void MHEngine::PutBefore(const MHRoot *p, const MHRoot *pRef)
 {
-    int nPos = CurrentApp()->FindOnStack(p);
+    MHApplication *pApp = CurrentApp();
+    if (nullptr == pApp)
+        return;
+    int nPos = pApp->FindOnStack(p);
 
     if (nPos == -1)
     {
@@ -796,21 +817,21 @@ void MHEngine::PutBefore(const MHRoot *p, const MHRoot *pRef)
     }
 
     auto *pVis = (MHVisible *)p; // Can now safely cast it.
-    int nRef = CurrentApp()->FindOnStack(pRef);
+    int nRef = pApp->FindOnStack(pRef);
 
     if (nRef == -1)
     {
         return;    // If the reference visible isn't there do nothing.
     }
 
-    CurrentApp()->m_displayStack.RemoveAt(nPos);
+    pApp->m_displayStack.RemoveAt(nPos);
 
     if (nRef >= nPos)
     {
         nRef--;    // The position of the reference may have shifted
     }
 
-    CurrentApp()->m_displayStack.InsertAt(pVis, nRef + 1);
+    pApp->m_displayStack.InsertAt(pVis, nRef + 1);
     // Redraw the area occupied by the moved item.  We might be able to reduce
     // the area to be redrawn by looking at the way it is affected by other items
     // in the stack.  We could also see whether it's currently active.
@@ -819,14 +840,17 @@ void MHEngine::PutBefore(const MHRoot *p, const MHRoot *pRef)
 
 void MHEngine::PutBehind(const MHRoot *p, const MHRoot *pRef)
 {
-    int nPos = CurrentApp()->FindOnStack(p);
+    MHApplication *pApp = CurrentApp();
+    if (nullptr == pApp)
+        return;
+    int nPos = pApp->FindOnStack(p);
 
     if (nPos == -1)
     {
         return;    // If it's not there do nothing
     }
 
-    int nRef = CurrentApp()->FindOnStack(pRef);
+    int nRef = pApp->FindOnStack(pRef);
 
     if (nRef == -1)
     {
@@ -834,14 +858,14 @@ void MHEngine::PutBehind(const MHRoot *p, const MHRoot *pRef)
     }
 
     auto *pVis = (MHVisible *)p; // Can now safely cast it.
-    CurrentApp()->m_displayStack.RemoveAt(nPos);
+    pApp->m_displayStack.RemoveAt(nPos);
 
     if (nRef >= nPos)
     {
         nRef--;    // The position of the reference may have shifted
     }
 
-    CurrentApp()->m_displayStack.InsertAt(pVis, nRef); // Shift the reference and anything above up.
+    pApp->m_displayStack.InsertAt(pVis, nRef); // Shift the reference and anything above up.
     Redraw(pVis->GetVisibleArea()); // Request a redraw
 }
 
@@ -850,6 +874,9 @@ void MHEngine::PutBehind(const MHRoot *p, const MHRoot *pRef)
 // transparency of items since items higher up the stack may be semi-transparent.
 void MHEngine::DrawRegion(const QRegion& toDraw, int nStackPos)
 {
+    MHApplication *pApp = CurrentApp();
+    if (nullptr == pApp)
+        return;
     if (toDraw.isEmpty())
     {
         return;    // Nothing left to draw.
@@ -857,7 +884,7 @@ void MHEngine::DrawRegion(const QRegion& toDraw, int nStackPos)
 
     while (nStackPos >= 0)
     {
-        MHVisible *pItem = CurrentApp()->m_displayStack.GetAt(nStackPos);
+        MHVisible *pItem = pApp->m_displayStack.GetAt(nStackPos);
         // Work out how much of the area we want to draw is included in this visible.
         // The visible area will be empty if the item is transparent or not active.
         QRegion drawArea = pItem->GetVisibleArea() & toDraw;
@@ -889,7 +916,8 @@ void MHEngine::DrawDisplay(const QRegion& toDraw)
         return;
     }
 
-    int nTopStack = CurrentApp() == nullptr ? -1 : CurrentApp()->m_displayStack.Size() - 1;
+    MHApplication *pApp = CurrentApp();
+    int nTopStack = (pApp == nullptr) ? -1 : pApp->m_displayStack.Size() - 1;
     DrawRegion(toDraw, nTopStack);
 }
 
@@ -903,9 +931,12 @@ void MHEngine::Redraw(const QRegion& region)
 // Called to decrement the lock count.
 void MHEngine::UnlockScreen()
 {
-    if (CurrentApp()->m_nLockCount > 0)
+    MHApplication *pApp = CurrentApp();
+    if (nullptr == pApp)
+        return;
+    if (pApp->m_nLockCount > 0)
     {
-        CurrentApp()->m_nLockCount--;
+        pApp->m_nLockCount--;
     }
 }
 
@@ -998,8 +1029,14 @@ void MHEngine::RequestExternalContent(MHIngredient *pRequester)
                     reinterpret_cast< const unsigned char * >(text.constData()),
                     text.size(), this);
             }
-            catch (...)
-            {}
+            catch(const std::exception& ex)
+            {
+                MHLOG(MHLogDetail, QString("ExternalContent - threw %1").arg(ex.what()));
+            }
+            catch(...)
+            {
+                MHLOG(MHLogDetail, QString("ExternalContent - threw unknown"));
+            }
         }
         else
         {
@@ -1069,8 +1106,14 @@ void MHEngine::CheckContentRequests()
                         reinterpret_cast< const unsigned char * >(text.constData()),
                         text.size(), this);
                 }
-                catch (...)
-                {}
+                catch(const std::exception& ex)
+                {
+                    MHLOG(MHLogDetail, QString("ContentRequest - threw %1").arg(ex.what()));
+                }
+                catch(...)
+                {
+                    MHLOG(MHLogDetail, QString("ContentRequest - threw unknown"));
+                }
             }
             else
             {

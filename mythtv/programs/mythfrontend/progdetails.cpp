@@ -8,6 +8,7 @@
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythdb.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythtv/recordingrule.h"
 #include "libmythui/mythdialogbox.h"
 #include "libmythui/mythmainwindow.h"
@@ -37,7 +38,7 @@ bool ProgDetails::Create(void)
 
 QString ProgDetails::getRatings(bool recorded, uint chanid, const QDateTime& startts)
 {
-    QString table = (recorded) ? "recordedrating" : "programrating";
+    QString table = recorded ? "recordedrating" : "programrating";
     QString sel = QString(
         "SELECT `system`, rating FROM %1 "
         "WHERE chanid  = :CHANID "
@@ -510,6 +511,7 @@ void ProgDetails::loadPage(void)
     using string_pair = QPair<QString, QString>;
     QVector<string_pair> actor_list;
     QVector<string_pair> guest_star_list;
+    QVector<string_pair> guest_list;
 
     if (m_progInfo.GetScheduledEndTime() != m_progInfo.GetScheduledStartTime())
     {
@@ -569,6 +571,8 @@ void ProgDetails::loadPage(void)
                         actor_list.append(qMakePair(pname, character));
                     else if (role == "guest_star")
                         guest_star_list.append(qMakePair(pname, character));
+                    else if (role == "guest")
+                        guest_list.append(qMakePair(pname, character));
                 }
 
                 if (rstr != role)
@@ -641,6 +645,12 @@ void ProgDetails::loadPage(void)
     {
         for (const auto & [actor, role] : std::as_const(guest_star_list))
             addItem(role, actor, ProgInfoList::kLevel2);
+    }
+    if (!guest_list.isEmpty())
+    {
+        for (const auto & [actor, role] : std::as_const(guest_list))
+            if (!role.isEmpty())
+                addItem(role, actor, ProgInfoList::kLevel2);
     }
 
     addItem(tr("Host"), hosts, ProgInfoList::kLevel1);
@@ -926,3 +936,5 @@ void ProgDetails::loadPage(void)
 
     delete record;
 }
+
+#include "moc_progdetails.cpp"

@@ -2,6 +2,7 @@
  *  Copyright (C) David C.J. Matthews 2005, 2006
  *     Derived from libdsmcc by Richard Palmer
  */
+#include <algorithm>
 #include <cstdint>
 
 #include "libmythbase/mythlogging.h"
@@ -42,10 +43,8 @@ static uint32_t crc32(const unsigned char *data, int len);
  */
 ObjCarousel *Dsmcc::GetCarouselById(unsigned int carouselId)
 {
-    auto it = std::find_if(m_carousels.cbegin(), m_carousels.cend(),
-                           [carouselId](ObjCarousel const * const car) -> bool
-                               { return car->m_id == carouselId; });
-    if (it != m_carousels.cend())
+    auto it = std::ranges::find(m_carousels, carouselId, &ObjCarousel::m_id);
+    if (it != m_carousels.end())
         return *it;
     return nullptr;
 }
@@ -167,10 +166,10 @@ void Dsmcc::ProcessDownloadServerInitiate(const unsigned char *data,
     if (ret <= 0)
         return; /* error */
 
-    if (strcmp(gatewayProfile.m_typeId, "srg") != 0)
+    if (gatewayProfile.m_typeId != "srg")
     {
         LOG(VB_DSMCC, LOG_WARNING, QString("[dsmcc] IOR unexpected type_id: '%1'")
-            .arg(gatewayProfile.m_typeId));
+            .arg(QString::fromStdString(gatewayProfile.m_typeId)));
         return; /* error */
     }
     if (ret + 4 > data_len)
@@ -430,7 +429,9 @@ void Dsmcc::ProcessSectionData(const unsigned char *data, int length)
 
     ObjCarousel *car = GetCarouselById(download_id);
     if (car != nullptr)
+    {
         car->AddModuleData(&ddb, blockData + 6);
+    }
     else
     {
         LOG(VB_DSMCC, LOG_WARNING, QString("[dsmcc] Data Block ModID %1 Pos %2"

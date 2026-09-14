@@ -20,8 +20,6 @@ add_executable(
   encoderlink.h
   filetransfer.cpp
   filetransfer.h
-  httpconfig.cpp
-  httpconfig.h
   httpstatus.cpp
   httpstatus.h
   internetContent.cpp
@@ -43,35 +41,6 @@ add_executable(
   recordingextender.h
   scheduler.cpp
   scheduler.h
-  serviceHosts/captureServiceHost.h
-  serviceHosts/channelServiceHost.h
-  serviceHosts/contentServiceHost.h
-  serviceHosts/dvrServiceHost.h
-  serviceHosts/guideServiceHost.h
-  serviceHosts/imageServiceHost.h
-  serviceHosts/musicServiceHost.h
-  serviceHosts/mythServiceHost.h
-  serviceHosts/videoServiceHost.h
-  services/capture.cpp
-  services/capture.h
-  services/channel.cpp
-  services/channel.h
-  services/content.cpp
-  services/content.h
-  services/dvr.cpp
-  services/dvr.h
-  services/guide.cpp
-  services/guide.h
-  services/image.cpp
-  services/image.h
-  services/music.cpp
-  services/music.h
-  services/myth.cpp
-  services/myth.h
-  services/serviceUtil.cpp
-  services/serviceUtil.h
-  services/video.cpp
-  services/video.h
   servicesv2/preformat.h
   servicesv2/v2artworkInfo.h
   servicesv2/v2artworkInfoList.h
@@ -134,6 +103,8 @@ add_executable(
   servicesv2/v2musicMetadataInfoList.h
   servicesv2/v2myth.cpp
   servicesv2/v2myth.h
+  servicesv2/v2playGroup.h
+  servicesv2/v2powerPriority.h
   servicesv2/v2programAndChannel.h
   servicesv2/v2programGuide.h
   servicesv2/v2programList.h
@@ -148,6 +119,7 @@ add_executable(
   servicesv2/v2settingList.h
   servicesv2/v2status.cpp
   servicesv2/v2status.h
+  servicesv2/v2recStats.h
   servicesv2/v2storageGroupDir.h
   servicesv2/v2storageGroupDirList.h
   servicesv2/v2systemEventList.h
@@ -177,9 +149,6 @@ add_executable(
 
 target_include_directories(mythbackend PRIVATE .)
 
-target_compile_definitions(mythbackend
-                           PRIVATE $<$<BOOL:${USING_VALGRIND}>:USING_VALGRIND>)
-
 target_link_libraries(
   mythbackend
   PUBLIC myth
@@ -187,7 +156,6 @@ target_link_libraries(
          mythbase
          mythmetadata
          mythprotoserver
-         mythservicecontracts
          mythupnp
          $<TARGET_NAME_IF_EXISTS:Qt${QT_VERSION_MAJOR}::DBus>)
 
@@ -195,6 +163,3 @@ install(TARGETS mythbackend RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 install(FILES devicemaster.xml deviceslave.xml MXML_scpd.xml
         DESTINATION ${CMAKE_INSTALL_DATADIR}/mythtv)
-
-install(FILES config_backend_general.xml config_backend_database.xml
-        DESTINATION ${CMAKE_INSTALL_DATADIR}/mythtv/backend-config)

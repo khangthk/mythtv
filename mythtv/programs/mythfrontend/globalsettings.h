@@ -9,8 +9,8 @@
 #include <QStringList>
 
 // MythTV
-#include "libmyth/mythcontext.h"
-#include "libmyth/standardsettings.h"
+#include "libmythbase/mythconfig.h"
+#include "libmythui/standardsettings.h"
 #include "libmythtv/mythvideoprofile.h"
 
 class QFileInfo;
@@ -190,7 +190,7 @@ class MainGeneralSettings : public GroupSetting
     MainGeneralSettings();
     void applyChange() override; // GroupSetting
 
-#ifdef USING_LIBCEC
+#if CONFIG_LIBCEC
   public slots:
     void cecChanged(bool setting);
   protected:
@@ -198,7 +198,7 @@ class MainGeneralSettings : public GroupSetting
     HostCheckBoxSetting *m_cecPowerOffTVAllowed {nullptr};
     HostCheckBoxSetting *m_cecPowerOnTVOnStart  {nullptr};
     HostCheckBoxSetting *m_cecPowerOffTVOnExit  {nullptr};
-#endif  // USING_LIBCEC
+#endif  // CONFIG_LIBCEC
 };
 
 class GeneralRecPrioritiesSettings : public GroupSetting
@@ -334,9 +334,6 @@ class ChannelGroupsSetting : public GroupSetting
   public slots:
     void ShowNewGroupDialog(void) const;
     void CreateNewGroup(const QString& name);
-
-  private:
-    ButtonStandardSetting *m_addGroupButton {nullptr};
 };
 
 #endif

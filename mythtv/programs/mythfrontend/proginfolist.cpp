@@ -1,6 +1,5 @@
 
  // MythTV
-#include "libmythbase/mythcoreutil.h"
 #include "libmythbase/mythdate.h"
 
 // MythFrontend
@@ -110,3 +109,5 @@ void ProgInfoList::Display(const DataList& data)
     if (m_btnList->CanTakeFocus())
         m_screen.SetFocusWidget(m_btnList);
 }
+
+#include "moc_proginfolist.cpp"

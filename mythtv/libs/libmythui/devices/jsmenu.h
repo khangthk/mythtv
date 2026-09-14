@@ -53,13 +53,16 @@ class JoystickMap
     public:
         void AddButton(int in_button, QString in_keystr, int in_chord = -1)
         {
-            buttonMapType new_button = { in_button, std::move(in_keystr), in_chord };
+            buttonMapType new_button = { .button=in_button,
+                                         .keystring=std::move(in_keystr),
+                                         .chord=in_chord };
             m_buttonMap.push_back(new_button);
         }
 
         void AddAxis(int in_axis, int in_from, int in_to, QString in_keystr)
         {
-            axisMapType new_axis = { in_axis, in_from, in_to, std::move(in_keystr)};
+            axisMapType new_axis = { .axis=in_axis, .from=in_from, .to=in_to,
+                                     .keystring=std::move(in_keystr)};
             m_axisMap.push_back(new_axis);
         }
 
@@ -98,9 +101,10 @@ class JoystickMenuThread : public MThread
     bool ReadConfig(const QString& config_file);
     void Stop(void) { m_bStop = true; }
 
-  private:
+  protected:
     void run() override; // MThread
 
+  private:
     bool m_configRead           {false};
     bool m_readError            {false};
     // put here to avoid changing other classes

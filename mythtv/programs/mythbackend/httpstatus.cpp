@@ -26,10 +26,10 @@
 // MythTV headers
 #include "libmythbase/compat.h"
 #include "libmythbase/exitcodes.h"
-#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythdbcon.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythbase/mythmiscutil.h"
 #include "libmythbase/mythsystemlegacy.h"
 #include "libmythbase/mythversion.h"
@@ -37,6 +37,7 @@
 #include "libmythtv/jobqueue.h"
 #include "libmythtv/tv.h"
 #include "libmythtv/tv_rec.h"
+#include "libmythupnp/ssdpcache.h"
 #include "libmythupnp/upnp.h"
 
 // MythBackend
@@ -51,11 +52,10 @@
 /////////////////////////////////////////////////////////////////////////////
 
 HttpStatus::HttpStatus( QMap<int, EncoderLink *> *tvList, Scheduler *sched,
-                        AutoExpire *expirer, bool bIsMaster )
+                        bool bIsMaster )
           : HttpServerExtension( "HttpStatus" , QString()),
             m_pSched(sched),
             m_pEncoders(tvList),
-            m_pExpirer(expirer),
             m_bIsMaster(bIsMaster)
 {
     m_nPreRollSeconds = gCoreContext->GetNumSetting("RecordPreRoll", 0);
@@ -67,12 +67,12 @@ HttpStatus::HttpStatus( QMap<int, EncoderLink *> *tvList, Scheduler *sched,
 
 HttpStatusMethod HttpStatus::GetMethod( const QString &sURI )
 {
-    if (sURI == "Status"               ) return( HSM_GetStatusHTML   );
-    if (sURI == "GetStatusHTML"        ) return( HSM_GetStatusHTML   );
-    if (sURI == "GetStatus"            ) return( HSM_GetStatusXML    );
-    if (sURI == "xml"                  ) return( HSM_GetStatusXML    );
+    if (sURI == "Status"               ) return HSM_GetStatusHTML;
+    if (sURI == "GetStatusHTML"        ) return HSM_GetStatusHTML;
+    if (sURI == "GetStatus"            ) return HSM_GetStatusXML;
+    if (sURI == "xml"                  ) return HSM_GetStatusXML;
 
-    return( HSM_Unknown );
+    return HSM_Unknown;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -97,7 +97,7 @@ bool HttpStatus::ProcessRequest( HTTPRequest *pRequest )
             if ((pRequest->m_sBaseUrl     != "/Status" ) &&
                 (pRequest->m_sResourceUrl != "/Status" ))
             {
-                return( false );
+                return false;
             }
 
             switch( GetMethod( pRequest->m_sMethod ))
@@ -121,7 +121,7 @@ bool HttpStatus::ProcessRequest( HTTPRequest *pRequest )
             "HttpStatus::ProcessRequest() - Unexpected Exception");
     }
 
-    return( false );
+    return false;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -297,7 +297,7 @@ void HttpStatus::FillStatusXML( QDomDocument *pDoc )
     QDomElement frontends = pDoc->createElement("Frontends");
     root.appendChild(frontends);
 
-    SSDPCacheEntries *fes = SSDP::Find(
+    SSDPCacheEntries *fes = SSDPCache::Instance()->Find(
         "urn:schemas-mythtv-org:service:MythFrontend:1");
     if (fes)
     {
@@ -338,7 +338,7 @@ void HttpStatus::FillStatusXML( QDomDocument *pDoc )
         mbe.setAttribute("url" , masterip + ":" + QString::number(masterport));
     }
 
-    SSDPCacheEntries *sbes = SSDP::Find(
+    SSDPCacheEntries *sbes = SSDPCache::Instance()->Find(
         "urn:schemas-mythtv-org:device:SlaveMediaServer:1");
     if (sbes)
     {
@@ -845,7 +845,7 @@ int HttpStatus::PrintEncoderStatus( QTextStream &os, const QDomElement& encoders
 
     os << "  </div>\r\n\r\n";
 
-    return( nNumEncoders );
+    return nNumEncoders;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -857,7 +857,7 @@ int HttpStatus::PrintScheduled( QTextStream &os, const QDomElement& scheduled )
     QDateTime qdtNow          = MythDate::current();
 
     if (scheduled.isNull())
-        return( 0 );
+        return 0;
 
     int     nNumRecordings= scheduled.attribute( "count", "0" ).toInt();
 
@@ -868,7 +868,7 @@ int HttpStatus::PrintScheduled( QTextStream &os, const QDomElement& scheduled )
     {
         os << "    There are no shows scheduled for recording.\r\n"
            << "    </div>\r\n";
-        return( 0 );
+        return 0;
     }
 
     os << "    The next " << nNumRecordings << " show" << (nNumRecordings == 1 ? "" : "s" )
@@ -978,7 +978,7 @@ int HttpStatus::PrintScheduled( QTextStream &os, const QDomElement& scheduled )
     os  << "    </div>\r\n";
     os << "  </div>\r\n\r\n";
 
-    return( nNumRecordings );
+    return nNumRecordings;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -988,12 +988,12 @@ int HttpStatus::PrintScheduled( QTextStream &os, const QDomElement& scheduled )
 int HttpStatus::PrintFrontends( QTextStream &os, const QDomElement& frontends )
 {
     if (frontends.isNull())
-        return( 0 );
+        return 0;
 
     int nNumFES= frontends.attribute( "count", "0" ).toInt();
 
     if (nNumFES < 1)
-        return( 0 );
+        return 0;
 
 
     os << "  <div class=\"content\">\r\n"
@@ -1026,12 +1026,12 @@ int HttpStatus::PrintFrontends( QTextStream &os, const QDomElement& frontends )
 int HttpStatus::PrintBackends( QTextStream &os, const QDomElement& backends )
 {
     if (backends.isNull())
-        return( 0 );
+        return 0;
 
     int nNumBES= backends.attribute( "count", "0" ).toInt();
 
     if (nNumBES < 1)
-        return( 0 );
+        return 0;
 
 
     os << "  <div class=\"content\">\r\n"
@@ -1065,7 +1065,7 @@ int HttpStatus::PrintBackends( QTextStream &os, const QDomElement& backends )
 int HttpStatus::PrintJobQueue( QTextStream &os, const QDomElement& jobs )
 {
     if (jobs.isNull())
-        return( 0 );
+        return 0;
 
     int nNumJobs= jobs.attribute( "count", "0" ).toInt();
 
@@ -1199,7 +1199,7 @@ int HttpStatus::PrintJobQueue( QTextStream &os, const QDomElement& jobs )
 
     os << "  </div>\r\n\r\n ";
 
-    return( nNumJobs );
+    return nNumJobs;
 
 }
 
@@ -1212,7 +1212,7 @@ int HttpStatus::PrintMachineInfo( QTextStream &os, const QDomElement& info )
     QString   sRep;
 
     if (info.isNull())
-        return( 0 );
+        return 0;
 
     os << "<div class=\"content\">\r\n"
        << "    <h2 class=\"status\">Machine Information</h2>\r\n";
@@ -1450,13 +1450,13 @@ int HttpStatus::PrintMachineInfo( QTextStream &os, const QDomElement& info )
     }
     os << "\r\n  </div>\r\n";
 
-    return( 1 );
+    return 1;
 }
 
 int HttpStatus::PrintMiscellaneousInfo( QTextStream &os, const QDomElement& info )
 {
     if (info.isNull())
-        return( 0 );
+        return 0;
 
     // Miscellaneous information
 
@@ -1504,7 +1504,7 @@ int HttpStatus::PrintMiscellaneousInfo( QTextStream &os, const QDomElement& info
         os << "</div>\r\n";
     }
 
-    return( 1 );
+    return 1;
 }
 
 void HttpStatus::FillProgramInfo(QDomDocument *pDoc,

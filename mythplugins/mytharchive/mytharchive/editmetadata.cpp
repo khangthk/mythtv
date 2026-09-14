@@ -1,6 +1,6 @@
 
 // myth
-#include <libmyth/mythcontext.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythui/mythuibutton.h>
 #include <libmythui/mythuitext.h>
 #include <libmythui/mythuitextedit.h>
@@ -75,3 +75,5 @@ void EditMetadataDialog::cancelPressed(void)
     emit haveResult(false, m_sourceMetadata);
     Close();
 }
+
+#include "moc_editmetadata.cpp"

@@ -1,4 +1,11 @@
+// C++ headers
+#include <algorithm>
+
 // Qt
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QDirIterator>
 #include <QNetworkInterface>
 #include <QCoreApplication>
@@ -7,12 +14,13 @@
 #include <QSslCertificate>
 
 // MythTV
+#include "mythconfig.h"
 #include "mythversion.h"
 #include "mythdirs.h"
 #include "mythcorecontext.h"
 #include "mythlogging.h"
 #include "libmythbase/configuration.h"
-#ifdef USING_LIBDNS_SD
+#if CONFIG_LIBDNS_SD
 #include "bonjourregister.h"
 #endif
 #include "http/mythhttpsocket.h"
@@ -22,7 +30,7 @@
 #include "http/mythhttpserver.h"
 
 // Std
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
 #include <sys/utsname.h>
 #endif
 
@@ -52,9 +60,14 @@ MythHTTPServer::MythHTTPServer()
     // Add our default paths (mostly static js, css, images etc).
     // We need to pass individual directories to the threads, so inspect the
     // the paths we want for sub-directories
-    static const QStringList s_dirs = { "/assets/", "/3rdParty/", "/css/", "/images/", "/js/", "/misc/", "/apps/", "/xslt/" };
+    static const QStringList s_dirs = { "/assets/", "/3rdParty/", "/css/", "/images/", "/apps/", "/xslt/" };
     m_config.m_filePaths.clear();
+
+    // Build a list of directories.  Start the list with enough entries
+    // to handle a current install, preventing multiple allocations.
+    static constexpr int approximate_count {60};
     QStringList dirs;
+    dirs.reserve(approximate_count);
     for (const auto & dir : s_dirs)
     {
         dirs.append(dir);
@@ -165,7 +178,7 @@ void MythHTTPServer::Init()
     if (version.startsWith("v"))
         version = version.right(version.length() - 1);
 
-#ifdef _WIN32
+#ifdef Q_OS_WINDOWS
     QString server = QStringLiteral("Windows");
 #else
     struct utsname uname_info {};
@@ -190,7 +203,7 @@ void MythHTTPServer::Init()
 void MythHTTPServer::Started([[maybe_unused]] bool Tcp,
                              [[maybe_unused]] bool Ssl)
 {
-#ifdef USING_LIBDNS_SD
+#if CONFIG_LIBDNS_SD
     // Advertise our webserver
     delete m_bonjour;
     delete m_bonjourSSL;
@@ -229,7 +242,7 @@ void MythHTTPServer::Stopped()
     m_config.m_hosts.clear();
     m_config.m_allowedOrigins.clear();
 
-#ifdef USING_LIBDNS_SD
+#if CONFIG_LIBDNS_SD
     // Stop advertising
     delete m_bonjour;
     delete m_bonjourSSL;
@@ -250,12 +263,10 @@ void MythHTTPServer::ProcessTCPQueueHandler()
 {
     if (AvailableThreads() > 0)
     {
-        auto Socket = m_connectionQueue.dequeue();
-        auto * server = qobject_cast<PrivTcpServer*>(QObject::sender());
-        auto ssl = server ? server->GetServerType() == kSSLServer : false;
+        auto entry = m_connectionQueue.dequeue();
         m_threadNum = m_threadNum % MaxThreads();
-        auto name = QString("HTTP%1%2").arg(ssl ? "S" : "").arg(m_threadNum++);
-        auto * newthread = new MythHTTPThread(this, m_config, name, Socket, ssl);
+        auto name = QString("HTTP%1%2").arg(entry.m_ssl ? "S" : "").arg(m_threadNum++);
+        auto * newthread = new MythHTTPThread(this, m_config, name, entry.m_socketFD, entry.m_ssl);
         AddThread(newthread);
         connect(newthread->qthread(), &QThread::finished, this, &MythHTTPThreadPool::ThreadFinished);
         connect(newthread->qthread(), &QThread::finished, this, &MythHTTPServer::ThreadFinished);
@@ -268,8 +279,11 @@ void MythHTTPServer::newTcpConnection(qintptr Socket)
 {
     if (!Socket)
         return;
-
-    m_connectionQueue.enqueue(Socket);
+    auto * server = qobject_cast<PrivTcpServer*>(QObject::sender());
+    MythTcpQueueEntry entry;
+    entry.m_socketFD = Socket;
+    entry.m_ssl = (server->GetServerType() == kSSLServer);
+    m_connectionQueue.enqueue(entry);
     emit ProcessTCPQueue();
 }
 
@@ -365,7 +379,7 @@ void MythHTTPServer::NewHandlers(const HTTPHandlers& Handlers)
     {
         if (ReservedPath(handler.first))
             continue;
-        if (!std::any_of(m_config.m_handlers.cbegin(), m_config.m_handlers.cend(),
+        if (!std::ranges::any_of(m_config.m_handlers,
                          [&handler](const HTTPHandler& Handler) { return Handler.first == handler.first; }))
         {
             LOG(VB_HTTP, LOG_INFO, LOC + QString("Adding handler for '%1'").arg(handler.first));
@@ -387,8 +401,8 @@ void MythHTTPServer::StaleHandlers(const HTTPHandlers& Handlers)
     bool stalehandlers = false;
     for (const auto & handler : std::as_const(Handlers))
     {
-        auto found = std::find_if(m_config.m_handlers.begin(), m_config.m_handlers.end(),
-                                  [&handler](const HTTPHandler& Handler) {  return Handler.first == handler.first; });
+        auto found = std::ranges::find(m_config.m_handlers, handler.first,
+                                       &HTTPHandler::first);
         if (found != m_config.m_handlers.end())
         {
             m_config.m_handlers.erase(found);
@@ -406,7 +420,7 @@ void MythHTTPServer::NewServices(const HTTPServices& Services)
     {
         if (ReservedPath(service.first))
             continue;
-        if (!std::any_of(m_config.m_services.cbegin(), m_config.m_services.cend(),
+        if (!std::ranges::any_of(m_config.m_services,
                          [&service](const HTTPService& Service) { return Service.first == service.first; }))
         {
             LOG(VB_HTTP, LOG_INFO, LOC + QString("Adding service for '%1'").arg(service.first));
@@ -428,8 +442,8 @@ void MythHTTPServer::StaleServices(const HTTPServices& Services)
     bool staleservices = false;
     for (const auto & service : std::as_const(Services))
     {
-        auto found = std::find_if(m_config.m_services.begin(), m_config.m_services.end(),
-                                  [&service](const HTTPService& Service) {  return Service.first == service.first; });
+        auto found = std::ranges::find(m_config.m_services, service.first,
+                                       &HTTPService::first);
         if (found != m_config.m_services.end())
         {
             m_config.m_services.erase(found);
@@ -537,6 +551,7 @@ QStringList MythHTTPServer::BuildAddressList(QHostInfo& Info)
     QString hostname = Info.hostName();
     QStringList results;
     auto ipaddresses = Info.addresses();
+    results.reserve(ipaddresses.count() + 1);
     for(auto & address : ipaddresses)
     {
         QString result = MythHTTP::AddressToString(address);
@@ -618,3 +633,5 @@ void MythHTTPServer::DebugHosts()
             LOG(VB_GENERAL, LOG_INFO, LOC + QString("Host: %1").arg(address));
     }
 }
+
+#include "moc_mythhttpserver.cpp"

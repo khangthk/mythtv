@@ -1,10 +1,13 @@
 // MythTV
+#include "libmythbase/mythlogging.h"
+
 #include "decoders/avformatdecoder.h"
 #include "mythplayerui.h"
 #include "mythmmalcontext.h"
 
 // FFmpeg
 extern "C" {
+#include "libavcodec/defs.h"
 #include "libavutil/opt.h"
 }
 
@@ -58,8 +61,8 @@ MythCodecID MythMMALContext::GetSupportedCodec(AVCodecContext **Context,
         case AV_CODEC_ID_MPEG4:      mythprofile = MythCodecContext::MPEG4; break;
         case AV_CODEC_ID_VC1:        mythprofile = MythCodecContext::VC1;   break;
         case AV_CODEC_ID_H264:
-            if ((*Context)->profile == FF_PROFILE_H264_HIGH_10 ||
-                (*Context)->profile == FF_PROFILE_H264_HIGH_10_INTRA)
+            if ((*Context)->profile == AV_PROFILE_H264_HIGH_10 ||
+                (*Context)->profile == AV_PROFILE_H264_HIGH_10_INTRA)
             {
                 return failure;
             }
@@ -190,7 +193,6 @@ bool MythMMALContext::GetBuffer(AVCodecContext *Context, MythVideoFrame *Frame, 
                                   MythVideoFrame::GetHeightForPlane(Frame->m_type, AvFrame->height, plane));
     }
 
-    AvFrame->reordered_opaque = Context->reordered_opaque;
     return true;
 }
 
@@ -216,7 +218,6 @@ bool MythMMALContext::GetBuffer2(AVCodecContext *Context, MythVideoFrame *Frame,
     Frame->m_swPixFmt = Context->sw_pix_fmt;
     Frame->m_directRendering = 1;
     AvFrame->opaque = Frame;
-    AvFrame->reordered_opaque = Context->reordered_opaque;
 
     // Frame->data[3] holds MMAL_BUFFER_HEADER_T
     Frame->m_buffer = AvFrame->data[3];

@@ -25,9 +25,12 @@
 #include "importicons.h"
 
 ImportIconsWizard::ImportIconsWizard(MythScreenStack *parent, bool fRefresh,
-                                     QString channelname)
+                                     int sourceid, QString channelname)
                   :MythScreenType(parent, "ChannelIconImporter"),
-    m_strChannelname(std::move(channelname)), m_fRefresh(fRefresh)
+    m_strChannelname(std::move(channelname)), m_fRefresh(fRefresh), m_sourceId(sourceid),
+    m_url(gCoreContext->GetSetting("ServicesRepositoryURL",
+                                   "https://services.mythtv.org") + "/channel-icon")
+
 {
     if (!m_strChannelname.isEmpty())
     {
@@ -296,6 +299,8 @@ bool ImportIconsWizard::initialLoad(const QString& name)
         querystring.append("name=\"" + name + "\"");
     else
         querystring.append("channel.visible > 0");
+    if (m_sourceId > 0)
+        querystring.append(QString(" AND channel.sourceid = %1").arg(m_sourceId));
     querystring.append(" ORDER BY name");
 
     MSqlQuery query(MSqlQuery::InitCon());
@@ -398,14 +403,16 @@ bool ImportIconsWizard::initialLoad(const QString& name)
         m_progressDialog = nullptr;
     }
 
-    /*: %1 is the current channel position,
-     *  %2 is the total number of channels,
+    /*  %1 is the current channel name
+     *  %2 is the current channel position
+     *  %3 is the total number of channels
      */
-    QString downloadMessage = tr("Downloading %1 of %2");
+    QString downloadMessage = tr("Downloading %1 (%2 of %3)");
 
     while (!closeDialog && (m_iter != m_listEntries.end()))
     {
-        QString message = downloadMessage.arg(m_nCount+1)
+        QString message = downloadMessage.arg(m_iter->strName)
+                                         .arg(m_nCount+1)
                                          .arg(m_listEntries.size());
 
         LOG(VB_GENERAL, LOG_NOTICE, message);
@@ -814,7 +821,7 @@ bool ImportIconsWizard::submit()
         if (line[0] == QChar('#'))
             continue;
 
-        QStringList strSplit2=(line).split(":", Qt::SkipEmptyParts);
+        QStringList strSplit2=line.split(":", Qt::SkipEmptyParts);
         if (strSplit2.size() < 2)
             continue;
 
@@ -842,7 +849,7 @@ void ImportIconsWizard::customEvent(QEvent *event)
 {
     if (event->type() == DialogCompletionEvent::kEventType)
     {
-        auto *dce = (DialogCompletionEvent*)(event);
+        auto *dce = (DialogCompletionEvent*)event;
 
         QString resultid  = dce->GetId();
         int     buttonnum = dce->GetResult();
@@ -867,3 +874,5 @@ void ImportIconsWizard::Close()
 {
     MythScreenType::Close();
 }
+
+#include "moc_importicons.cpp"

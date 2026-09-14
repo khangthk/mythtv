@@ -1,9 +1,14 @@
 // -*- Mode: c++ -*-
 
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
+
 // Standard UNIX C headers
 #include <unistd.h>
 #include <fcntl.h>
-#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(_WIN32)
+#if defined(Q_OS_BSD4) || defined(Q_OS_WINDOWS)
 #include <sys/types.h>
 #else
 #include <sys/sysmacros.h>
@@ -26,7 +31,6 @@
 #include <utility>
 
 // MythTV headers
-#include "libmyth/mythterminal.h"
 #include "libmythbase/compat.h"
 #include "libmythbase/exitcodes.h"
 #include "libmythbase/mythconfig.h"
@@ -36,6 +40,7 @@
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythsystemlegacy.h"
 #include "libmythui/mythnotification.h"
+#include "libmythui/mythterminal.h"
 #include "libmythupnp/httprequest.h"    // for TestMimeType()
 
 #include "cardutil.h"
@@ -49,15 +54,15 @@
 #include "v4l2util.h"
 #include "videosource.h"
 
-#ifdef USING_DVB
+#if CONFIG_DVB
 #include "recorders/dvbtypes.h"
 #endif
 
-#ifdef USING_VBOX
+#if CONFIG_VBOX
 #include "recorders/vboxutils.h"
 #endif
 
-#ifdef USING_HDHOMERUN
+#if CONFIG_HDHOMERUN
 #include HDHOMERUN_HEADERFILE
 #endif
 
@@ -186,6 +191,11 @@ class InstanceCount : public MythUISpinBoxSetting
                 "program on a single channel."
                 ));
     };
+
+    ~InstanceCount() override
+    {
+        delete GetStorage();
+    }
 };
 
 class SchedGroup : public MythUICheckBoxSetting
@@ -205,6 +215,11 @@ class SchedGroup : public MythUICheckBoxSetting
                 "load."
                 ));
     };
+
+    ~SchedGroup() override
+    {
+        delete GetStorage();
+    }
 };
 
 QString VideoSourceDBStorage::GetWhereClause(MSqlBindings &bindings) const
@@ -268,6 +283,11 @@ class XMLTVGrabber : public MythUIComboBoxSetting
         setLabel(QObject::tr("Listings grabber"));
     };
 
+    ~XMLTVGrabber() override
+    {
+        delete GetStorage();
+    }
+
     void Load(void) override // StandardSetting
     {
         addTargetedChild("eitonly",   new EITOnly_config(m_parent, this));
@@ -283,11 +303,6 @@ class XMLTVGrabber : public MythUIComboBoxSetting
         QString d2;
         QString d3;
         SourceUtil::GetListingsLoginData(m_parent.getSourceID(), gname, d1, d2, d3);
-
-#ifdef _MSC_VER
-#pragma message( "tv_find_grabbers is not supported yet on windows." )
-        //-=>TODO:Screen doesn't show up if the call to MythSysemLegacy is executed
-#else
 
         QString loc = QString("XMLTVGrabber::Load(%1): ").arg(m_parent.getSourceName());
 
@@ -333,7 +348,6 @@ class XMLTVGrabber : public MythUIComboBoxSetting
 
         LoadXMLTVGrabbers(m_nameList, m_progList);
         MythUIComboBoxSetting::Load();
-#endif
     }
 
     void Save(void) override // StandardSetting
@@ -397,13 +411,19 @@ class CaptureCardSpinBoxSetting : public MythUISpinBoxSetting
                              min_val.count(), max_val.count(), step.count())
     {
     }
+
+    ~CaptureCardSpinBoxSetting() override
+    {
+        delete GetStorage();
+    }
     // Handles integer milliseconds (compiler converts seconds to milliseconds)
     void setValueMs (std::chrono::milliseconds newValue)
         { setValue(newValue.count()); }
     // Handle non-integer seconds
-    template<typename T, typename = std::enable_if_t<!std::is_integral<T>()>>
+    template<typename T>
     void setValueMs (std::chrono::duration<T> newSecs)
-        { setValueMs(duration_cast<std::chrono::milliseconds>(newSecs)); }
+    requires (!std::is_integral<T>())
+    { setValueMs(duration_cast<std::chrono::milliseconds>(newSecs)); }
 };
 
 class CaptureCardTextEditSetting : public MythUITextEditSetting
@@ -413,6 +433,11 @@ class CaptureCardTextEditSetting : public MythUITextEditSetting
                                const QString &setting) :
         MythUITextEditSetting(new CaptureCardDBStorage(this, parent, setting))
     {
+    }
+
+    ~CaptureCardTextEditSetting() override
+    {
+        delete GetStorage();
     }
 };
 
@@ -428,6 +453,11 @@ class ScanFrequencyStart : public MythUITextEditSetting
                                "Frequency value in Hz for DVB-T/T2/C, in kHz for DVB-S/S2. "
                                "Leave at 0 if not known. "));
     };
+
+    ~ScanFrequencyStart() override
+    {
+        delete GetStorage();
+    }
 };
 
 class DVBNetID : public MythUISpinBoxSetting
@@ -445,6 +475,11 @@ class DVBNetID : public MythUISpinBoxSetting
                                "enter it here. Leave it at -1 otherwise."));
        setValue(value);
     };
+
+    ~DVBNetID() override
+    {
+        delete GetStorage();
+    }
 };
 
 class BouquetID : public MythUISpinBoxSetting
@@ -462,6 +497,11 @@ class BouquetID : public MythUISpinBoxSetting
                                "See the MythTV Wiki https://www.mythtv.org/wiki/DVB_UK."));
        setValue(value);
     };
+
+    ~BouquetID() override
+    {
+        delete GetStorage();
+    }
 };
 
 class RegionID : public MythUISpinBoxSetting
@@ -479,6 +519,11 @@ class RegionID : public MythUISpinBoxSetting
                                "See the MythTV Wiki https://www.mythtv.org/wiki/DVB_UK."));
        setValue(value);
     };
+
+    ~RegionID() override
+    {
+        delete GetStorage();
+    }
 };
 
 class LCNOffset : public MythUISpinBoxSetting
@@ -496,6 +541,11 @@ class LCNOffset : public MythUISpinBoxSetting
                                "or if the video sources do not have DVB logical channel numbers."));
        setValue(value);
     };
+
+    ~LCNOffset() override
+    {
+        delete GetStorage();
+    }
 };
 
 FreqTableSelector::FreqTableSelector(const VideoSource &parent) :
@@ -510,6 +560,11 @@ FreqTableSelector::FreqTableSelector(const VideoSource &parent) :
     setHelpText(QObject::tr("Use default unless this source uses a "
                 "different frequency table than the system wide table "
                 "defined in the General settings."));
+}
+
+FreqTableSelector::~FreqTableSelector()
+{
+    delete GetStorage();
 }
 
 TransFreqTableSelector::TransFreqTableSelector(uint _sourceid) :
@@ -602,6 +657,11 @@ class UseEIT : public MythUICheckBoxSetting
                         "If enabled, program guide data for channels on this "
                         "source will be updated with data provided by the "
                         "channels themselves 'Over-the-Air'."));
+    }
+
+    ~UseEIT() override
+    {
+        delete GetStorage();
     }
 };
 
@@ -825,7 +885,7 @@ class VideoDevice : public CaptureCardComboBoxSetting
      *  \param absPath  Ignored. The function always uses absolute paths.
      */
     void fillSelectionsFromDir(const QDir &dir,
-                               [[maybe_unused]] bool absPath = true)
+                               [[maybe_unused]] bool absPath = true) override
     {
         fillSelectionsFromDir(dir, 0, 255, QString(), QRegularExpression(), false);
     }
@@ -934,7 +994,7 @@ class VBIDevice : public CaptureCardComboBoxSetting
      *  \param absPath  Ignored. The function always uses absolute paths.
      */
     void fillSelectionsFromDir(const QDir &dir,
-                               [[maybe_unused]] bool absPath = true)
+                               [[maybe_unused]] bool absPath = true) override
     {
         fillSelectionsFromDir(dir, QString(), QString());
     }
@@ -984,6 +1044,11 @@ class CommandPath : public MythUITextEditSetting
         setHelpText(QObject::tr("Specify the command to run, with any "
                                 "needed arguments."));
     };
+
+    ~CommandPath() override
+    {
+        delete GetStorage();
+    }
 };
 
 class FileDevice : public MythUIFileBrowserSetting
@@ -996,6 +1061,11 @@ class FileDevice : public MythUIFileBrowserSetting
     {
         setLabel(QObject::tr("File path"));
     };
+
+    ~FileDevice() override
+    {
+        delete GetStorage();
+    }
 };
 
 class AudioDevice : public CaptureCardComboBoxSetting
@@ -1006,13 +1076,13 @@ class AudioDevice : public CaptureCardComboBoxSetting
                                    "audiodevice")
     {
         setLabel(QObject::tr("Audio device"));
-#ifdef USING_OSS
+#if CONFIG_AUDIO_OSS
         QDir dev("/dev", "dsp*", QDir::Name, QDir::System);
         fillSelectionsFromDir(dev);
         dev.setPath("/dev/sound");
         fillSelectionsFromDir(dev);
 #endif
-#ifdef USING_ALSA
+#if CONFIG_AUDIO_ALSA
         addSelection("ALSA:default", "ALSA:default");
 #endif
         addSelection(QObject::tr("(None)"), "NULL");
@@ -1036,11 +1106,13 @@ class SignalTimeout : public CaptureCardSpinBoxSetting
                         "a signal when scanning for channels."));
     };
     // Handle non-integer seconds
-    template<typename T, typename = std::enable_if_t<std::is_floating_point_v<T>> >
-    SignalTimeout(const CaptureCard &parent, std::chrono::milliseconds value, std::chrono::duration<T> min_secs) :
+    template<typename T>
+    SignalTimeout(const CaptureCard &parent, std::chrono::milliseconds value, std::chrono::duration<T> min_secs)
+        requires (std::is_floating_point_v<T>) :
         SignalTimeout(parent, value, duration_cast<std::chrono::milliseconds>(min_secs)) {};
-    template<typename T, typename = std::enable_if_t<std::is_floating_point_v<T>> >
-    SignalTimeout(const CaptureCard &parent, std::chrono::duration<T> value, std::chrono::duration<T> min_secs) :
+    template<typename T>
+    SignalTimeout(const CaptureCard &parent, std::chrono::duration<T> value, std::chrono::duration<T> min_secs)
+        requires (std::is_floating_point_v<T>) :
         SignalTimeout(parent,
                       duration_cast<std::chrono::milliseconds>(value),
                       duration_cast<std::chrono::milliseconds>(min_secs)) {};
@@ -1062,11 +1134,13 @@ class ChannelTimeout : public CaptureCardSpinBoxSetting
                         "exceeded, the recording will be marked as failed."));
     };
     // Handle non-integer seconds
-    template<typename T, typename = std::enable_if_t<std::is_floating_point_v<T>> >
-    ChannelTimeout(const CaptureCard &parent, std::chrono::milliseconds value, std::chrono::duration<T> min_secs) :
+    template<typename T>
+    ChannelTimeout(const CaptureCard &parent, std::chrono::milliseconds value, std::chrono::duration<T> min_secs)
+        requires (std::is_floating_point_v<T>) :
         ChannelTimeout(parent, value, duration_cast<std::chrono::milliseconds>(min_secs)) {};
-    template<typename T, typename = std::enable_if_t<std::is_floating_point_v<T>> >
-    ChannelTimeout(const CaptureCard &parent, std::chrono::duration<T> value, std::chrono::duration<T> min_secs) :
+    template<typename T>
+    ChannelTimeout(const CaptureCard &parent, std::chrono::duration<T> value, std::chrono::duration<T> min_secs)
+        requires (std::is_floating_point_v<T>) :
         ChannelTimeout(parent, value, duration_cast<std::chrono::milliseconds>(min_secs)) {};
 };
 
@@ -1101,7 +1175,12 @@ class SkipBtAudio : public MythUICheckBoxSetting
             QObject::tr("Enable this option for budget BT878 based "
                         "DVB-T cards such as the AverTV DVB-T which "
                         "require the audio volume to be left alone."));
-   };
+    };
+
+    ~SkipBtAudio() override
+    {
+        delete GetStorage();
+    }
 };
 
 class DVBCardNum : public CaptureCardComboBoxSetting
@@ -1131,8 +1210,15 @@ class DVBCardNum : public CaptureCardComboBoxSetting
 
         // Add current if needed
         if (!current.isEmpty() &&
-            (std::find(sdevs.begin(), sdevs.end(), current) == sdevs.end()))
+#ifdef __cpp_lib_ranges_contains
+            !std::ranges::contains(sdevs, current)
+#else
+            (std::ranges::find(sdevs, current) == sdevs.end())
+#endif
+            )
         {
+            // QList doesn't always play well with std::ranges
+            // NOLINTNEXTLINE(modernize-use-ranges)
             std::stable_sort(sdevs.begin(), sdevs.end());
         }
 
@@ -1142,7 +1228,7 @@ class DVBCardNum : public CaptureCardComboBoxSetting
         QString sel = current;
         for (const QString& dev : std::as_const(sdevs))
         {
-            in_use[dev] = std::find(db.begin(), db.end(), dev) != db.end();
+            in_use[dev] = db.contains(dev);
             if (sel.isEmpty() && !in_use[dev])
                 sel = dev;
         }
@@ -1213,6 +1299,11 @@ class DVBNoSeqStart : public MythUICheckBoxSetting
             QObject::tr("If enabled, drop packets from the start of a DVB "
                         "recording until a sequence start header is seen."));
     };
+
+    ~DVBNoSeqStart() override
+    {
+        delete GetStorage();
+    }
 };
 
 class DVBOnDemand : public MythUICheckBoxSetting
@@ -1228,6 +1319,11 @@ class DVBOnDemand : public MythUICheckBoxSetting
             QObject::tr("If enabled, only open the DVB card when required, "
                         "leaving it free for other programs at other times."));
     };
+
+    ~DVBOnDemand() override
+    {
+        delete GetStorage();
+    }
 };
 
 class DVBEITScan : public MythUICheckBoxSetting
@@ -1244,6 +1340,11 @@ class DVBEITScan : public MythUICheckBoxSetting
                         "program data (EIT). When this option is enabled "
                         "the DVB card is constantly in use."));
     };
+
+    ~DVBEITScan() override
+    {
+        delete GetStorage();
+    }
 };
 
 class DVBTuningDelay : public CaptureCardSpinBoxSetting
@@ -1269,7 +1370,7 @@ class FirewireGUID : public CaptureCardComboBoxSetting
         CaptureCardComboBoxSetting(parent, false, "videodevice")
     {
         setLabel(QObject::tr("GUID"));
-#ifdef USING_FIREWIRE
+#if CONFIG_FIREWIRE
         std::vector<AVCInfo> list = FirewireDevice::GetSTBList();
         for (auto & i : list)
         {
@@ -1277,7 +1378,7 @@ class FirewireGUID : public CaptureCardComboBoxSetting
             m_guidToAvcInfo[guid] = i;
             addSelection(guid);
         }
-#endif // USING_FIREWIRE
+#endif // CONFIG_FIREWIRE
     }
 
     AVCInfo GetAVCInfo(const QString &guid) const
@@ -1319,25 +1420,25 @@ FirewireModel::FirewireModel(const CaptureCard  &parent,
 
 void FirewireModel::SetGUID([[maybe_unused]] const QString &_guid)
 {
-#ifdef USING_FIREWIRE
+#if CONFIG_FIREWIRE
     AVCInfo info = m_guid->GetAVCInfo(_guid);
     QString model = FirewireDevice::GetModelName(info.m_vendorid, info.m_modelid);
     setValue(std::max(getValueIndex(model), 0));
-#endif // USING_FIREWIRE
+#endif // CONFIG_FIREWIRE
 }
 
 void FirewireDesc::SetGUID([[maybe_unused]] const QString &_guid)
 {
     setLabel(tr("Description"));
 
-#ifdef USING_FIREWIRE
+#if CONFIG_FIREWIRE
     QString name = m_guid->GetAVCInfo(_guid).m_product_name;
     name.replace("Scientific-Atlanta", "SA");
     name.replace(", Inc.", "");
     name.replace("Explorer(R)", "");
     name = name.simplified();
     setValue((name.isEmpty()) ? "" : name);
-#endif // USING_FIREWIRE
+#endif // CONFIG_FIREWIRE
 }
 
 class FirewireConnection : public MythUIComboBoxSetting
@@ -1350,6 +1451,11 @@ class FirewireConnection : public MythUIComboBoxSetting
         setLabel(QObject::tr("Connection Type"));
         addSelection(QObject::tr("Point to Point"),"0");
         addSelection(QObject::tr("Broadcast"),"1");
+    }
+
+    ~FirewireConnection() override
+    {
+        delete GetStorage();
     }
 };
 
@@ -1366,9 +1472,14 @@ class FirewireSpeed : public MythUIComboBoxSetting
         addSelection(QObject::tr("400Mbps"),"2");
         addSelection(QObject::tr("800Mbps"),"3");
     }
+
+    ~FirewireSpeed() override
+    {
+        delete GetStorage();
+    }
 };
 
-#ifdef USING_FIREWIRE
+#if CONFIG_FIREWIRE
 static void FirewireConfigurationGroup(CaptureCard& parent, CardType& cardtype)
 {
     auto *dev(new FirewireGUID(parent));
@@ -1380,10 +1491,10 @@ static void FirewireConfigurationGroup(CaptureCard& parent, CardType& cardtype)
     cardtype.addTargetedChild("FIREWIRE", desc);
     cardtype.addTargetedChild("FIREWIRE", model);
 
-#ifdef USING_LINUX_FIREWIRE
+#if CONFIG_FIREWIRE_LINUX
     cardtype.addTargetedChild("FIREWIRE", new FirewireConnection(parent));
     cardtype.addTargetedChild("FIREWIRE", new FirewireSpeed(parent));
-#endif // USING_LINUX_FIREWIRE
+#endif // CONFIG_FIREWIRE_LINUX
 
     cardtype.addTargetedChild("FIREWIRE", new SignalTimeout(parent, 2s, 1s));
     cardtype.addTargetedChild("FIREWIRE", new ChannelTimeout(parent, 9s, 1.75s));
@@ -1397,7 +1508,7 @@ static void FirewireConfigurationGroup(CaptureCard& parent, CardType& cardtype)
 }
 #endif
 
-#ifdef USING_HDHOMERUN
+#if CONFIG_HDHOMERUN
 
 // -----------------------
 // HDHomeRun Configuration
@@ -1411,6 +1522,11 @@ HDHomeRunDeviceID::HDHomeRunDeviceID(const CaptureCard &parent,
 {
     setVisible(false);
 };
+
+HDHomeRunDeviceID::~HDHomeRunDeviceID()
+{
+    delete GetStorage();
+}
 
 void HDHomeRunDeviceID::Load(void)
 {
@@ -1438,6 +1554,11 @@ class HDHomeRunEITScan : public MythUICheckBoxSetting
                         "program data (EIT). When this option is enabled "
                         "the HDHomeRun is constantly in use."));
     };
+
+    ~HDHomeRunEITScan() override
+    {
+        delete GetStorage();
+    }
 };
 
 
@@ -1636,6 +1757,11 @@ VBoxDeviceID::VBoxDeviceID(const CaptureCard &parent) :
     setReadOnly(true);
 }
 
+VBoxDeviceID::~VBoxDeviceID()
+{
+    delete GetStorage();
+}
+
 void VBoxDeviceID::SetIP(const QString &ip)
 {
     m_ip = ip;
@@ -1697,6 +1823,7 @@ void VBoxDeviceIDList::fillSelections(const QString &cur)
 
     const QString& current = cur;
 
+    devs.reserve(m_deviceList->size());
     for (auto it = m_deviceList->begin(); it != m_deviceList->end(); ++it)
     {
         devs.push_back(it.key());
@@ -1818,9 +1945,10 @@ class ASIDevice : public CaptureCardComboBoxSetting
         QStringList sdevs = CardUtil::ProbeVideoDevices("ASI");
 
         // Add current if needed
-        if (!current.isEmpty() &&
-            (std::find(sdevs.begin(), sdevs.end(), current) == sdevs.end()))
+        if (!current.isEmpty() && !sdevs.contains(current))
         {
+            // QList doesn't always play well with std::ranges
+            // NOLINTNEXTLINE(modernize-use-ranges)
             std::stable_sort(sdevs.begin(), sdevs.end());
         }
 
@@ -1834,7 +1962,7 @@ class ASIDevice : public CaptureCardComboBoxSetting
         QString sel = current;
         for (const QString& dev : std::as_const(sdevs))
         {
-            in_use[dev] = std::find(db.begin(), db.end(), dev) != db.end();
+            in_use[dev] = db.contains(dev);
             if (sel.isEmpty() && !in_use[dev])
                 sel = dev;
         }
@@ -1897,7 +2025,7 @@ ASIConfigurationGroup::ASIConfigurationGroup(CaptureCard& a_parent,
 
 void ASIConfigurationGroup::probeCard([[maybe_unused]] const QString &device)
 {
-#ifdef USING_ASI
+#if CONFIG_ASI
     if (device.isEmpty())
     {
         m_cardInfo->setValue("");
@@ -2066,7 +2194,7 @@ void VBoxConfigurationGroup::FillDeviceList(void)
 // -----------------------
 // Ceton Configuration
 // -----------------------
-#ifdef USING_CETON
+#if CONFIG_CETON
 CetonSetting::CetonSetting(QString label, const QString& helptext)
 {
     setLabel(std::move(label));
@@ -2092,6 +2220,11 @@ CetonDeviceID::CetonDeviceID(const CaptureCard &parent) :
 {
     setLabel(tr("Device ID"));
     setHelpText(tr("Device ID of Ceton device"));
+}
+
+CetonDeviceID::~CetonDeviceID()
+{
+    delete GetStorage();
 }
 
 void CetonDeviceID::SetIP(const QString &ip)
@@ -2173,7 +2306,12 @@ class SchedGroupFalse : public MythUICheckBoxSetting
     {
         setValue(false);
         setVisible(false);
-   };
+    };
+
+    ~SchedGroupFalse() override
+    {
+        delete GetStorage();
+    }
 };
 
 V4LConfigurationGroup::V4LConfigurationGroup(CaptureCard& parent,
@@ -2329,7 +2467,7 @@ void DemoConfigurationGroup::probeCard(const QString &device)
     m_size->setValue(cs);
 }
 
-#if !defined( USING_MINGW ) && !defined( _MSC_VER )
+#ifndef Q_OS_WINDOWS
 ExternalConfigurationGroup::ExternalConfigurationGroup(CaptureCard &a_parent,
                                                        CardType &a_cardtype) :
     m_parent(a_parent),
@@ -2382,7 +2520,7 @@ void ExternalConfigurationGroup::probeApp(const QString & path)
     m_info->setValue(ci);
     m_info->setHelpText(ci);
 }
-#endif // !defined( USING_MINGW ) && !defined( _MSC_VER )
+#endif // !defined( Q_OS_WINDOWS )
 
 HDPVRConfigurationGroup::HDPVRConfigurationGroup(CaptureCard &a_parent,
                                                  CardType &a_cardtype) :
@@ -2462,7 +2600,7 @@ V4L2encGroup::V4L2encGroup(CaptureCard &parent, CardType& cardtype) :
 
 void V4L2encGroup::probeCard([[maybe_unused]] const QString &device_name)
 {
-#ifdef USING_V4L2
+#if CONFIG_V4L2
     QString    card_name = tr("Failed to open");
     QString    card_info = card_name;
     V4L2util   v4l2(device_name);
@@ -2511,7 +2649,7 @@ void V4L2encGroup::probeCard([[maybe_unused]] const QString &device_name)
         m_device->addTargetedChild(m_driverName,
                                    new ChannelTimeout(m_parent, 15s, 2s));
     }
-#endif // USING_V4L2
+#endif // CONFIG_V4L2
 }
 
 CaptureCardGroup::CaptureCardGroup(CaptureCard &parent)
@@ -2521,44 +2659,44 @@ CaptureCardGroup::CaptureCardGroup(CaptureCard &parent)
     auto* cardtype = new CardType(parent);
     parent.addChild(cardtype);
 
-#ifdef USING_DVB
+#if CONFIG_DVB
     cardtype->addTargetedChild("DVB",
                                new DVBConfigurationGroup(parent, *cardtype));
-#endif // USING_DVB
+#endif // CONFIG_DVB
 
-#ifdef USING_V4L2
+#if CONFIG_V4L2
     cardtype->addTargetedChild("HDPVR",
                                new HDPVRConfigurationGroup(parent, *cardtype));
-#endif // USING_V4L2
+#endif // CONFIG_V4L2
 
-#ifdef USING_HDHOMERUN
+#if CONFIG_HDHOMERUN
     cardtype->addTargetedChild("HDHOMERUN",
                                new HDHomeRunConfigurationGroup(parent, *cardtype));
-#endif // USING_HDHOMERUN
+#endif // CONFIG_HDHOMERUN
 
-#ifdef USING_VBOX
+#if CONFIG_VBOX
     cardtype->addTargetedChild("VBOX",
                                new VBoxConfigurationGroup(parent, *cardtype));
-#endif // USING_VBOX
+#endif // CONFIG_VBOX
 
-#ifdef USING_SATIP
+#if CONFIG_SATIP
     cardtype->addTargetedChild("SATIP",
                                new SatIPConfigurationGroup(parent, *cardtype));
-#endif // USING_SATIP
+#endif // CONFIG_SATIP
 
-#ifdef USING_FIREWIRE
+#if CONFIG_FIREWIRE
     FirewireConfigurationGroup(parent, *cardtype);
-#endif // USING_FIREWIRE
+#endif // CONFIG_FIREWIRE
 
-#ifdef USING_CETON
+#if CONFIG_CETON
     CetonSetting::CetonConfigurationGroup(parent, *cardtype);
-#endif // USING_CETON
+#endif // CONFIG_CETON
 
-#ifdef USING_IPTV
+#if CONFIG_IPTV
     IPTVConfigurationGroup(parent, *cardtype);
-#endif // USING_IPTV
+#endif // CONFIG_IPTV
 
-#ifdef USING_V4L2
+#if CONFIG_V4L2
     cardtype->addTargetedChild("V4L2ENC", new V4L2encGroup(parent, *cardtype));
     cardtype->addTargetedChild("V4L",
                                new V4LConfigurationGroup(parent, *cardtype, "V4L"));
@@ -2568,19 +2706,19 @@ CaptureCardGroup::CaptureCardGroup(CaptureCard &parent)
                                new V4LConfigurationGroup(parent, *cardtype, "GO7007"));
     cardtype->addTargetedChild("MPEG",
                                new MPEGConfigurationGroup(parent, *cardtype));
-#endif // USING_V4L2
+#endif // CONFIG_V4L2
 
-#ifdef USING_ASI
+#if CONFIG_ASI
     cardtype->addTargetedChild("ASI",
                                new ASIConfigurationGroup(parent, *cardtype));
-#endif // USING_ASI
+#endif // CONFIG_ASI
 
     // for testing without any actual tuner hardware:
     cardtype->addTargetedChild("IMPORT",
                                new ImportConfigurationGroup(parent, *cardtype));
     cardtype->addTargetedChild("DEMO",
                                new DemoConfigurationGroup(parent, *cardtype));
-#if !defined( USING_MINGW ) && !defined( _MSC_VER )
+#ifndef Q_OS_WINDOWS
     cardtype->addTargetedChild("EXTERNAL",
                                new ExternalConfigurationGroup(parent,
                                                               *cardtype));
@@ -2719,48 +2857,48 @@ CardType::CardType(const CaptureCard &parent) :
 
 void CardType::fillSelections(MythUIComboBoxSetting* setting)
 {
-#ifdef USING_DVB
+#if CONFIG_DVB
     setting->addSelection(
         QObject::tr("DVB-T/S/C, ATSC or ISDB-T tuner card"), "DVB");
-#endif // USING_DVB
+#endif // CONFIG_DVB
 
-#ifdef USING_V4L2
+#if CONFIG_V4L2
     setting->addSelection(
         QObject::tr("V4L2 encoder"), "V4L2ENC");
     setting->addSelection(
         QObject::tr("HD-PVR H.264 encoder"), "HDPVR");
-#endif // USING_V4L2
+#endif // CONFIG_V4L2
 
-#ifdef USING_HDHOMERUN
+#if CONFIG_HDHOMERUN
     setting->addSelection(
         QObject::tr("HDHomeRun networked tuner"), "HDHOMERUN");
-#endif // USING_HDHOMERUN
+#endif // CONFIG_HDHOMERUN
 
-#ifdef USING_SATIP
+#if CONFIG_SATIP
     setting->addSelection(
         QObject::tr("Sat>IP networked tuner"), "SATIP");
-#endif // USING_SATIP
+#endif // CONFIG_SATIP
 
-#ifdef USING_VBOX
+#if CONFIG_VBOX
     setting->addSelection(
         QObject::tr("V@Box TV Gateway networked tuner"), "VBOX");
-#endif // USING_VBOX
+#endif // CONFIG_VBOX
 
-#ifdef USING_FIREWIRE
+#if CONFIG_FIREWIRE
     setting->addSelection(
         QObject::tr("FireWire cable box"), "FIREWIRE");
-#endif // USING_FIREWIRE
+#endif // CONFIG_FIREWIRE
 
-#ifdef USING_CETON
+#if CONFIG_CETON
     setting->addSelection(
         QObject::tr("Ceton Cablecard tuner"), "CETON");
-#endif // USING_CETON
+#endif // CONFIG_CETON
 
-#ifdef USING_IPTV
+#if CONFIG_IPTV
     setting->addSelection(QObject::tr("IPTV recorder"), "FREEBOX");
-#endif // USING_IPTV
+#endif // CONFIG_IPTV
 
-#ifdef USING_V4L2
+#if CONFIG_V4L2
     setting->addSelection(
         QObject::tr("Analog to MPEG-2 encoder card (PVR-150/250/350, etc)"), "MPEG");
     setting->addSelection(
@@ -2770,18 +2908,30 @@ void CardType::fillSelections(MythUIComboBoxSetting* setting)
         "GO7007");
     setting->addSelection(
         QObject::tr("Analog capture card"), "V4L");
-#endif // USING_V4L2
+#endif // CONFIG_V4L2
 
-#ifdef USING_ASI
+#if CONFIG_ASI
     setting->addSelection(QObject::tr("DVEO ASI recorder"), "ASI");
 #endif
 
     setting->addSelection(QObject::tr("Import test recorder"), "IMPORT");
     setting->addSelection(QObject::tr("Demo test recorder"),   "DEMO");
-#if !defined( USING_MINGW ) && !defined( _MSC_VER )
+#ifndef Q_OS_WINDOWS
     setting->addSelection(QObject::tr("External (black box) recorder"),
                           "EXTERNAL");
 #endif
+}
+
+CaptureCard::Hostname::Hostname(const CaptureCard &parent) :
+    StandardSetting(new CaptureCardDBStorage(this, parent, "hostname"))
+{
+    setVisible(false);
+    setValue(gCoreContext->GetHostName());
+}
+
+CaptureCard::Hostname::~Hostname()
+{
+    delete GetStorage();
 }
 
 class InputName : public MythUIComboBoxSetting
@@ -2792,6 +2942,11 @@ class InputName : public MythUIComboBoxSetting
     {
         setLabel(QObject::tr("Input name"));
     };
+
+    ~InputName() override
+    {
+        delete GetStorage();
+    }
 
     void Load(void) override // StandardSetting
     {
@@ -2846,6 +3001,11 @@ class InputDisplayName : public MythUITextEditSetting
                         "characters are unique for each input or use a "
                         "slash ('/') to designate the unique portion."));
     };
+
+    ~InputDisplayName() override
+    {
+        delete GetStorage();
+    }
     void Load(void) override {
         MythUITextEditSetting::Load();
         if (getValue().isEmpty())
@@ -2861,6 +3021,11 @@ class CardInputComboBoxSetting : public MythUIComboBoxSetting
     CardInputComboBoxSetting(const CardInput &parent, const QString &setting) :
         MythUIComboBoxSetting(new CardInputDBStorage(this, parent, setting))
     {
+    }
+
+    ~CardInputComboBoxSetting() override
+    {
+        delete GetStorage();
     }
 };
 
@@ -2992,7 +3157,7 @@ void InputGroup::Load(void)
     for (size_t i = 0; i < names.size(); i++)
     {
         bool sel = (m_groupId == grpid[i]);
-        index = (sel) ? i : index;
+        index = sel ? i : index;
 
 #if 0
         LOG(VB_GENERAL, LOG_DEBUG, QString("grpid %1, name '%2', i %3, s %4")
@@ -3045,6 +3210,11 @@ class ExternalChannelCommand : public MythUITextEditSetting
                     "tuner device such as a cable box. The first argument "
                     "will be the channel number."));
     };
+
+    ~ExternalChannelCommand() override
+    {
+        delete GetStorage();
+    }
 };
 
 class PresetTuner : public MythUITextEditSetting
@@ -3060,6 +3230,11 @@ class PresetTuner : public MythUITextEditSetting
                     "If so, you will need to specify the preset channel for "
                     "the signal (normally 3 or 4)."));
     };
+
+    ~PresetTuner() override
+    {
+        delete GetStorage();
+    }
 };
 
 void StartingChannel::SetSourceID(const QString &sourceid)
@@ -3117,6 +3292,11 @@ class InputPriority : public MythUISpinBoxSetting
                     "at a later time so that it can record on an input with "
                     "a higher value."));
     };
+
+    ~InputPriority() override
+    {
+        delete GetStorage();
+    }
 };
 
 class ScheduleOrder : public MythUISpinBoxSetting
@@ -3134,6 +3314,11 @@ class ScheduleOrder : public MythUISpinBoxSetting
                                 "Setting this value to zero will make the "
                                 "input unavailable to the scheduler."));
     };
+
+    ~ScheduleOrder() override
+    {
+        delete GetStorage();
+    }
 };
 
 class LiveTVOrder : public MythUISpinBoxSetting
@@ -3153,6 +3338,11 @@ class LiveTVOrder : public MythUISpinBoxSetting
                                 "Setting this value to zero will make the "
                                 "input unavailable to live TV."));
     };
+
+    ~LiveTVOrder() override
+    {
+        delete GetStorage();
+    }
 };
 
 class DishNetEIT : public MythUICheckBoxSetting
@@ -3170,6 +3360,11 @@ class DishNetEIT : public MythUICheckBoxSetting
                 "you may wish to enable this feature. For best results, "
                 "enable general EIT collection as well."));
     };
+
+    ~DishNetEIT() override
+    {
+        delete GetStorage();
+    }
 };
 
 CardInput::CardInput(const QString & cardtype, const QString & device,
@@ -3368,7 +3563,7 @@ void CardInput::channelScanner(void)
     uint crdid = m_id->getValue().toUInt();
     QString in = m_inputName->getValue();
 
-#ifdef USING_BACKEND
+#if CONFIG_BACKEND
     uint num_channels_before = SourceUtil::GetChannelCount(srcid);
 
     Save(); // save info for scanner.
@@ -3727,7 +3922,7 @@ void CardInputEditor::Load(void)
     GroupSetting::Load();
 }
 
-#ifdef USING_DVB
+#if CONFIG_DVB
 static QString remove_chaff(const QString &name)
 {
     // Trim off some of the chaff.
@@ -3768,7 +3963,7 @@ static QString remove_chaff(const QString &name)
 
     return short_name;
 }
-#endif // USING_DVB
+#endif // CONFIG_DVB
 
 void DVBConfigurationGroup::reloadDiseqcTree(const QString &videodevice)
 {
@@ -3803,7 +3998,7 @@ void DVBConfigurationGroup::probeCard(const QString &videodevice)
         return;
     }
 
-#ifdef USING_DVB
+#if CONFIG_DVB
     QString frontend_name = CardUtil::ProbeDVBFrontendName(videodevice);
     QString subtype = CardUtil::ProbeDVBType(videodevice);
 
@@ -3812,43 +4007,43 @@ void DVBConfigurationGroup::probeCard(const QString &videodevice)
 
     switch (CardUtil::toInputType(subtype))
     {
-        case CardUtil::ERROR_OPEN:
+        case CardUtil::INPUT_TYPES::ERROR_OPEN:
             m_cardName->setValue(err_open);
             m_cardType->setValue(strerror(errno));
             break;
-        case CardUtil::ERROR_UNKNOWN:
+        case CardUtil::INPUT_TYPES::ERROR_UNKNOWN:
             m_cardName->setValue(err_other);
             m_cardType->setValue("Unknown error");
             break;
-        case CardUtil::ERROR_PROBE:
+        case CardUtil::INPUT_TYPES::ERROR_PROBE:
             m_cardName->setValue(err_other);
             m_cardType->setValue(strerror(errno));
             break;
-        case CardUtil::QPSK:
+        case CardUtil::INPUT_TYPES::QPSK:
             m_cardType->setValue("DVB-S");
             m_cardName->setValue(frontend_name);
             m_signalTimeout->setValueMs(7s);
             m_channelTimeout->setValueMs(10s);
             break;
-        case CardUtil::DVBS2:
+        case CardUtil::INPUT_TYPES::DVBS2:
             m_cardType->setValue("DVB-S2");
             m_cardName->setValue(frontend_name);
             m_signalTimeout->setValueMs(7s);
             m_channelTimeout->setValueMs(10s);
             break;
-        case CardUtil::QAM:
+        case CardUtil::INPUT_TYPES::QAM:
             m_cardType->setValue("DVB-C");
             m_cardName->setValue(frontend_name);
             m_signalTimeout->setValueMs(3s);
             m_channelTimeout->setValueMs(6s);
             break;
-        case CardUtil::DVBT2:
+        case CardUtil::INPUT_TYPES::DVBT2:
             m_cardType->setValue("DVB-T2");
             m_cardName->setValue(frontend_name);
             m_signalTimeout->setValueMs(3s);
             m_channelTimeout->setValueMs(6s);
             break;
-        case CardUtil::OFDM:
+        case CardUtil::INPUT_TYPES::OFDM:
         {
             m_cardType->setValue("DVB-T");
             m_cardName->setValue(frontend_name);
@@ -3880,7 +4075,7 @@ void DVBConfigurationGroup::probeCard(const QString &videodevice)
 #endif
         }
         break;
-        case CardUtil::ATSC:
+        case CardUtil::INPUT_TYPES::ATSC:
         {
             QString short_name = remove_chaff(frontend_name);
             m_cardType->setValue("ATSC");
@@ -4046,7 +4241,7 @@ void DVBConfigurationGroup::Save(void)
 // -----------------------
 // SAT>IP configuration
 // -----------------------
-#ifdef USING_SATIP
+#if CONFIG_SATIP
 
 class DiSEqCPosition : public MythUISpinBoxSetting
 {
@@ -4063,6 +4258,11 @@ class DiSEqCPosition : public MythUISpinBoxSetting
                                "the SatIP tune command."));
        setValue(value);
     };
+
+    ~DiSEqCPosition() override
+    {
+        delete GetStorage();
+    }
 };
 
 SatIPConfigurationGroup::SatIPConfigurationGroup
@@ -4193,6 +4393,8 @@ void SatIPDeviceIDList::fillSelections(const QString &cur)
     const QString& current = cur;
     QString sel;
 
+    names.reserve(m_deviceList->size());
+    devs.reserve(m_deviceList->size());
     SatIPDeviceList::iterator it = m_deviceList->begin();
     for(; it != m_deviceList->end(); ++it)
     {
@@ -4232,6 +4434,11 @@ SatIPDeviceID::SatIPDeviceID(const CaptureCard &parent) :
     setReadOnly(true);
 };
 
+SatIPDeviceID::~SatIPDeviceID()
+{
+    delete GetStorage();
+}
+
 void SatIPDeviceID::Load(void)
 {
     MythUITextEditSetting::Load();
@@ -4247,4 +4454,6 @@ SatIPDeviceAttribute::SatIPDeviceAttribute(const QString& label, const QString& 
     setLabel(label);
     setHelpText(helptext);
 };
-#endif // USING_SATIP
+#endif // CONFIG_SATIP
+
+#include "moc_videosource.cpp"

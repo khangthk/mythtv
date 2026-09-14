@@ -44,6 +44,8 @@ class V2Myth : public MythHTTPService
     Q_CLASSINFO( "ProfileUpdated",        "methods=GET"                 )
     Q_CLASSINFO( "ProfileText",           "methods=GET"                 )
     Q_CLASSINFO( "ManageDigestUser",      "methods=POST"                )
+    Q_CLASSINFO( "LoginUser",             "methods=POST"                )
+    Q_CLASSINFO( "GetUsers",              "methods=GET;name=StringList" )
     Q_CLASSINFO( "ManageUrlProtection",   "methods=POST"                )
     Q_CLASSINFO( "SetConnectionInfo",     "methods=POST"                )
     Q_CLASSINFO("ManageScheduler",        "methods=POST")
@@ -54,6 +56,16 @@ class V2Myth : public MythHTTPService
     V2Myth();
    ~V2Myth() override = default;
     static void RegisterCustomTypes();
+
+    enum WebOnlyStartup : std::uint8_t {
+        kWebOnlyNone = 0,
+        kWebOnlyDBSetup = 1,
+        kWebOnlyDBTimezone = 2,
+        kWebOnlyWebOnlyParm = 3,
+        kWebOnlyIPAddress = 4,
+        kWebOnlySchemaUpdate = 5
+    };
+    static inline WebOnlyStartup s_WebOnlyStartup {kWebOnlyNone};
 
   public slots:
 
@@ -119,7 +131,7 @@ class V2Myth : public MythHTTPService
                                               const QString   &Default );
     static V2SettingList* GetSettingList    ( const QString   &HostName );
 
-    static bool           PutSetting        ( const QString   &HostName,
+    bool                  PutSetting        ( const QString   &HostName,
                                               const QString   &Key,
                                               const QString   &Value   );
 
@@ -169,13 +181,18 @@ class V2Myth : public MythHTTPService
 
     static QString      ProfileText         ( void );
 
-    static V2BackendInfo* GetBackendInfo     ( void );
+    V2BackendInfo*       GetBackendInfo     ( void );
 
-    static bool         ManageDigestUser    ( const QString &Action,
+    bool         ManageDigestUser           ( const QString &Action,
                                               const QString &UserName,
                                               const QString &Password,
-                                              const QString &NewPassword,
-                                              const QString &AdminPassword );
+                                              const QString &NewPassword);
+
+    QString             LoginUser         (  const QString & UserName,
+                                             const QString & Password,
+                                             const QString & Client );
+
+    static QStringList GetUsers             ( void );
 
     static bool         ManageUrlProtection ( const QString &Services,
                                               const QString &AdminPassword );
@@ -183,7 +200,7 @@ class V2Myth : public MythHTTPService
     static bool         ManageScheduler    ( bool Enable,
                                               bool Disable );
 
-    static bool         Shutdown    ( int Retcode, bool Restart);
+    static bool         Shutdown    ( int Retcode, bool Restart, bool WebOnly);
 
     static QString      Proxy             ( const QString &Url);
 

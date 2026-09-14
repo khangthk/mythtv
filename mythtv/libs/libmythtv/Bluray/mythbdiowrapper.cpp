@@ -1,6 +1,8 @@
+#include "mythbdiowrapper.h"
+
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythlogging.h"
 #include "io/mythiowrapper.h"
-#include "Bluray/mythbdiowrapper.h"
 
 // Std
 #include <cstdio>
@@ -10,7 +12,7 @@
 #include <sys/types.h>
 
 // Bluray
-#ifdef HAVE_LIBBLURAY
+#if HAVE_LIBBLURAY
 #include <libbluray/filesystem.h>
 #else
 #include "file/filesystem.h"
@@ -27,18 +29,17 @@ static void MythBDDirClose(BD_DIR_H *Dir)
     {
         MythDirClose(static_cast<int>(reinterpret_cast<intptr_t>(Dir->internal)));
         LOG(VB_FILE, LOG_DEBUG, LOC + "Closed mythdir dir");
-        free(Dir);
+        delete Dir;
     }
 }
 
 static int MythBDDirRead(BD_DIR_H *Dir, BD_DIRENT *Entry)
 {
-    char *filename = MythDirRead(static_cast<int>(reinterpret_cast<intptr_t>(Dir->internal)));
-    if (filename)
+    std::string filename = MythDirRead(static_cast<int>(reinterpret_cast<intptr_t>(Dir->internal)));
+    if (!filename.empty())
     {
         Entry->d_name[255] = '\0';
-        strncpy(Entry->d_name, filename, 255);
-        free(filename);
+        strncpy(Entry->d_name, filename.c_str(), 255);
         return 0;
     }
 
@@ -54,7 +55,8 @@ static BD_DIR_H *MythBDDirOpen(const char* DirName)
         return sDefaultDirOpen(DirName);
     }
 
-    auto *dir = static_cast<BD_DIR_H*>(calloc(1, sizeof(BD_DIR_H)));
+    // We own this pointer. It will be deleted in MythBDDirClose.
+    auto *dir = new BD_DIR_H;
 
     LOG(VB_FILE, LOG_DEBUG, LOC + QString("Opening mythdir '%1'").arg(DirName));
     dir->close = MythBDDirClose;
@@ -63,12 +65,13 @@ static BD_DIR_H *MythBDDirOpen(const char* DirName)
     int dirID = MythDirOpen(DirName);
     if (dirID != 0)
     {
+        // NOLINTNEXTLINE(performance-no-int-to-ptr)
         dir->internal = reinterpret_cast<void*>(static_cast<intptr_t>(dirID));
         return dir;
     }
 
     LOG(VB_FILE, LOG_DEBUG, LOC + QString("Error opening dir '%1'").arg(DirName));
-    free(dir);
+    delete dir;
     return nullptr;
 }
 
@@ -79,7 +82,7 @@ static void MythBDFileClose(BD_FILE_H *File)
     {
         MythfileClose(static_cast<int>(reinterpret_cast<intptr_t>(File->internal)));
         LOG(VB_FILE, LOG_DEBUG, LOC + "Closed mythfile file");
-        free(File);
+        delete File;
     }
 }
 
@@ -115,7 +118,8 @@ static BD_FILE_H *MythBDFileOpen(const char* FileName, const char *CMode)
         return sDefaultFileOpen(FileName, CMode);
     }
 
-    auto *file = static_cast<BD_FILE_H*>(calloc(1, sizeof(BD_FILE_H)));
+    // We own this pointer. It will be deleted in MythBDFileClose.
+    auto *file = new BD_FILE_H;
 
     LOG(VB_FILE, LOG_DEBUG, LOC + QString("Opening mythfile file '%1'").arg(FileName));
     file->close = MythBDFileClose;
@@ -132,12 +136,13 @@ static BD_FILE_H *MythBDFileOpen(const char* FileName, const char *CMode)
     int fd = MythFileOpen(FileName, intMode);
     if (fd >= 0)
     {
+        // NOLINTNEXTLINE(performance-no-int-to-ptr)
         file->internal = reinterpret_cast<void*>(static_cast<intptr_t>(fd));
         return file;
     }
 
     LOG(VB_FILE, LOG_DEBUG, LOC + QString("Error opening file '%1'").arg(FileName));
-    free(file);
+    delete file;
     return nullptr;
 }
 

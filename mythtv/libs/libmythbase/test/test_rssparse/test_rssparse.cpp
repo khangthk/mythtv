@@ -42,12 +42,12 @@ void TestRSSParse::test_rfc822_data(void)
     QTest::addColumn<QDate>("expectedDate");
     QTest::addColumn<QTime>("expectedTime");
 
-    QTest::newRow("EST") << "Wed, 02 Oct 2002 08:00:00 EST"
-                         << QDate(2002,10,02) << QTime(13,0,0);
-    QTest::newRow("GMT") << "Wed, 02 Oct 2002 13:00:00 GMT"
-                         << QDate(2002,10,02) << QTime(13,0,0);
-    QTest::newRow("EST") << "Wed, 02 Oct 2002 15:00:00 +0200"
-                         << QDate(2002,10,02) << QTime(13,0,0);
+    QTest::newRow("EST1") << "Wed, 02 Oct 2002 08:00:00 EST"
+                          << QDate(2002,10,02) << QTime(13,0,0);
+    QTest::newRow("GMT")  << "Wed, 02 Oct 2002 13:00:00 GMT"
+                          << QDate(2002,10,02) << QTime(13,0,0);
+    QTest::newRow("EST2") << "Wed, 02 Oct 2002 15:00:00 +0200"
+                          << QDate(2002,10,02) << QTime(13,0,0);
 }
 
 void TestRSSParse::test_rfc822(void)
@@ -57,7 +57,12 @@ void TestRSSParse::test_rfc822(void)
     QFETCH(QTime, expectedTime);
 
     QDateTime result = Parse::RFC822TimeToQDateTime(dateString);
-    QDateTime expectedResult(expectedDate, expectedTime, Qt::OffsetFromUTC);
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
+    QDateTime expectedResult(expectedDate, expectedTime, Qt::UTC);
+#else
+    QDateTime expectedResult(expectedDate, expectedTime,
+                             QTimeZone(QTimeZone::UTC));
+#endif
     QCOMPARE(result, expectedResult);
 }
 
@@ -100,7 +105,12 @@ void TestRSSParse::test_rfc3339(void)
     QFETCH(QTime, expectedTime);
 
     QDateTime result = Parse::FromRFC3339(dateString);
-    QDateTime expectedResult(expectedDate, expectedTime, Qt::OffsetFromUTC);
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
+    QDateTime expectedResult(expectedDate, expectedTime, Qt::UTC);
+#else
+    QDateTime expectedResult(expectedDate, expectedTime,
+                             QTimeZone(QTimeZone::UTC));
+#endif
     QCOMPARE(result, expectedResult);
 }
 
@@ -110,3 +120,5 @@ void TestRSSParse::cleanupTestCase()
 }
 
 QTEST_APPLESS_MAIN(TestRSSParse)
+
+#include "moc_test_rssparse.cpp"

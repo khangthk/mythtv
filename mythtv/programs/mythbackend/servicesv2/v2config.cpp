@@ -12,7 +12,6 @@
 #include "libmythbase/mythlocale.h"
 #include "libmythbase/mythtranslation.h"
 #include "libmythbase/mythversion.h"
-#include "libmythbase/version.h"
 
 // MythBackend
 #include "v2config.h"
@@ -86,7 +85,7 @@ bool V2Config::SetDatabaseCredentials(const QString &Host, const QString &UserNa
     // We need the force parameter set to true here, otherwise if you accept the
     // default values, it does not save the file and theus does not create
     // config.xml.
-    bResult = gContext->SaveDatabaseParams(dbparms, true);
+    bResult = GetMythDB()->SaveDatabaseParams(dbparms, true);
 
     return bResult;
 }
@@ -245,3 +244,5 @@ V2SystemEventList* V2Config::GetSystemEvents(const QString &Host)
     }
     return pList;
 }
+
+#include "moc_v2config.cpp"

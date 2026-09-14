@@ -1,16 +1,18 @@
 
 #include "musicmetadata.h"
 
+#include <thread>
+#include <utility>
+
 // qt
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QDomDocument>
 #include <QScopedPointer>
-#include <utility>
 
 // mythtv
-#include "libmyth/mythcontext.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythdirs.h"
@@ -329,7 +331,9 @@ bool MusicMetadata::updateStreamList(void)
     QByteArray uncompressedData;
 
     // check if the streamlist has been updated since we last checked
-    QDateTime lastModified = GetMythDownloadManager()->GetLastModified(QString(STREAMUPDATEURL));
+    QString streamupdateurl = gCoreContext->GetSetting("ServicesRepositoryURL",
+                                   "https://services.mythtv.org") + "/music/data/?data=streams";
+    QDateTime lastModified = GetMythDownloadManager()->GetLastModified(streamupdateurl);
 
     QDateTime lastUpdate = QDateTime::fromString(gCoreContext->GetSetting("MusicStreamListModified"), Qt::ISODate);
 
@@ -344,7 +348,7 @@ bool MusicMetadata::updateStreamList(void)
     LOG(VB_GENERAL, LOG_INFO, "MusicMetadata: downloading radio streams list");
 
     // download compressed stream file
-    if (!GetMythDownloadManager()->download(QString(STREAMUPDATEURL), &compressedData, false))
+    if (!GetMythDownloadManager()->download(streamupdateurl, &compressedData, false))
     {
         LOG(VB_GENERAL, LOG_ERR, "MusicMetadata: failed to download radio stream list");
         gCoreContext->SaveSettingOnHost("MusicStreamListModified", "", nullptr);
@@ -354,24 +358,39 @@ bool MusicMetadata::updateStreamList(void)
     // uncompress the data
     uncompressedData = gzipUncompress(compressedData);
 
+    // load the xml
+    QDomDocument domDoc;
+
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     QString errorMsg;
     int errorLine = 0;
     int errorColumn = 0;
-
-    // load the xml
-    QDomDocument domDoc;
 
     if (!domDoc.setContent(uncompressedData, false, &errorMsg,
                            &errorLine, &errorColumn))
     {
         LOG(VB_GENERAL, LOG_ERR,
             "MusicMetadata: Could not read content of streams.xml" +
-                QString("\n\t\t\tError parsing %1").arg(STREAMUPDATEURL) +
+                QString("\n\t\t\tError parsing %1").arg(streamupdateurl) +
                 QString("\n\t\t\tat line: %1  column: %2 msg: %3")
                 .arg(errorLine).arg(errorColumn).arg(errorMsg));
         gCoreContext->SaveSettingOnHost("MusicStreamListModified", "", nullptr);
         return false;
     }
+#else
+    auto parseResult = domDoc.setContent(uncompressedData);
+    if (!parseResult)
+    {
+        LOG(VB_GENERAL, LOG_ERR,
+            "MusicMetadata: Could not read content of streams.xml" +
+                QString("\n\t\t\tError parsing %1").arg(streamupdateurl) +
+                QString("\n\t\t\tat line: %1  column: %2 msg: %3")
+                .arg(parseResult.errorLine).arg(parseResult.errorColumn)
+                .arg(parseResult.errorMessage));
+        gCoreContext->SaveSettingOnHost("MusicStreamListModified", "", nullptr);
+        return false;
+    }
+#endif
 
     MSqlQuery query(MSqlQuery::InitCon());
     query.prepare("DELETE FROM music_streams;");
@@ -1033,34 +1052,33 @@ QString MusicMetadata::getLocalFilename(void)
 
 void MusicMetadata::setField(const QString &field, const QString &data)
 {
-    if (field == "artist")
+    if (field == "artist") {
         m_artist = data;
-    else if (field == "compilation_artist")
+    } else if (field == "compilation_artist") {
       m_compilationArtist = data;
-    else if (field == "album")
+    } else if (field == "album") {
         m_album = data;
-    else if (field == "title")
+    } else if (field == "title") {
         m_title = data;
-    else if (field == "genre")
+    } else if (field == "genre") {
         m_genre = data;
-    else if (field == "filename")
+    } else if (field == "filename") {
         m_filename = data;
-    else if (field == "year")
+    } else if (field == "year") {
         m_year = data.toInt();
-    else if (field == "tracknum")
+    } else if (field == "tracknum") {
         m_trackNum = data.toInt();
-    else if (field == "trackcount")
+    } else if (field == "trackcount") {
         m_trackCount = data.toInt();
-    else if (field == "discnum")
+    } else if (field == "discnum") {
         m_discNum = data.toInt();
-    else if (field == "disccount")
+    } else if (field == "disccount") {
         m_discCount = data.toInt();
-    else if (field == "length")
+    } else if (field == "length") {
         m_length = std::chrono::milliseconds(data.toInt());
-    else if (field == "compilation")
+    } else if (field == "compilation") {
         m_compilation = (data.toInt() > 0);
-    else
-    {
+    } else {
         LOG(VB_GENERAL, LOG_ERR, QString("Something asked me to set data "
                                          "for a field called %1").arg(field));
     }
@@ -1069,16 +1087,15 @@ void MusicMetadata::setField(const QString &field, const QString &data)
 
 void MusicMetadata::getField(const QString &field, QString *data)
 {
-    if (field == "artist")
+    if (field == "artist") {
         *data = FormatArtist();
-    else if (field == "album")
+    } else if (field == "album") {
         *data = m_album;
-    else if (field == "title")
+    } else if (field == "title") {
         *data = FormatTitle();
-    else if (field == "genre")
+    } else if (field == "genre") {
         *data = m_genre;
-    else
-    {
+    } else {
         LOG(VB_GENERAL, LOG_ERR, QString("Something asked me to return data "
                                          "about a field called %1").arg(field));
         *data = "I Dunno";
@@ -1412,7 +1429,7 @@ void MetadataLoadingThread::run()
 {
     RunProlog();
     //if you want to simulate a big music collection load
-    //sleep(3);
+    //std::this_thread::sleep_for(3s);
     m_parent->resync();
     RunEpilog();
 }
@@ -1903,6 +1920,7 @@ AlbumArtImages::AlbumArtImages(MusicMetadata *metadata, bool loadFromDB)
 AlbumArtImages::AlbumArtImages(MusicMetadata *metadata, const AlbumArtImages &other)
     : m_parent(metadata)
 {
+    m_imageList.reserve(other.m_imageList.size());
     for (const auto &srcImage : std::as_const(other.m_imageList))
     {
         m_imageList.append(new AlbumArtImage(srcImage));
@@ -2062,7 +2080,7 @@ void AlbumArtImages::scanForImages()
     while (scanThread->isRunning())
     {
         QCoreApplication::processEvents();
-        usleep(1000);
+        std::this_thread::sleep_for(1ms);
     }
 
     strList = scanThread->getResult();
@@ -2142,6 +2160,7 @@ QStringList AlbumArtImages::getImageFilenames(void) const
 {
     QStringList paths;
 
+    paths.reserve(m_imageList.size());
     for (const auto *item : std::as_const(m_imageList))
         paths += item->m_filename;
 
@@ -2338,4 +2357,11 @@ void AlbumArtImages::dumpToDatabase(void)
                 image->m_id = query.lastInsertId().toInt();
         }
     }
+}
+
+void AlbumArtScannerThread::run()
+{
+    RunProlog();
+    gCoreContext->SendReceiveStringList(m_strList);
+    RunEpilog();
 }

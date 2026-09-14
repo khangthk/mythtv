@@ -1,18 +1,18 @@
 <span #top></span>
-<div class="content-section implementation">
+<div>
     <h1>{{ 'settings.main.title' | translate }}</h1>
-    <div class="card">
-        <div class="flex flex-row">
-            <button pButton pRipple icon="pi pi-angle-double-left" class="p-button-text p-button-primary"
-                (click)="menu.navBackward()" pTooltip="{{ 'dashboard.scrolltabsleft' | translate }}"></button>
-            <div class="col-11">
-                <p-tabMenu #menu [model]="wizardService.wizardItems" [activeItem]="activeItem"
-                    [scrollable]="false"></p-tabMenu>
-            </div>
-            <button pButton pRipple icon="pi pi-angle-double-right" class="p-button-text p-button-primary"
-                (click)="menu.navForward()" pTooltip="{{ 'dashboard.scrolltabsright' | translate }}"></button>
+    <div class="flex flex-row">
+        <div class="shrink overflow-auto">
+            <p-tabs [scrollable]="true" [selectOnFocus]="true">
+                <p-tablist>
+                    @for (tab of fullMenu; track tab.routerLink; let ix = $index) {
+                    <p-tab [routerLink]="tab.routerLink">
+                        <span [ngClass]="tabClass[ix]">{{tab.label}}</span>
+                    </p-tab>
+                    }
+                </p-tablist>
+            </p-tabs>
         </div>
-
     </div>
     <app-backend-warning></app-backend-warning>
     <router-outlet></router-outlet>

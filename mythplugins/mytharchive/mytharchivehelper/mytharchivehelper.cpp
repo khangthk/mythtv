@@ -29,14 +29,6 @@
 #include <iostream>
 #include <unistd.h>
 
-#include <QtGlobal>
-#if defined(Q_OS_DARWIN) or defined(__FreeBSD__)
-#include <sys/param.h>
-#include <sys/mount.h>
-#elif defined(__linux__)
-#include <sys/vfs.h>
-#endif
-
 // Qt headers
 #include <QApplication>
 #include <QDir>
@@ -49,11 +41,13 @@
 #include <QTextStream>
 
 // MythTV headers
-#include <mythconfig.h>
+#include <libmythbase/mythconfig.h> // IMAGE_ALIGN
+#include <libmythtv/mythavframe.h>
 #include <libmyth/mythcontext.h>
 #include <libmythbase/exitcodes.h>
+#include <libmythbase/filesysteminfo.h>
 #include <libmythbase/mythcommandlineparser.h>
-#include <libmythbase/mythcoreutil.h>
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythdate.h>
 #include <libmythbase/mythdb.h>
 #include <libmythbase/mythdirs.h>
@@ -62,8 +56,8 @@
 #include <libmythbase/mythpluginexport.h>
 #include <libmythbase/mythsystemlegacy.h>
 #include <libmythbase/mythversion.h>
-#include <libmythbase/programinfo.h>
 #include <libmythtv/mythavutil.h>
+#include <libmythtv/programinfo.h>
 
 extern "C" {
     #include <libavcodec/avcodec.h>
@@ -330,12 +324,11 @@ int NativeArchive::doNativeArchive(const QString &jobFile)
         {
             type = elem.attribute("type");
 
-            if (type.toLower() == "recording")
+            if (type.toLower() == "recording") {
                 exportRecording(elem, saveDirectory);
-            else if (type.toLower() == "video")
+            } else if (type.toLower() == "video") {
                 exportVideo(elem, saveDirectory);
-            else
-            {
+            } else {
                 LOG(VB_JOBQUEUE, LOG_ERR,
                     QString("Don't know how to archive items of type '%1'")
                         .arg(type.toLower()));
@@ -1000,6 +993,8 @@ int NativeArchive::importRecording(const QDomElement &itemNode,
     QStringList bindList;
     QDomNodeList nodes =  recordedNode.childNodes();
 
+    fieldList.reserve(nodes.count());
+    bindList.reserve(nodes.count());
     for (int x = 0; x < nodes.count(); x++)
     {
         QDomNode n2 = nodes.item(x);
@@ -1653,7 +1648,7 @@ static int grabThumbnail(const QString& inFile, const QString& thumbList, const 
                     frameFinished = true;
                 if (ret == 0 || ret == AVERROR(EAGAIN))
                     avcodec_send_packet(codecCtx, &pkt);
-                int keyFrame = frame->key_frame;
+                bool keyFrame = (frame->flags & AV_FRAME_FLAG_KEY) != 0;
 
                 while (!frameFinished || !keyFrame)
                 {
@@ -1670,7 +1665,7 @@ static int grabThumbnail(const QString& inFile, const QString& thumbList, const 
                             frameFinished = true;
                         if (ret == 0 || ret == AVERROR(EAGAIN))
                             avcodec_send_packet(codecCtx, &pkt);
-                        keyFrame = frame->key_frame;
+                        keyFrame = (frame->flags & AV_FRAME_FLAG_KEY) != 0;
                     }
                 }
 
@@ -2226,21 +2221,8 @@ static int isRemote(const QString& filename)
     if (!QFile::exists(filename))
         return 0;
 
-// TODO replace with FileSystemInfo?
-#ifdef Q_OS_DARWIN
-    struct statfs statbuf {};
-    if ((statfs(qPrintable(filename), &statbuf) == 0) &&
-        ((!strcmp(statbuf.f_fstypename, "nfs")) ||      // NFS|FTP
-            (!strcmp(statbuf.f_fstypename, "afpfs")) || // ApplShr
-            (!strcmp(statbuf.f_fstypename, "smbfs"))))  // SMB
+    if (!FileSystemInfo(QString(), filename).isLocal())
         return 2;
-#elif defined(__linux__)
-    struct statfs statbuf {};
-    if ((statfs(qPrintable(filename), &statbuf) == 0) &&
-        ((statbuf.f_type == 0x6969) ||      // NFS
-            (statbuf.f_type == 0x517B)))    // SMB
-        return 2;
-#endif
 
     return 1;
 }
@@ -2389,12 +2371,10 @@ static int main_local(int argc, char **argv)
     // Don't listen to console input
     close(0);
 
-    gContext = new MythContext(MYTH_BINARY_VERSION);
-    if (!gContext->Init(false))
+    MythContext context {MYTH_BINARY_VERSION};
+    if (!context.Init(false))
     {
         LOG(VB_GENERAL, LOG_ERR, "Failed to init MythContext, exiting.");
-        delete gContext;
-        gContext = nullptr;
         return GENERIC_EXIT_NO_MYTHCONTEXT;
     }
 
@@ -2530,22 +2510,21 @@ static int main_local(int argc, char **argv)
         }
     }
 
-    if (bGrabThumbnail)
+    if (bGrabThumbnail) {
         res = grabThumbnail(inFile, thumbList, outFile, frameCount);
-    else if (bGetDBParameters)
+    } else if (bGetDBParameters) {
         res = getDBParamters(outFile);
-    else if (bNativeArchive)
+    } else if (bNativeArchive) {
         res = doNativeArchive(outFile);
-    else if (bImportArchive)
+    } else if (bImportArchive) {
         res = doImportArchive(inFile, chanID);
-    else if (bGetFileInfo)
+    } else if (bGetFileInfo) {
         res = getFileInfo(inFile, outFile, lenMethod);
-    else if (bIsRemote)
+    } else if (bIsRemote) {
         res = isRemote(inFile);
-    else if (bDoBurn)
+    } else if (bDoBurn) {
         res = doBurnDVD(mediaType, bEraseDVDRW, bNativeFormat);
-    else if (bSup2Dast)
-    {
+    } else if (bSup2Dast) {
         QByteArray inFileBA = inFile.toLocal8Bit();
         QByteArray ifoFileBA = ifoFile.toLocal8Bit();
         res = sup2dast(inFileBA.constData(), ifoFileBA.constData(), delay);
@@ -2554,9 +2533,6 @@ static int main_local(int argc, char **argv)
     {
         cmdline.PrintHelp();
     }
-
-    delete gContext;
-    gContext = nullptr;
 
     exit(res);
 }

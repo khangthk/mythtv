@@ -9,10 +9,9 @@
 #include <QUrl>
 
 // MythTV
-#include <libmyth/mythcontext.h>
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythevent.h>
 #include <libmythbase/mythlogging.h>
-#include <libmythbase/remoteutil.h>
 #include <libmythui/mythdialogbox.h>
 #include <libmythui/mythmainwindow.h>
 #include <libmythui/mythprogressdialog.h>
@@ -143,15 +142,15 @@ bool GameScannerThread::buildFileList()
         SendProgressEvent(counter, (uint)m_handlers.size(),
                           GameScanner::tr("Searching for games..."));
 
+    QStringList filters;
     for (auto * handler : std::as_const(m_handlers))
     {
         QDir dir(handler->SystemRomPath());
         QStringList extensions = handler->ValidExtensions();
-        QStringList filters;
+        filters.clear();
+        filters.reserve(extensions.size());
         for (const auto & ext : std::as_const(extensions))
-        {
             filters.append(QString("*.%1").arg(ext));
-        }
 
         dir.setNameFilters(filters);
         dir.setFilter(QDir::Files | QDir::Readable | QDir::NoDotAndDotDot);
@@ -256,4 +255,4 @@ void GameScanner::finishedScan()
     emit finished(m_scanThread->getDataChanged());
 }
 
-////////////////////////////////////////////////////////////////////////
+#include "moc_gamescan.cpp"

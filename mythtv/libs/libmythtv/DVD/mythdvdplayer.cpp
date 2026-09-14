@@ -1,7 +1,9 @@
 #include <algorithm>
 
 // MythTV
-#include "libmyth/audio/audiooutput.h"
+#include "libmythtv/audio/audiooutput.h"
+#include "libmythbase/mythcorecontext.h"
+#include "libmythbase/mythlogging.h"
 
 #include "DVD/mythdvdbuffer.h"
 #include "DVD/mythdvddecoder.h"
@@ -723,3 +725,5 @@ void MythDVDPlayer::CreateDecoder(TestBufferVec & Testbuf)
     if (MythDVDDecoder::CanHandle(Testbuf, m_playerCtx->m_buffer->GetFilename()))
         SetDecoder(new MythDVDDecoder(this, *m_playerCtx->m_playingInfo, m_playerFlags));
 }
+
+#include "moc_mythdvdplayer.cpp"

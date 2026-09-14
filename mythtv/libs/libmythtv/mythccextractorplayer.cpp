@@ -27,6 +27,7 @@
 #include <QPainter>
 
 #include "libmythbase/iso639.h"
+#include "libmythbase/mythlogging.h"
 
 #include "captions/srtwriter.h"
 #include "captions/subtitlescreen.h"
@@ -59,7 +60,9 @@ MythCCExtractorPlayer::MythCCExtractorPlayer(PlayerContext *Context, PlayerFlags
     if (!comps.empty())
         comps.removeLast();
     if (destdir.isEmpty())
+    {
         m_workingDir = QDir(QFileInfo(m_fileName).path());
+    }
     else
     {
         m_workingDir = QDir(destdir);
@@ -190,7 +193,7 @@ bool MythCCExtractorPlayer::run(void)
             m_myFramesPlayed = m_totalFrames;
         }
         QString str = progress_string(flagTime, m_myFramesPlayed, m_totalFrames);
-        std::cout << qPrintable(str) << std::endl;
+        std::cout << qPrintable(str) << '\n';
     }
 
     Process608Captions(kProcessFinalize);
@@ -523,6 +526,7 @@ static QStringList to_string_list(const TeletextSubPage &subPage)
 {
     QStringList content;
     // Skip the page header (line 0)
+    content.reserve(subPage.data.size() - 1);
     for (size_t i = 1; i < subPage.data.size(); ++i)
     {
         QString str = decode_teletext(subPage.lang, subPage.data[i]).trimmed();
@@ -788,7 +792,7 @@ CC708Reader *MythCCExtractorPlayer::GetCC708Reader(uint id)
 {
     if (!m_cc708Info[id].m_reader)
     {
-        m_cc708Info[id].m_reader = new CC708Reader(this);
+        m_cc708Info[id].m_reader = new CC708Reader();
         m_cc708Info[id].m_reader->SetEnabled(true);
         LOG(VB_GENERAL, LOG_INFO, "Created CC708Reader");
     }
@@ -816,7 +820,7 @@ SubtitleReader *MythCCExtractorPlayer::GetSubReader(uint id)
 {
     if (!m_dvbsubInfo[id].m_reader)
     {
-        m_dvbsubInfo[id].m_reader = new SubtitleReader(this);
+        m_dvbsubInfo[id].m_reader = new SubtitleReader();
         m_dvbsubInfo[id].m_reader->EnableAVSubtitles(true);
         m_dvbsubInfo[id].m_reader->EnableTextSubtitles(true);
         m_dvbsubInfo[id].m_reader->EnableRawTextSubtitles(true);

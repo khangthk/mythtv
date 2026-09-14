@@ -10,11 +10,9 @@ INCLUDEPATH += . ../..
 INCLUDEPATH += ../../../../libs
 
 LIBS += ../../obj/recordingextender.o
-LIBS += ../../obj/moc_recordingextender.o
 
 # Add all the necessary libraries
 LIBS += -L../../../../libs/libmythbase -lmythbase-$$LIBVERSION
-LIBS += -L../../../../libs/libmythservicecontracts -lmythservicecontracts-$$LIBVERSION
 LIBS += -L../../../../libs/libmythui -lmythui-$$LIBVERSION
 LIBS += -L../../../../libs/libmythupnp -lmythupnp-$$LIBVERSION
 LIBS += -L../../../../libs/libmyth -lmyth-$$LIBVERSION
@@ -27,14 +25,12 @@ LIBS += -L../../../../external/FFmpeg/libavcodec -lmythavcodec
 LIBS += -L../../../../external/FFmpeg/libswscale -lmythswscale
 LIBS += -L../../../../external/FFmpeg/libavformat -lmythavformat
 LIBS += -L../../../../external/FFmpeg/libavfilter -lmythavfilter
-LIBS += -L../../../../external/FFmpeg/libpostproc -lmythpostproc
 using_mheg:LIBS += -L../../../../libs/libmythfreemheg -lmythfreemheg-$$LIBVERSION
 
 using_mheg:QMAKE_LFLAGS += -Wl,$$_RPATH_$(PWD)/../../../../libs/libmythfreemheg
 QMAKE_LFLAGS += -Wl,$$_RPATH_$(PWD)/../../../../libs/libmythmetadata
 QMAKE_LFLAGS += -Wl,$$_RPATH_$(PWD)/../../../../libs/libmythtv
 QMAKE_LFLAGS += -Wl,$$_RPATH_$(PWD)/../../../../libs/libmyth
-QMAKE_LFLAGS += -Wl,$$_RPATH_$(PWD)/../../../../libs/libmythservicecontracts
 QMAKE_LFLAGS += -Wl,$$_RPATH_$(PWD)/../../../../libs/libmythupnp
 QMAKE_LFLAGS += -Wl,$$_RPATH_$(PWD)/../../../../libs/libmythui
 QMAKE_LFLAGS += -Wl,$$_RPATH_$(PWD)/../../../../libs/libmythbase
@@ -43,7 +39,6 @@ QMAKE_LFLAGS += -Wl,$$_RPATH_$(PWD)/../../../../external/FFmpeg/libswscale
 QMAKE_LFLAGS += -Wl,$$_RPATH_$(PWD)/../../../../external/FFmpeg/libavformat
 QMAKE_LFLAGS += -Wl,$$_RPATH_$(PWD)/../../../../external/FFmpeg/libavfilter
 QMAKE_LFLAGS += -Wl,$$_RPATH_$(PWD)/../../../../external/FFmpeg/libavcodec
-QMAKE_LFLAGS += -Wl,$$_RPATH_$(PWD)/../../../../external/FFmpeg/libpostproc
 QMAKE_LFLAGS += -Wl,$$_RPATH_$(PWD)/../../../../external/FFmpeg/libswresample
 QMAKE_LFLAGS += -Wl,$$_RPATH_$(PWD)/../../
 

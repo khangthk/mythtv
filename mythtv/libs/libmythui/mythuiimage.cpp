@@ -5,7 +5,6 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
-#include <ctime>
 #include <random>
 #include <algorithm>
 
@@ -23,9 +22,6 @@
 #include "libmythbase/mthreadpool.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythmiscutil.h"
-#ifdef _MSC_VER
-#  include "libmythbase/compat.h"   // random
-#endif
 
 // Mythui
 #include "mythpainter.h"
@@ -879,6 +875,8 @@ void MythUIImage::SetAnimationFrames(const AnimationFrames& frames)
     QVector<std::chrono::milliseconds> delays;
     QVector<MythImage *> images;
 
+    delays.reserve(frames.size());
+    images.reserve(frames.size());
     for (const auto & frame : std::as_const(frames))
     {
         images.append(frame.first);
@@ -1262,10 +1260,10 @@ void MythUIImage::DrawSelf(MythPainter *p, int xoffset, int yoffset,
         QRect visibleImage = m_effects.GetExtent(currentImageArea.size());
 
         if (area.width() > visibleImage.width())
-            x = area.width() / 2 + visibleImage.topLeft().x();
+            x = (area.width() / 2) + visibleImage.topLeft().x();
 
         if (area.height() > visibleImage.height())
-            y = area.height() / 2 + visibleImage.topLeft().y();
+            y = (area.height() / 2) + visibleImage.topLeft().y();
 
         if ((x > 0 || y > 0))
             area.translate(x, y);
@@ -1663,6 +1661,7 @@ void MythUIImage::FindRandomImage(void)
         QStringList imageTypes;
 
         QList< QByteArray > exts = QImageReader::supportedImageFormats();
+        imageTypes.reserve(exts.size());
         for (const auto & ext : std::as_const(exts))
         {
             imageTypes.append(QString("*.").append(ext));
@@ -1710,3 +1709,5 @@ void MythUIImage::FindRandomImage(void)
 
     m_origFilename = m_imageProperties.m_filename = randFile;
 }
+
+#include "moc_mythuiimage.cpp"

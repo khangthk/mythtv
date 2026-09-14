@@ -13,13 +13,10 @@
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdirs.h"
 #include "libmythbase/mythlogging.h"
-#include "libmythbase/remoteutil.h"
-
-// libmyth
-#include "libmyth/mythcontext.h"
 
 // libmythtv
 #include "previewgenerator.h"
+#include "programinforemoteutil.h"
 
 #define LOC QString("PreviewQueue: ")
 
@@ -315,6 +312,7 @@ bool PreviewGeneratorQueue::event(QEvent *e)
             }
 
             QStringList list;
+            list.reserve(4 + (*it).m_tokens.size());
             list.push_back(QString::number(recordedingID));
             list.push_back(filename);
             list.push_back(msg);
@@ -791,3 +789,5 @@ void PreviewGeneratorQueue::ClearPreviewGeneratorAttempts(const QString &key)
  * \addtogroup myth_network_protocol
  * \par PREVIEW_FAILED \e recordingId \e outFileName \e msg \e datetime \e token
  */
+
+#include "moc_previewgeneratorqueue.cpp"

@@ -22,6 +22,8 @@
 //
 //////////////////////////////////////////////////////////////////////////////
 
+#include "libmythtv/mythaverror.h"
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythui/mythmainwindow.h"
@@ -29,37 +31,38 @@
 #include "avformatdecoder.h"
 #include "mythplayerui.h"
 
-#ifdef USING_VAAPI
+#if CONFIG_VAAPI
 #include "mythvaapicontext.h"
 #endif
-#ifdef USING_VDPAU
+#if CONFIG_VDPAU
 #include "mythvdpauhelper.h"
 #include "mythvdpaucontext.h"
 #endif
-#ifdef USING_NVDEC
+#if CONFIG_NVDEC
 #include "mythnvdeccontext.h"
 #endif
-#ifdef USING_VTB
+#if CONFIG_VIDEOTOOLBOX
 #include "mythvtbcontext.h"
 #endif
-#ifdef USING_MEDIACODEC
+#if CONFIG_MEDIACODEC
 #include "mythmediacodeccontext.h"
 #endif
-#ifdef USING_V4L2
+#if CONFIG_V4L2
 #include "mythv4l2m2mcontext.h"
 #endif
-#ifdef USING_MMAL
+#if CONFIG_MMAL
 #include "mythmmalcontext.h"
 #endif
-#ifdef USING_EGL
+#if CONFIG_EGL
 #include "mythdrmprimecontext.h"
 #endif
-#ifdef USING_DXVA2
+#if CONFIG_DXVA2
 #include "videoout_d3d.h"
 #endif
 #include "mythcodeccontext.h"
 
 extern "C" {
+#include "libavcodec/defs.h"
 #include "libavutil/pixdesc.h"
 }
 
@@ -77,35 +80,35 @@ MythCodecContext *MythCodecContext::CreateContext(DecoderBase *Parent,
                                                   [[maybe_unused]] MythCodecID Codec)
 {
     MythCodecContext *mctx = nullptr;
-#ifdef USING_VAAPI
+#if CONFIG_VAAPI
     if (codec_is_vaapi(Codec) || codec_is_vaapi_dec(Codec))
         mctx = new MythVAAPIContext(Parent, Codec);
 #endif
-#ifdef USING_VDPAU
+#if CONFIG_VDPAU
     if (codec_is_vdpau_hw(Codec) || codec_is_vdpau_dechw(Codec))
         mctx = new MythVDPAUContext(Parent, Codec);
 #endif
-#ifdef USING_NVDEC
+#if CONFIG_NVDEC
     if (codec_is_nvdec_dec(Codec) || codec_is_nvdec(Codec))
         mctx = new MythNVDECContext(Parent, Codec);
 #endif
-#ifdef USING_VTB
+#if CONFIG_VIDEOTOOLBOX
     if (codec_is_vtb_dec(Codec) || codec_is_vtb(Codec))
         mctx = new MythVTBContext(Parent, Codec);
 #endif
-#ifdef USING_MEDIACODEC
+#if CONFIG_MEDIACODEC
     if (codec_is_mediacodec(Codec) || codec_is_mediacodec_dec(Codec))
         mctx = new MythMediaCodecContext(Parent, Codec);
 #endif
-#ifdef USING_V4L2
+#if CONFIG_V4L2
     if (codec_is_v4l2_dec(Codec) || codec_is_v4l2(Codec))
         mctx = new MythV4L2M2MContext(Parent, Codec);
 #endif
-#ifdef USING_MMAL
+#if CONFIG_MMAL
     if (codec_is_mmal_dec(Codec) || codec_is_mmal(Codec))
         mctx = new MythMMALContext(Parent, Codec);
 #endif
-#ifdef USING_EGL
+#if CONFIG_EGL
     if (codec_is_drmprime(Codec))
         mctx = new MythDRMPRIMEContext(Parent, Codec);
 #endif
@@ -119,25 +122,25 @@ QStringList MythCodecContext::GetDecoderDescription(void)
 {
     QStringList decoders;
 
-#ifdef USING_VDPAU
+#if CONFIG_VDPAU
     MythVDPAUHelper::GetDecoderList(decoders);
 #endif
-#ifdef USING_VAAPI
+#if CONFIG_VAAPI
     MythVAAPIContext::GetDecoderList(decoders);
 #endif
-#ifdef USING_MEDIACODEC
+#if CONFIG_MEDIACODEC
     MythMediaCodecContext::GetDecoderList(decoders);
 #endif
-#ifdef USING_NVDEC
+#if CONFIG_NVDEC
     MythNVDECContext::GetDecoderList(decoders);
 #endif
-#ifdef USING_MMAL
+#if CONFIG_MMAL
     MythMMALContext::GetDecoderList(decoders);
 #endif
-#ifdef USING_V4L2
+#if CONFIG_V4L2
     MythV4L2M2MContext::GetDecoderList(decoders);
 #endif
-#ifdef USING_VTB
+#if CONFIG_VIDEOTOOLBOX
     MythVTBContext::GetDecoderList(decoders);
 #endif
     return decoders;
@@ -160,7 +163,7 @@ void MythCodecContext::GetDecoders(RenderOptions &Opts, bool Reinit /*=false*/)
     Opts.decoders->append("ffmpeg");
     (*Opts.equiv_decoders)["ffmpeg"].append("dummy");
 
-#ifdef USING_VDPAU
+#if CONFIG_VDPAU
     // Only enable VDPAU support if it is actually present
     if (MythVDPAUHelper::HaveVDPAU(Reinit))
     {
@@ -170,12 +173,12 @@ void MythCodecContext::GetDecoders(RenderOptions &Opts, bool Reinit /*=false*/)
         (*Opts.equiv_decoders)["vdpau-dec"].append("dummy");
     }
 #endif
-#ifdef USING_DXVA2
+#if CONFIG_DXVA2
     Opts.decoders->append("dxva2");
     (*Opts.equiv_decoders)["dxva2"].append("dummy");
 #endif
 
-#ifdef USING_VAAPI
+#if CONFIG_VAAPI
     // Only enable VAAPI if it is actually present and isn't actually VDPAU
     if (!MythVAAPIContext::HaveVAAPI(Reinit).isEmpty())
     {
@@ -185,7 +188,7 @@ void MythCodecContext::GetDecoders(RenderOptions &Opts, bool Reinit /*=false*/)
         (*Opts.equiv_decoders)["vaapi-dec"].append("dummy");
     }
 #endif
-#ifdef USING_NVDEC
+#if CONFIG_NVDEC
     // Only enable NVDec support if it is actually present
     if (MythNVDECContext::HaveNVDEC(Reinit))
     {
@@ -195,7 +198,7 @@ void MythCodecContext::GetDecoders(RenderOptions &Opts, bool Reinit /*=false*/)
         (*Opts.equiv_decoders)["nvdec-dec"].append("dummy");
     }
 #endif
-#ifdef USING_MEDIACODEC
+#if CONFIG_MEDIACODEC
     if (MythMediaCodecContext::HaveMediaCodec(Reinit))
     {
         Opts.decoders->append("mediacodec");
@@ -204,7 +207,7 @@ void MythCodecContext::GetDecoders(RenderOptions &Opts, bool Reinit /*=false*/)
         (*Opts.equiv_decoders)["mediacodec-dec"].append("dummy");
     }
 #endif
-#ifdef USING_VTB
+#if CONFIG_VIDEOTOOLBOX
     if (MythVTBContext::HaveVTB(Reinit))
     {
         Opts.decoders->append("vtb");
@@ -213,10 +216,10 @@ void MythCodecContext::GetDecoders(RenderOptions &Opts, bool Reinit /*=false*/)
         (*Opts.equiv_decoders)["vtb-dec"].append("dummy");
     }
 #endif
-#ifdef USING_V4L2
+#if CONFIG_V4L2
     if (MythV4L2M2MContext::HaveV4L2Codecs(Reinit))
     {
-#ifdef USING_V4L2PRIME
+#if CONFIG_V4L2PRIME
         Opts.decoders->append("v4l2");
         (*Opts.equiv_decoders)["v4l2"].append("dummy");
 #endif
@@ -224,14 +227,14 @@ void MythCodecContext::GetDecoders(RenderOptions &Opts, bool Reinit /*=false*/)
         (*Opts.equiv_decoders)["v4l2-dec"].append("dummy");
     }
 #endif
-#ifdef USING_EGL
+#if CONFIG_EGL
     if (MythDRMPRIMEContext::HavePrimeDecoders(Reinit))
     {
         Opts.decoders->append("drmprime");
         (*Opts.equiv_decoders)["drmprime"].append("dummy");
     }
 #endif
-#ifdef USING_MMAL
+#if CONFIG_MMAL
     if (MythMMALContext::HaveMMAL(Reinit))
     {
         Opts.decoders->append("mmal-dec");
@@ -254,47 +257,47 @@ MythCodecID MythCodecContext::FindDecoder(const QString &Decoder,
     MythCodecID result = kCodec_NONE;
     uint streamtype = mpeg_version((*Context)->codec_id);
 
-#ifdef USING_VDPAU
+#if CONFIG_VDPAU
     result = MythVDPAUContext::GetSupportedCodec(Context, Codec, Decoder, streamtype);
     if (codec_is_vdpau_hw(result) || codec_is_vdpau_dechw(result))
         return result;
 #endif
-#ifdef USING_VAAPI
+#if CONFIG_VAAPI
     result = MythVAAPIContext::GetSupportedCodec(Context, Codec, Decoder, streamtype);
     if (codec_is_vaapi(result) || codec_is_vaapi_dec(result))
         return result;
 #endif
-#ifdef USING_VTB
+#if CONFIG_VIDEOTOOLBOX
     result = MythVTBContext::GetSupportedCodec(Context, Codec, Decoder, streamtype);
     if (codec_is_vtb(result) || codec_is_vtb_dec(result))
         return result;
 #endif
-#ifdef USING_DXVA2
+#if CONFIG_DXVA2
     result = VideoOutputD3D::GetSupportedCodec(Context, Codec, Decoder, streamtype);
     if (codec_is_dxva2(result))
         return result;
 #endif
-#ifdef USING_MEDIACODEC
+#if CONFIG_MEDIACODEC
     result = MythMediaCodecContext::GetBestSupportedCodec(Context, Codec, Decoder, Stream, streamtype);
     if (codec_is_mediacodec(result) || codec_is_mediacodec_dec(result))
         return result;
 #endif
-#ifdef USING_NVDEC
+#if CONFIG_NVDEC
     result = MythNVDECContext::GetSupportedCodec(Context, Codec, Decoder, Stream, streamtype);
     if (codec_is_nvdec(result) || codec_is_nvdec_dec(result))
         return result;
 #endif
-#ifdef USING_V4L2
+#if CONFIG_V4L2
     result = MythV4L2M2MContext::GetSupportedCodec(Context, Codec, Decoder, Stream, streamtype);
     if (codec_is_v4l2_dec(result) || codec_is_v4l2(result))
         return result;
 #endif
-#ifdef USING_MMAL
+#if CONFIG_MMAL
     result = MythMMALContext::GetSupportedCodec(Context, Codec, Decoder, Stream, streamtype);
     if (codec_is_mmal_dec(result) || codec_is_mmal(result))
         return result;
 #endif
-#ifdef USING_EGL
+#if CONFIG_EGL
     result = MythDRMPRIMEContext::GetSupportedCodec(Context, Codec, Decoder, Stream, streamtype);
     if (codec_is_drmprime(result))
         return result;
@@ -336,7 +339,6 @@ int MythCodecContext::GetBuffer(struct AVCodecContext *Context, AVFrame *Frame, 
     }
     Frame->opaque           = videoframe;
     videoframe->m_pixFmt    = Context->pix_fmt;
-    Frame->reordered_opaque = Context->reordered_opaque;
 
     int ret = avcodec_default_get_buffer2(Context, Frame, Flags);
     if (ret < 0)
@@ -386,7 +388,6 @@ bool MythCodecContext::GetBuffer2(struct AVCodecContext *Context, MythVideoFrame
     Frame->m_directRendering = true;
     Frame->m_colorshifted = true;
 
-    AvFrame->reordered_opaque = Context->reordered_opaque;
     AvFrame->opaque = Frame;
 
     // retrieve the software format
@@ -453,12 +454,13 @@ void MythCodecContext::DeviceContextFinished(AVHWDeviceContext* Context)
     auto * interop = reinterpret_cast<MythInteropGPU*>(Context->user_opaque);
     if (interop)
     {
-        DestroyInterop(interop);
         FreeAVHWDeviceContext free = interop->GetDefaultFree();
+        void *io_user_opaque = interop->GetDefaultUserOpaque();
+        DestroyInterop(interop);
         if (free)
         {
             LOG(VB_PLAYBACK, LOG_INFO, LOC + "Calling default device context free");
-            Context->user_opaque = interop->GetDefaultUserOpaque();
+            Context->user_opaque = io_user_opaque;
             free(Context);
         }
     }
@@ -509,7 +511,7 @@ MythPlayerUI* MythCodecContext::GetPlayerUI(AVCodecContext *Context)
     MythPlayerUI* result = nullptr;
     auto* decoder = reinterpret_cast<AvFormatDecoder*>(Context->opaque);
     if (decoder)
-        result = dynamic_cast<MythPlayerUI*>(decoder->GetPlayer());
+        result = qobject_cast<MythPlayerUI*>(decoder->GetPlayer());
     return result;
 }
 
@@ -603,13 +605,13 @@ bool MythCodecContext::IsUnsupportedProfile(AVCodecContext *Context)
         case AV_CODEC_ID_H264:
             switch (Context->profile)
             {
-                case FF_PROFILE_H264_HIGH_10:
-                case FF_PROFILE_H264_HIGH_10_INTRA:
-                case FF_PROFILE_H264_HIGH_422:
-                case FF_PROFILE_H264_HIGH_422_INTRA:
-                case FF_PROFILE_H264_HIGH_444_PREDICTIVE:
-                case FF_PROFILE_H264_HIGH_444_INTRA:
-                case FF_PROFILE_H264_CAVLC_444: return true;
+                case AV_PROFILE_H264_HIGH_10:
+                case AV_PROFILE_H264_HIGH_10_INTRA:
+                case AV_PROFILE_H264_HIGH_422:
+                case AV_PROFILE_H264_HIGH_422_INTRA:
+                case AV_PROFILE_H264_HIGH_444_PREDICTIVE:
+                case AV_PROFILE_H264_HIGH_444_INTRA:
+                case AV_PROFILE_H264_CAVLC_444: return true;
                 default: break;
             }
             break;
@@ -692,34 +694,34 @@ MythCodecContext::CodecProfile MythCodecContext::FFmpegToMythProfile(AVCodecID C
         case AV_CODEC_ID_MPEG2VIDEO:
             switch (Profile)
             {
-                case FF_PROFILE_MPEG2_422:          return MPEG2422;
-                case FF_PROFILE_MPEG2_HIGH:         return MPEG2High;
-                case FF_PROFILE_MPEG2_SS:           return MPEG2Spatial;
-                case FF_PROFILE_MPEG2_SNR_SCALABLE: return MPEG2SNR;
-                case FF_PROFILE_MPEG2_SIMPLE:       return MPEG2Simple;
-                case FF_PROFILE_MPEG2_MAIN:         return MPEG2Main;
+                case AV_PROFILE_MPEG2_422:          return MPEG2422;
+                case AV_PROFILE_MPEG2_HIGH:         return MPEG2High;
+                case AV_PROFILE_MPEG2_SS:           return MPEG2Spatial;
+                case AV_PROFILE_MPEG2_SNR_SCALABLE: return MPEG2SNR;
+                case AV_PROFILE_MPEG2_SIMPLE:       return MPEG2Simple;
+                case AV_PROFILE_MPEG2_MAIN:         return MPEG2Main;
                 default: break;
             }
             break;
         case AV_CODEC_ID_MPEG4:
             switch (Profile)
             {
-                case FF_PROFILE_MPEG4_SIMPLE:             return MPEG4Simple;
-                case FF_PROFILE_MPEG4_SIMPLE_SCALABLE:    return MPEG4SimpleScaleable;
-                case FF_PROFILE_MPEG4_CORE:               return MPEG4Core;
-                case FF_PROFILE_MPEG4_MAIN:               return MPEG4Main;
-                case FF_PROFILE_MPEG4_N_BIT:              return MPEG4NBit;
-                case FF_PROFILE_MPEG4_SCALABLE_TEXTURE:   return MPEG4ScaleableTexture;
-                case FF_PROFILE_MPEG4_SIMPLE_FACE_ANIMATION:  return MPEG4SimpleFace;
-                case FF_PROFILE_MPEG4_BASIC_ANIMATED_TEXTURE: return MPEG4BasicAnimated;
-                case FF_PROFILE_MPEG4_HYBRID:             return MPEG4Hybrid;
-                case FF_PROFILE_MPEG4_ADVANCED_REAL_TIME: return MPEG4AdvancedRT;
-                case FF_PROFILE_MPEG4_CORE_SCALABLE:      return MPEG4CoreScaleable;
-                case FF_PROFILE_MPEG4_ADVANCED_CODING:    return MPEG4AdvancedCoding;
-                case FF_PROFILE_MPEG4_ADVANCED_CORE:      return MPEG4AdvancedCore;
-                case FF_PROFILE_MPEG4_ADVANCED_SCALABLE_TEXTURE: return MPEG4AdvancedScaleableTexture;
-                case FF_PROFILE_MPEG4_SIMPLE_STUDIO:      return MPEG4SimpleStudio;
-                case FF_PROFILE_MPEG4_ADVANCED_SIMPLE:    return MPEG4AdvancedSimple;
+                case AV_PROFILE_MPEG4_SIMPLE:             return MPEG4Simple;
+                case AV_PROFILE_MPEG4_SIMPLE_SCALABLE:    return MPEG4SimpleScaleable;
+                case AV_PROFILE_MPEG4_CORE:               return MPEG4Core;
+                case AV_PROFILE_MPEG4_MAIN:               return MPEG4Main;
+                case AV_PROFILE_MPEG4_N_BIT:              return MPEG4NBit;
+                case AV_PROFILE_MPEG4_SCALABLE_TEXTURE:   return MPEG4ScaleableTexture;
+                case AV_PROFILE_MPEG4_SIMPLE_FACE_ANIMATION:  return MPEG4SimpleFace;
+                case AV_PROFILE_MPEG4_BASIC_ANIMATED_TEXTURE: return MPEG4BasicAnimated;
+                case AV_PROFILE_MPEG4_HYBRID:             return MPEG4Hybrid;
+                case AV_PROFILE_MPEG4_ADVANCED_REAL_TIME: return MPEG4AdvancedRT;
+                case AV_PROFILE_MPEG4_CORE_SCALABLE:      return MPEG4CoreScaleable;
+                case AV_PROFILE_MPEG4_ADVANCED_CODING:    return MPEG4AdvancedCoding;
+                case AV_PROFILE_MPEG4_ADVANCED_CORE:      return MPEG4AdvancedCore;
+                case AV_PROFILE_MPEG4_ADVANCED_SCALABLE_TEXTURE: return MPEG4AdvancedScaleableTexture;
+                case AV_PROFILE_MPEG4_SIMPLE_STUDIO:      return MPEG4SimpleStudio;
+                case AV_PROFILE_MPEG4_ADVANCED_SIMPLE:    return MPEG4AdvancedSimple;
             }
             break;
         case AV_CODEC_ID_H263: return H263;
@@ -727,57 +729,57 @@ MythCodecContext::CodecProfile MythCodecContext::FFmpegToMythProfile(AVCodecID C
             switch (Profile)
             {
                 // Mapping of H264MainExtended, H264ConstrainedHigh?
-                case FF_PROFILE_H264_BASELINE: return H264Baseline;
-                case FF_PROFILE_H264_CONSTRAINED_BASELINE: return H264ConstrainedBaseline;
-                case FF_PROFILE_H264_MAIN:     return H264Main;
-                case FF_PROFILE_H264_EXTENDED: return H264Extended;
-                case FF_PROFILE_H264_HIGH:     return H264High;
-                case FF_PROFILE_H264_HIGH_10:  return H264High10;
-                //case FF_PROFILE_H264_HIGH_10_INTRA:
-                //case FF_PROFILE_H264_MULTIVIEW_HIGH:
-                case FF_PROFILE_H264_HIGH_422: return H264High422;
-                //case FF_PROFILE_H264_HIGH_422_INTRA:
-                //case FF_PROFILE_H264_STEREO_HIGH:
-                case FF_PROFILE_H264_HIGH_444: return H264High444;
-                //case FF_PROFILE_H264_HIGH_444_PREDICTIVE:
-                //case FF_PROFILE_H264_HIGH_444_INTRA:
-                //case FF_PROFILE_H264_CAVLC_444:
+                case AV_PROFILE_H264_BASELINE: return H264Baseline;
+                case AV_PROFILE_H264_CONSTRAINED_BASELINE: return H264ConstrainedBaseline;
+                case AV_PROFILE_H264_MAIN:     return H264Main;
+                case AV_PROFILE_H264_EXTENDED: return H264Extended;
+                case AV_PROFILE_H264_HIGH:     return H264High;
+                case AV_PROFILE_H264_HIGH_10:  return H264High10;
+                //case AV_PROFILE_H264_HIGH_10_INTRA:
+                //case AV_PROFILE_H264_MULTIVIEW_HIGH:
+                case AV_PROFILE_H264_HIGH_422: return H264High422;
+                //case AV_PROFILE_H264_HIGH_422_INTRA:
+                //case AV_PROFILE_H264_STEREO_HIGH:
+                case AV_PROFILE_H264_HIGH_444: return H264High444;
+                //case AV_PROFILE_H264_HIGH_444_PREDICTIVE:
+                //case AV_PROFILE_H264_HIGH_444_INTRA:
+                //case AV_PROFILE_H264_CAVLC_444:
             }
             break;
         case AV_CODEC_ID_HEVC:
             switch (Profile)
             {
-                case FF_PROFILE_HEVC_MAIN:    return HEVCMain;
-                case FF_PROFILE_HEVC_MAIN_10: return HEVCMain10;
-                case FF_PROFILE_HEVC_MAIN_STILL_PICTURE: return HEVCMainStill;
-                case FF_PROFILE_HEVC_REXT:    return HEVCRext;
+                case AV_PROFILE_HEVC_MAIN:    return HEVCMain;
+                case AV_PROFILE_HEVC_MAIN_10: return HEVCMain10;
+                case AV_PROFILE_HEVC_MAIN_STILL_PICTURE: return HEVCMainStill;
+                case AV_PROFILE_HEVC_REXT:    return HEVCRext;
             }
             break;
         case AV_CODEC_ID_VC1:
             switch (Profile)
             {
-                case FF_PROFILE_VC1_SIMPLE:   return VC1Simple;
-                case FF_PROFILE_VC1_MAIN:     return VC1Main;
-                case FF_PROFILE_VC1_COMPLEX:  return VC1Complex;
-                case FF_PROFILE_VC1_ADVANCED: return VC1Advanced;
+                case AV_PROFILE_VC1_SIMPLE:   return VC1Simple;
+                case AV_PROFILE_VC1_MAIN:     return VC1Main;
+                case AV_PROFILE_VC1_COMPLEX:  return VC1Complex;
+                case AV_PROFILE_VC1_ADVANCED: return VC1Advanced;
             }
             break;
         case AV_CODEC_ID_VP8: return VP8;
         case AV_CODEC_ID_VP9:
             switch (Profile)
             {
-                case FF_PROFILE_VP9_0: return VP9_0;
-                case FF_PROFILE_VP9_1: return VP9_1;
-                case FF_PROFILE_VP9_2: return VP9_2;
-                case FF_PROFILE_VP9_3: return VP9_3;
+                case AV_PROFILE_VP9_0: return VP9_0;
+                case AV_PROFILE_VP9_1: return VP9_1;
+                case AV_PROFILE_VP9_2: return VP9_2;
+                case AV_PROFILE_VP9_3: return VP9_3;
             }
             break;
         case AV_CODEC_ID_AV1:
             switch (Profile)
             {
-                case FF_PROFILE_AV1_MAIN: return AV1Main;
-                case FF_PROFILE_AV1_HIGH: return AV1High;
-                case FF_PROFILE_AV1_PROFESSIONAL: return AV1Professional;
+                case AV_PROFILE_AV1_MAIN: return AV1Main;
+                case AV_PROFILE_AV1_HIGH: return AV1High;
+                case AV_PROFILE_AV1_PROFESSIONAL: return AV1Professional;
             }
             break;
         case AV_CODEC_ID_MJPEG: return MJPEG;

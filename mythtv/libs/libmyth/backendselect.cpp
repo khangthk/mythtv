@@ -14,6 +14,8 @@
 #include "libmythui/mythuibuttonlist.h"
 #include "libmythui/mythuistatetype.h"
 #include "libmythupnp/mythxmlclient.h"
+#include "libmythupnp/ssdp.h"
+#include "libmythupnp/ssdpcache.h"
 
 BackendSelection::BackendSelection(
     MythScreenStack *parent,
@@ -34,7 +36,7 @@ BackendSelection::BackendSelection(
 
 BackendSelection::~BackendSelection()
 {
-    SSDP::RemoveListener(this);
+    SSDPCache::Instance()->removeListener(this);
 
     ItemMap::iterator it;
     for (it = m_devices.begin(); it != m_devices.end(); ++it)
@@ -120,8 +122,8 @@ void BackendSelection::Accept(MythUIButtonListItem *item)
         {
             auto config = XmlConfiguration(m_configFilename);
             if (!m_pinCode.isEmpty())
-                config.SetValue(kDefaultPIN, m_pinCode);
-            config.SetValue(kDefaultUSN, m_usn);
+                config.SetValue(XmlConfiguration::kDefaultPIN, m_pinCode);
+            config.SetValue(XmlConfiguration::kDefaultUSN, m_usn);
             config.Save();
         }
         CloseWithDecision(kAcceptConfigure);
@@ -149,7 +151,7 @@ void BackendSelection::AddItem(DeviceLocation *dev)
     m_mutex.lock();
 
     // The devices' USN should be unique. Don't add if it is already there:
-    if (m_devices.find(usn) == m_devices.end())
+    if (!m_devices.contains(usn))
     {
         dev->IncrRef();
         m_devices.insert(usn, dev);
@@ -199,7 +201,14 @@ bool BackendSelection::ConnectBackend(DeviceLocation *dev)
 
     m_usn   = dev->m_sUSN;
 
-    MythXMLClient client( dev->m_sLocation );
+    QUrl url { dev->m_sLocation };
+    if (!url.isValid())
+    {
+        LOG(VB_GENERAL, LOG_ERR, QString("ConnectBackend() invalid url: %1")
+            .arg(dev->m_sLocation));
+        return false;
+    }
+    MythXMLClient client( url );
 
     UPnPResultCode stat = client.GetConnectionInfo(m_pinCode, m_dbParams, message);
 
@@ -251,13 +260,13 @@ void BackendSelection::Cancel(void)
 
 void BackendSelection::Load(void)
 {
-    SSDP::AddListener(this);
-    SSDP::Instance()->PerformSearch(kBackendURI);
+    SSDPCache::Instance()->addListener(this);
+    SSDP::Instance()->PerformSearch(SSDP::kBackendURI);
 }
 
 void BackendSelection::Init(void)
 {
-    SSDPCacheEntries *pEntries = SSDPCache::Instance()->Find(kBackendURI);
+    SSDPCacheEntries *pEntries = SSDPCache::Instance()->Find(SSDP::kBackendURI);
     if (pEntries)
     {
         EntryMap ourMap;
@@ -332,7 +341,7 @@ void BackendSelection::customEvent(QEvent *event)
         if (message.startsWith("SSDP_ADD") &&
             URI.startsWith("urn:schemas-mythtv-org:device:MasterMediaServer:"))
         {
-            DeviceLocation *devLoc = SSDP::Find(URI, URN);
+            DeviceLocation *devLoc = SSDPCache::Instance()->Find(URI, URN);
             if (devLoc)
             {
                 AddItem(devLoc);
@@ -396,3 +405,5 @@ void BackendSelection::CloseWithDecision(Decision d)
     else
         MythScreenType::Close();
 }
+
+#include "moc_backendselect.cpp"

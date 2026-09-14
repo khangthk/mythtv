@@ -6,8 +6,8 @@
 #include <QTimer>
 
 // MythTV
-#include <libmyth/mythcontext.h>
 #include <libmythbase/lcddevice.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythui/mythmainwindow.h>
 
 // mythmusic
@@ -108,3 +108,5 @@ bool MiniPlayer::keyPressEvent(QKeyEvent *event)
 
     return handled;
 }
+
+#include "moc_miniplayer.cpp"

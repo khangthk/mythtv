@@ -3,6 +3,7 @@
  */
 
 // Qt
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QMutexLocker>
 #include <QtGlobal>
 #include <QtAlgorithms>
@@ -18,9 +19,6 @@
 // DVD
 #include "dvdread/dvd_reader.h"
 #include "dvdread/dvd_udf.h"
-extern "C" {
-#include "dvd_input.h"
-}
 
 #define LOC QString("DVDStream: ")
 
@@ -50,6 +48,13 @@ class MythDVDStream::BlockRange
     int m_title      { 0 };
 };
 
+// from internal libdvdread header dvd_input.h
+/**
+ * Defines and flags.  Make sure they fit the libdvdcss API!
+ */
+static constexpr int DVDINPUT_NOFLAGS      { 0 };
+static constexpr int DVDINPUT_READ_DECRYPT { 1 << 0 };
+static constexpr int DVDCSS_SEEK_KEY       { 1 << 1 };
 
 // Private but located in/shared with dvd_reader.c
 extern "C" int InternalUDFReadBlocksRaw(dvd_reader_t *device, uint32_t lb_number,
@@ -148,6 +153,8 @@ bool MythDVDStream::OpenFile(const QString &Filename, std::chrono::milliseconds 
             }
         }
 
+        // QList doesn't play well with std::ranges
+        // NOLINTNEXTLINE(modernize-use-ranges)
         std::sort(m_blocks.begin(), m_blocks.end());
 
         // Open the root menu so that CSS keys are generated now
@@ -185,6 +192,8 @@ int MythDVDStream::SafeRead(void *Buffer, uint Size)
     int ret = 0;
 
     // Are any blocks in the range encrypted?
+    // QList doesn't play well with std::ranges
+    // NOLINTNEXTLINE(modernize-use-ranges)
     auto it = std::lower_bound(m_blocks.begin(), m_blocks.end(), BlockRange(m_pos, block, -1));
     uint32_t b {0};
     if (it == m_blocks.end())
@@ -207,7 +216,7 @@ int MythDVDStream::SafeRead(void *Buffer, uint Size)
             return ret * DVD_VIDEO_LB_LEN;
 
         Buffer = static_cast<unsigned char*>(Buffer) +
-            static_cast<ptrdiff_t>(ret) * DVD_VIDEO_LB_LEN;
+            (static_cast<ptrdiff_t>(ret) * DVD_VIDEO_LB_LEN);
     }
 
     b = it->End() - m_pos;
@@ -234,7 +243,7 @@ int MythDVDStream::SafeRead(void *Buffer, uint Size)
     ret += ret2;
     block -= static_cast<uint>(ret2);
     Buffer = static_cast<unsigned char*>(Buffer) +
-        static_cast<ptrdiff_t>(ret2) * DVD_VIDEO_LB_LEN;
+        (static_cast<ptrdiff_t>(ret2) * DVD_VIDEO_LB_LEN);
 
     if (block > 0 && m_start == 0)
     {

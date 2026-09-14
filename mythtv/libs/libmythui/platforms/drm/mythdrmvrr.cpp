@@ -1,5 +1,7 @@
 // MythTV
 #include "mythdrmvrr.h"
+
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythlogging.h"
 
 #define LOC QString("FreeSync: ")
@@ -118,7 +120,7 @@ MythDRMVRR::~MythDRMVRR()
 
 void MythDRMVRR::SetEnabled(bool Enable)
 {
-#ifdef USING_QTPRIVATEHEADERS
+#if CONFIG_QTPRIVATEHEADERS
     if (m_device && m_vrrProp && m_device->GetCrtc() &&
         m_device->QueueAtomics({{ m_device->GetCrtc()->m_id, m_vrrProp->m_id, Enable ? 1 : 0 }}))
 #endif

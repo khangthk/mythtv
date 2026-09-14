@@ -1,10 +1,11 @@
 #ifndef MYTHDRMDEVICE_H
 #define MYTHDRMDEVICE_H
 
+#include "libmythbase/mythconfig.h"
+
 // MythTV
-#include "libmythbase/mythlogging.h"
 #include "libmythui/mythdisplay.h"
-#if defined (USING_QTPRIVATEHEADERS)
+#if CONFIG_QTPRIVATEHEADERS
 #include "libmythbase/mythcommandlineparser.h"
 #endif
 #include "libmythui/platforms/drm/mythdrmconnector.h"
@@ -43,7 +44,7 @@ class MUI_PUBLIC MythDRMDevice
     bool     CanSwitchModes () const;
     bool     SwitchMode     (int ModeIndex);
 
-#if defined (USING_QTPRIVATEHEADERS)
+#if CONFIG_QTPRIVATEHEADERS
     static inline bool    s_mythDRMVideo     = qEnvironmentVariableIsSet("MYTHTV_DRM_VIDEO");
     static inline bool    s_planarRequested  = false;
     static inline bool    s_planarSetup      = false;

@@ -85,7 +85,9 @@ void ResultItem::toMap(InfoMap &metadataMap)
         metadataMap["date"] = MythDate::toString(m_date, MythDate::kDateFull);
 
     if (m_time.toInt() == 0)
+    {
         metadataMap["length"] = QString();
+    }
     else
     {
         QTime time(0,0,0,0);
@@ -176,6 +178,7 @@ namespace
         {
                 QList<QDomNode> result;
                 QDomNodeList unf = elem.elementsByTagNameNS(ns, name);
+                result.reserve(unf.size());
                 for (int i = 0, size = unf.size(); i < size; ++i)
                         if (unf.at(i).parentNode() == elem)
                                 result << unf.at(i);
@@ -282,6 +285,7 @@ private:
          QDomNodeList entries = holder.elementsByTagNameNS(Parse::kMediaRSS,
              "content");
 
+         result.reserve(entries.size());
          for (int i = 0; i < entries.size(); ++i)
          {
              MRSSEntry entry;
@@ -434,6 +438,7 @@ private:
         QList<MRSSThumbnail> result;
         QList<QDomNode> thumbs = GetDirectChildrenNS(element, Parse::kMediaRSS,
             "thumbnail");
+        result.reserve(thumbs.size());
         for (const auto& dom : std::as_const(thumbs))
         {
             QDomElement thumbNode = dom.toElement();
@@ -443,10 +448,10 @@ private:
             int height = heightOpt ? heightOpt : 0;
             MRSSThumbnail thumb =
             {
-                thumbNode.attribute("url"),
-                width,
-                height,
-                thumbNode.attribute("time")
+                .URL=thumbNode.attribute("url"),
+                .Width=width,
+                .Height=height,
+                .Time=thumbNode.attribute("time")
              };
              result << thumb;
         }
@@ -459,6 +464,7 @@ private:
         QList<QDomNode> credits = GetDirectChildrenNS(element, Parse::kMediaRSS,
            "credit");
 
+        result.reserve(credits.size());
         for (const auto& dom : std::as_const(credits))
         {
             QDomElement creditNode = dom.toElement();
@@ -466,8 +472,8 @@ private:
                  continue;
             MRSSCredit credit =
             {
-                creditNode.attribute("role"),
-                creditNode.text()
+                .Role=creditNode.attribute("role"),
+                .Who=creditNode.text()
             };
             result << credit;
         }
@@ -485,12 +491,13 @@ private:
             QDomNodeList comments = commParents.at(0).toElement()
                 .elementsByTagNameNS(Parse::kMediaRSS,
                 "comment");
+            result.reserve(comments.size());
             for (int i = 0; i < comments.size(); ++i)
             {
                 MRSSComment comment =
                 {
-                    QObject::tr("Comments"),
-                    comments.at(i).toElement().text()
+                    .Type=QObject::tr("Comments"),
+                    .Comment=comments.at(i).toElement().text()
                 };
                 result << comment;
             }
@@ -504,12 +511,15 @@ private:
             QDomNodeList responses = respParents.at(0).toElement()
                 .elementsByTagNameNS(Parse::kMediaRSS,
                 "response");
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+            result.reserve(result.capacity() + responses.size());
+#endif
             for (int i = 0; i < responses.size(); ++i)
             {
                 MRSSComment comment =
                 {
-                    QObject::tr("Responses"),
-                    responses.at(i).toElement().text()
+                    .Type=QObject::tr("Responses"),
+                    .Comment=responses.at(i).toElement().text()
                 };
                 result << comment;
             }
@@ -523,12 +533,15 @@ private:
             QDomNodeList backlinks = backParents.at(0).toElement()
                 .elementsByTagNameNS(Parse::kMediaRSS,
                 "backLink");
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+            result.reserve(result.capacity() + backlinks.size());
+#endif
             for (int i = 0; i < backlinks.size(); ++i)
             {
                 MRSSComment comment =
                 {
-                    QObject::tr("Backlinks"),
-                    backlinks.at(i).toElement().text()
+                    .Type=QObject::tr("Backlinks"),
+                    .Comment=backlinks.at(i).toElement().text()
                 };
                 result << comment;
             }
@@ -542,13 +555,14 @@ private:
         QList<QDomNode> links = GetDirectChildrenNS(element, Parse::kMediaRSS,
             "peerLink");
 
+        result.reserve(links.size());
         for (const auto& dom : std::as_const(links))
         {
             QDomElement linkNode = dom.toElement();
             MRSSPeerLink pl =
             {
-                linkNode.attribute("type"),
-                linkNode.attribute("href")
+                .Type=linkNode.attribute("type"),
+                .Link=linkNode.attribute("href")
             };
             result << pl;
         }
@@ -566,15 +580,16 @@ private:
             QDomNodeList scenesNodes = scenesNode.at(0).toElement()
                 .elementsByTagNameNS(Parse::kMediaRSS, "scene");
 
+            result.reserve(scenesNodes.size());
             for (int i = 0; i < scenesNodes.size(); ++i)
             {
                 QDomElement sceneNode = scenesNodes.at(i).toElement();
                 MRSSScene scene =
                 {
-                    sceneNode.firstChildElement("sceneTitle").text(),
-                    sceneNode.firstChildElement("sceneDescription").text(),
-                    sceneNode.firstChildElement("sceneStartTime").text(),
-                    sceneNode.firstChildElement("sceneEndTime").text()
+                    .Title=sceneNode.firstChildElement("sceneTitle").text(),
+                    .Description=sceneNode.firstChildElement("sceneDescription").text(),
+                    .StartTime=sceneNode.firstChildElement("sceneStartTime").text(),
+                    .EndTime=sceneNode.firstChildElement("sceneEndTime").text()
                 };
                 result << scene;
             }
@@ -1067,7 +1082,11 @@ QDateTime Parse::RFC822TimeToQDateTime(const QString& t)
     if (result.isNull() || !result.isValid())
         return {};
     result = result.addSecs((hoursShift * 3600 * (-1)) + (minutesShift * 60 * (-1)));
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     result.setTimeSpec(Qt::UTC);
+#else
+    result.setTimeZone(QTimeZone(QTimeZone::UTC));
+#endif
     return result;
 }
 
@@ -1102,7 +1121,11 @@ QDateTime Parse::FromRFC3339(const QString& t)
         int minutesShift = match.capturedView(3).toInt();
         result = result.addSecs((hoursShift * 3600 * multiplier) + (minutesShift * 60 * multiplier));
     }
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     result.setTimeSpec(Qt::UTC);
+#else
+    result.setTimeZone(QTimeZone(QTimeZone::UTC));
+#endif
     return result;
 }
 
@@ -1110,16 +1133,17 @@ QList<Enclosure> Parse::GetEnclosures(const QDomElement& entry)
 {
     QList<Enclosure> result;
     QDomNodeList links = entry.elementsByTagName("enclosure");
+    result.reserve(links.size());
     for (int i = 0; i < links.size(); ++i)
     {
         QDomElement link = links.at(i).toElement();
 
         Enclosure e =
         {
-            link.attribute("url"),
-            link.attribute("type"),
-            link.attribute("length", "-1").toLongLong(),
-            link.attribute("hreflang")
+            .URL=link.attribute("url"),
+            .Type=link.attribute("type"),
+            .Length=link.attribute("length", "-1").toLongLong(),
+            .Lang=link.attribute("hreflang")
         };
 
         result << e;
@@ -1171,3 +1195,5 @@ QString Parse::UnescapeHTML(const QString& escaped)
 
     return result;
 }
+
+#include "moc_rssparse.cpp"

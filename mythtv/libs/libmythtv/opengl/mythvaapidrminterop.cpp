@@ -1,8 +1,15 @@
+#include "opengl/mythvaapidrminterop.h"
+
+#include <va/va_drm.h>
+#include <va/va_drmcommon.h>
+
 // MythTV
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythcorecontext.h"
+#include "libmythbase/mythlogging.h"
+
 #include "mythvideocolourspace.h"
 #include "fourcc.h"
-#include "opengl/mythvaapidrminterop.h"
 
 // FFmpeg
 extern "C" {
@@ -48,7 +55,7 @@ MythVAAPIInteropDRM::MythVAAPIInteropDRM(MythPlayerUI *Player, MythRenderOpenGL*
 
 MythVAAPIInteropDRM::~MythVAAPIInteropDRM()
 {
-#ifdef USING_DRM_VIDEO
+#if CONFIG_DRM_VIDEO
     delete m_drm;
 #endif
     OpenGLLocker locker(m_openglContext);
@@ -252,7 +259,7 @@ MythVAAPIInteropDRM::Acquire(MythRenderOpenGL* Context,
     }
     m_discontinuityCounter = Frame->m_frameCounter;
 
-#ifdef USING_DRM_VIDEO
+#if CONFIG_DRM_VIDEO
     if (!m_drmTriedAndFailed)
         if (HandleDRMVideo(ColourSpace, id, Frame))
             return result;
@@ -359,10 +366,10 @@ VideoFrameType MythVAAPIInteropDRM::VATypeToMythType(uint32_t Fourcc)
         case VA_FOURCC_NV12: return FMT_NV12;
         case VA_FOURCC_YUY2:
         case VA_FOURCC_UYVY: return FMT_YUY2;
-#if defined (VA_FOURCC_P010)
+#ifdef VA_FOURCC_P010
         case VA_FOURCC_P010: return FMT_P010;
 #endif
-#if defined (VA_FOURCC_P016)
+#ifdef VA_FOURCC_P016
         case VA_FOURCC_P016: return FMT_P016;
 #endif
         case VA_FOURCC_ARGB: return FMT_ARGB32;
@@ -376,7 +383,6 @@ bool MythVAAPIInteropDRM::IsSupported(MythRenderOpenGL* Context)
     return HaveDMABuf(Context);
 }
 
-#if VA_CHECK_VERSION(1, 1, 0)
 static inline void VADRMtoPRIME(VADRMPRIMESurfaceDescriptor* VaDRM, AVDRMFrameDescriptor* Prime)
 {
     Prime->nb_objects = static_cast<int>(VaDRM->num_objects);
@@ -399,7 +405,6 @@ static inline void VADRMtoPRIME(VADRMPRIMESurfaceDescriptor* VaDRM, AVDRMFrameDe
         }
     }
 }
-#endif
 
 /*! \brief Export the given VideoFrame as a DRM PRIME descriptor
  *
@@ -413,19 +418,16 @@ MythVAAPIInteropDRM::AcquirePrime([[maybe_unused]] VASurfaceID Id,
 {
     std::vector<MythVideoTextureOpenGL*> result;
 
-#if VA_CHECK_VERSION(1, 1, 0)
     if (!m_drmFrames.contains(Id))
         m_drmFrames.insert(Id, GetDRMFrameDescriptor(Id));
     if (!m_drmFrames.contains(Id))
         return result;
     result = CreateTextures(m_drmFrames[Id], Context, Frame, false);
-#endif
     return result;
 }
 
 AVDRMFrameDescriptor* MythVAAPIInteropDRM::GetDRMFrameDescriptor([[maybe_unused]] VASurfaceID Id)
 {
-#if VA_CHECK_VERSION(1, 1, 0)
     INIT_ST;
     uint32_t exportflags = VA_EXPORT_SURFACE_SEPARATE_LAYERS | VA_EXPORT_SURFACE_READ_ONLY;
     VADRMPRIMESurfaceDescriptor vadesc;
@@ -437,9 +439,6 @@ AVDRMFrameDescriptor* MythVAAPIInteropDRM::GetDRMFrameDescriptor([[maybe_unused]
     auto * drmdesc = reinterpret_cast<AVDRMFrameDescriptor*>(av_mallocz(sizeof(AVDRMFrameDescriptor)));
     VADRMtoPRIME(&vadesc, drmdesc);
     return drmdesc;
-#else
-    return nullptr;
-#endif
 }
 
 void MythVAAPIInteropDRM::CleanupDRMPRIME()
@@ -459,7 +458,6 @@ void MythVAAPIInteropDRM::CleanupDRMPRIME()
 
 bool MythVAAPIInteropDRM::TestPrimeInterop()
 {
-#if VA_CHECK_VERSION(1, 1, 0)
     static bool s_supported = false;
     static bool s_checked = false;
 
@@ -471,11 +469,16 @@ bool MythVAAPIInteropDRM::TestPrimeInterop()
 
     VASurfaceID surface = 0;
 
-    VASurfaceAttrib attribs = {};
-    attribs.flags = VA_SURFACE_ATTRIB_SETTABLE;
-    attribs.type = VASurfaceAttribPixelFormat;
-    attribs.value.type = VAGenericValueTypeInteger;
-    attribs.value.value.i = VA_FOURCC_NV12;
+    VASurfaceAttrib attribs = {
+        .type = VASurfaceAttribPixelFormat,
+        .flags = VA_SURFACE_ATTRIB_SETTABLE,
+        .value = {
+            .type = VAGenericValueTypeInteger,
+            .value = {
+                .i = VA_FOURCC_NV12,
+            }
+        }
+    };
 
     if (vaCreateSurfaces(m_vaDisplay, VA_RT_FORMAT_YUV420, 1920, 1080,
                          &surface, 1, &attribs, 1) == VA_STATUS_SUCCESS)
@@ -509,12 +512,9 @@ bool MythVAAPIInteropDRM::TestPrimeInterop()
     LOG(VB_PLAYBACK, LOG_INFO, LOC + QString("VAAPI DRM PRIME interop is %1supported")
         .arg(s_supported ? "" : "not "));
     return s_supported;
-#else
-    return false;
-#endif
 }
 
-#ifdef USING_DRM_VIDEO
+#if CONFIG_DRM_VIDEO
 bool MythVAAPIInteropDRM::HandleDRMVideo(MythVideoColourSpace* ColourSpace, VASurfaceID Id, MythVideoFrame* Frame)
 {
     if (!((m_type == DRM_DRMPRIME) && m_usePrime && Id && Frame && ColourSpace))

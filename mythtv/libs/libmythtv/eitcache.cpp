@@ -5,9 +5,9 @@
  * License: GPL v2
  */
 
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QDateTime>
 
-#include "libmyth/mythcontext.h"
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythlogging.h"
@@ -376,7 +376,7 @@ bool EITCache::IsNewEIT(uint chanid,  uint tableid,   uint version,
     }
 
     // Validity check, reject events with endtime over 7 weeks in the future
-    if (endtime > m_lastPruneTime + 50 * 86400)
+    if (endtime > m_lastPruneTime + (50 * 86400))
     {
         m_futureHitCnt++;
         return false;

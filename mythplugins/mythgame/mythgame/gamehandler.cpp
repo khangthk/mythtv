@@ -1,4 +1,5 @@
 // C++
+#include <algorithm>
 #include <utility>
 
 // Qt
@@ -7,9 +8,10 @@
 #include <QRegularExpression>
 
 // MythTV
-#include <libmyth/mythcontext.h>
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythdb.h>
 #include <libmythbase/mythdbcon.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythbase/mythsystemlegacy.h>
 #include <libmythui/mythdialogbox.h>
 #include <libmythui/mythmainwindow.h>
@@ -31,7 +33,9 @@ static void checkHandlers(void)
     // If a handlers list doesn't currently exist create one. Otherwise
     // clear the existing list so that we can regenerate a new one.
     if (!handlers)
+    {
         handlers = new QList<GameHandler*>;
+    }
     else
     {
         while (!handlers->isEmpty())
@@ -491,7 +495,7 @@ void GameHandler::UpdateGameDB(GameHandler *handler)
                 MythDB::DBError("GameHandler::UpdateGameDB - "
                                 "insert gamemetadata", query);
         }
-        else if ((game.FoundLoc() == inDatabase) && (removalprompt))
+        else if ((game.FoundLoc() == inDatabase) && removalprompt)
         {
 
             promptForRemoval( game );
@@ -538,11 +542,7 @@ void GameHandler::VerifyGameDB(GameHandler *handler)
         QString GameName = query.value(2).toString();
         if (!RomName.isEmpty())
         {
-#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
             auto iter = m_gameMap.find(RomName);
-#else
-            auto iter = m_gameMap.constFind(RomName);
-#endif
             if (iter != m_gameMap.end())
             {
                 // If it's both on disk and in the database we're done with it.
@@ -595,7 +595,7 @@ int GameHandler::buildFileCount(const QString& directory, GameHandler *handler)
                 QRegularExpression::CaseInsensitiveOption };
             QStringList result;
             QStringList& exts = handler->m_validextensions;
-            std::copy_if(exts.cbegin(), exts.cend(), std::back_inserter(result),
+            std::ranges::copy_if(std::as_const(exts), std::back_inserter(result),
                          [&r](const QString& extension){ return extension.contains(r); } );
             if (result.isEmpty())
                 continue;
@@ -657,7 +657,7 @@ void GameHandler::buildFileList(const QString& directory, GameHandler *handler,
                 QRegularExpression::CaseInsensitiveOption };
             QStringList result;
             QStringList& exts = handler->m_validextensions;
-            std::copy_if(exts.cbegin(), exts.cend(), std::back_inserter(result),
+            std::ranges::copy_if(std::as_const(exts), std::back_inserter(result),
                          [&r](const QString& extension){ return extension.contains(r); } );
             if (result.isEmpty())
                 continue;
@@ -684,7 +684,9 @@ void GameHandler::processGames(GameHandler *handler)
     {
         QDir d(handler->SystemRomPath());
         if (d.exists())
+        {
             maxcount = buildFileCount(handler->SystemRomPath(),handler);
+        }
         else
         {
             LOG(VB_GENERAL, LOG_ERR, LOC +
@@ -709,7 +711,9 @@ void GameHandler::processGames(GameHandler *handler)
                                                 "gamescanbusy");
 
         if (busyDialog->Create())
+        {
             popupStack->AddScreen(busyDialog, false);
+        }
         else
         {
             delete busyDialog;
@@ -1012,3 +1016,5 @@ void GameHandler::CreateProgress(const QString& message)
         m_progressDlg = nullptr;
     }
 }
+
+#include "moc_gamehandler.cpp"

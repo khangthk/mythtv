@@ -4,13 +4,14 @@
 
 // MythTV
 #include "libmyth/mythcontext.h"
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/compat.h"
 #include "libmythbase/exitcodes.h"
 #include "libmythbase/lcddevice.h"
+#include "libmythbase/mythappname.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythtranslation.h"
 #include "libmythbase/mythversion.h"
-#include "libmythbase/signalhandling.h"
 #include "libmythui/mythdisplay.h"
 #include "libmythui/mythmainwindow.h"
 #include "libmythui/mythuihelper.h"
@@ -74,18 +75,13 @@ int main(int argc, char **argv)
     if (cmdline.toBool("setup"))
         bShowSettings = true;
 
-#ifndef _WIN32
-    SignalHandler::Init();
-#endif
-
-    gContext = new MythContext(MYTH_BINARY_VERSION, true);
+    MythContext context {MYTH_BINARY_VERSION, true};
 
     cmdline.ApplySettingsOverride();
-    if (!gContext->Init())
+    if (!context.Init())
     {
         LOG(VB_GENERAL, LOG_ERR,
             "mythwelcome: Could not initialize MythContext. Exiting.");
-        SignalHandler::Done();
         return GENERIC_EXIT_NO_MYTHCONTEXT;
     }
 
@@ -95,7 +91,6 @@ int main(int argc, char **argv)
     {
         LOG(VB_GENERAL, LOG_ERR,
             "mythwelcome: Could not open the database. Exiting.");
-        SignalHandler::Done();
         return -1;
     }
 
@@ -141,11 +136,6 @@ int main(int argc, char **argv)
     }
 
     mw_sd_notify("STOPPING=1\nSTATUS=Exiting");
-    DestroyMythMainWindow();
-
-    delete gContext;
-
-    SignalHandler::Done();
 
     return ok ? 0 : -1;
 }

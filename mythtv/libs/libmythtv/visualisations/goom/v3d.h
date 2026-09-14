@@ -31,7 +31,10 @@ struct v2d {
 	 (v2).x = Xp + ((width)>>1); \
 	 (v2).y = -Yp + ((height)>>1); \
   } \
-  else (v2).x=(v2).y=-666; \
+  else \
+  { \
+	 (v2).x=(v2).y=-666; \
+  } \
 }
 
 /*
@@ -40,8 +43,8 @@ struct v2d {
  */
 #define Y_ROTATE_V3D(vi,vf,sina,cosa)\
 {\
- (vf).x = (vi).x * (cosa) - (vi).z * (sina);\
- (vf).z = (vi).x * (sina) + (vi).z * (cosa);\
+ (vf).x = ((vi).x * (cosa)) - ((vi).z * (sina));\
+ (vf).z = ((vi).x * (sina)) + ((vi).z * (cosa));\
  (vf).y = (vi).y;\
 }
 

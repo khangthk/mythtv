@@ -1,6 +1,8 @@
 #ifndef MYTHUISPINBOX_H_
 #define MYTHUISPINBOX_H_
 
+#include "libmythbase/mythconfig.h"
+
 #include "mythuibuttonlist.h"
 
 /** \class MythUISpinBox
@@ -32,15 +34,26 @@ class MUI_PUBLIC MythUISpinBox : public MythUIButtonList
         { return GetDataValue().toString(); }
     int GetIntValue(void) const override // MythUIButtonList
         { return GetDataValue().toInt(); }
+    bool MoveDown(MovementUnit unit = MoveItem, uint amount = 0) override; // MythUIButtonList
+    bool MoveUp(MovementUnit unit = MoveItem, uint amount = 0) override; // MythUIButtonList
     bool keyPressEvent(QKeyEvent *event) override; // MythUIButtonList
 
     template <typename T>
-        std::enable_if_t<std::chrono::__is_duration<T>::value, T>
-        GetDuration()
+    T GetDuration()
+#if HAVE_IS_DURATION_V
+    requires (std::chrono::__is_duration_v<T>)
+#else
+    requires (std::chrono::__is_duration<T>::value)
+#endif
     { return T(GetDataValue().toInt()); }
+
     template <typename T>
-        std::enable_if_t<std::chrono::__is_duration<T>::value, void>
-        SetDuration(T val)
+    void SetDuration(T val)
+#if HAVE_IS_DURATION_V
+    requires (std::chrono::__is_duration_v<T>)
+#else
+    requires (std::chrono::__is_duration<T>::value)
+#endif
     { SetValueByData(static_cast<int>(val.count())); }
 
   protected:
@@ -49,8 +62,6 @@ class MUI_PUBLIC MythUISpinBox : public MythUIButtonList
     void CopyFrom(MythUIType *base) override; // MythUIButtonList
     void CreateCopy(MythUIType *parent) override; // MythUIButtonList
 
-    bool MoveDown(MovementUnit unit = MoveItem, uint amount = 0) override; // MythUIButtonList
-    bool MoveUp(MovementUnit unit = MoveItem, uint amount = 0) override; // MythUIButtonList
     void ShowEntryDialog(QString initialEntry);
 
     bool    m_hasTemplate      {false};

@@ -10,12 +10,11 @@
 
 #include <QtEndian>
 
-#include "libmythbase/mythlogging.h"
-#include "udppacket.h"
-
-#ifdef _MSC_VER
-#  include <WinSock2.h>
+#ifndef __cpp_size_t_suffix
+#include "libmythbase/sizetliteral.h"
 #endif
+#include "libmythtv/mythtvexp.h"
+#include "udppacket.h"
 
 /** \brief RTP Data Packet
  *
@@ -29,58 +28,24 @@
  *  shared data container, so an RTPDataPacket can be assigned to a
  *  subclass efficiently.
  */
-class RTPDataPacket : public UDPPacket
+class MTV_PUBLIC RTPDataPacket : public UDPPacket
 {
   public:
     RTPDataPacket(const RTPDataPacket&)  = default;
-    explicit RTPDataPacket(const UDPPacket &o) : UDPPacket(o), m_off(0) { }
-    explicit RTPDataPacket(uint64_t key) : UDPPacket(key), m_off(0) { }
+    explicit RTPDataPacket(const UDPPacket &o) : UDPPacket(o) { }
+    explicit RTPDataPacket(uint64_t key) : UDPPacket(key) { }
     RTPDataPacket(void) : UDPPacket(0ULL) { }
 
     RTPDataPacket& operator=(const RTPDataPacket&) = default;
 
-    bool IsValid(void) const override // UDPPacket
-    {
-        if (m_data.size() < 12)
-        {
-            return false;
-        }
-        if (2 != GetVersion())
-        {
-            LOG(VB_GENERAL, LOG_INFO, QString("Version incorrect %1")
-                .arg(GetVersion()));
-            return false;
-        }
-
-        int off = 12 + 4 * GetCSRCCount();
-        if (off > m_data.size())
-        {
-            LOG(VB_GENERAL, LOG_INFO, QString("off %1 > sz %2")
-                .arg(off).arg(m_data.size()));
-            return false;
-        }
-        if (HasExtension())
-        {
-            uint ext_size = m_data[off+2] << 8 | m_data[off+3];
-            off += 4 * (1 + ext_size);
-        }
-        if (off > m_data.size())
-        {
-            LOG(VB_GENERAL, LOG_INFO, QString("off + ext %1 > sz %2")
-                .arg(off).arg(m_data.size()));
-            return false;
-        }
-        m_off = off;
-
-        return true;
-    }
+    bool IsValid(void) const override; // UDPPacket
 
     uint GetVersion(void) const { return (m_data[0] >> 6) & 0x3; }
     bool HasPadding(void) const { return (m_data[0] >> 5) & 0x1; }
     bool HasExtension(void) const { return (m_data[0] >> 4) & 0x1; }
     uint GetCSRCCount(void) const { return m_data[0] & 0xf; }
 
-    enum {
+    enum : uint8_t {
         kPayLoadTypePCMAudio   = 8,
         kPayLoadTypeMPEGAudio  = 12,
         kPayLoadTypeH261Video  = 31,
@@ -111,8 +76,13 @@ class RTPDataPacket : public UDPPacket
 
     uint GetContributingSource(uint i) const
     {
+#ifdef __cpp_size_t_suffix
         const uint32_t tmp =
-            *reinterpret_cast<const uint32_t*>(m_data.data() + 12 + 4 * i);
+            *reinterpret_cast<const uint32_t*>(m_data.data() + 12 + (4UZ * i));
+#else
+        const uint32_t tmp =
+            *reinterpret_cast<const uint32_t*>(m_data.data() + 12 + (4_UZ * i));
+#endif
         return qFromBigEndian(tmp);
     }
 

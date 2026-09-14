@@ -1,8 +1,11 @@
 #include "mythtimezone.h"
 
-#include <cstdlib> // for malloc, getenv
-#include <ctime>
-
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtEnvironmentVariables>
+#include <QtSystemDetection>
+#include <QtVersionChecks>
+#endif
 #include <QDataStream>
 #include <QTextStream>
 #include <QDateTime>
@@ -10,8 +13,6 @@
 #include <QFileInfo>
 #include <QDir>
 
-#include "mythcorecontext.h"
-#include "mythlogging.h"
 #include "mythdate.h"
 
 namespace MythTZ
@@ -21,7 +22,11 @@ int calc_utc_offset(void)
 {
     QDateTime loc = QDateTime::currentDateTime();
     QDateTime utc = loc.toUTC();
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     loc = QDateTime(loc.date(), loc.time(), Qt::UTC);
+#else
+    loc = QDateTime(loc.date(), loc.time(), QTimeZone(QTimeZone::UTC));
+#endif
     return utc.secsTo(loc);
 }
 
@@ -32,7 +37,7 @@ int calc_utc_offset(void)
 QString getTimeZoneID(void)
 {
     QString zone_id("UNDEF");
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
     // First, try the TZ environment variable to check for environment-specific
     // overrides
     QString tz = qEnvironmentVariable("TZ");

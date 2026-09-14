@@ -1,6 +1,7 @@
 #ifndef MYTHUI_IMAGE_H_
 #define MYTHUI_IMAGE_H_
 
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QDateTime>
 #include <QHash>
 #include <QMutex>
@@ -105,7 +106,7 @@ class MUI_PUBLIC MythUIImage : public MythUIType
     MythUIImage(MythUIType *parent, const QString &name);
    ~MythUIImage() override;
 
-    QString GetFilename(void) { return m_filename; }
+    QString GetFilename(void) const { return m_imageProperties.m_filename; }
 
     /** Must be followed by a call to Load() to load the image. */
     void SetFilename(const QString &filename);
@@ -135,6 +136,7 @@ class MUI_PUBLIC MythUIImage : public MythUIType
 
     void LoadNow(void) override; // MythUIType
 
+    void SetSize(QSize size) override; // MythUIType
     void SetOrientation(int orientation);
 
   signals:
@@ -156,7 +158,6 @@ class MUI_PUBLIC MythUIImage : public MythUIType
     void Finalize(void) override; // MythUIType
 
     void SetSize(int width, int height);
-    void SetSize(QSize size) override; // MythUIType
     void ForceSize(QSize size);
 
     void SetCropRect(int x, int y, int width, int height);
@@ -164,7 +165,6 @@ class MUI_PUBLIC MythUIImage : public MythUIType
 
     void FindRandomImage(void);
 
-    QString m_filename;
     QString m_origFilename;
 
     QHash<int, MythImage *> m_images;

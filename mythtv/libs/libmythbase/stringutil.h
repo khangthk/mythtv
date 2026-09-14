@@ -1,10 +1,18 @@
 #ifndef STRINGUTIL_H_
 #define STRINGUTIL_H_
 
+// The following distributions have a C++20 compiler but don't
+// support std::format:
+//
+// Centos/RHEL 9, Debian 11&12, NetBSD10, Ubuntu 22.04
 #if __has_include(<format>) // C++20
 #include <format>
 #endif
 
+#include <string_view>
+#include <vector>
+
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QByteArray>
 #include <QString>
 
@@ -40,11 +48,11 @@ This is equivalent to QVariant(bool).toString()
 */
 inline QString bool_to_string(bool val)
 {
-    return (val) ? QStringLiteral("true") : QStringLiteral("false");
+    return val ? QStringLiteral("true") : QStringLiteral("false");
 }
 
 MBASE_PUBLIC
-int naturalCompare(const QString &_a, const QString &_b,
+std::strong_ordering naturalCompare(const QString &_a, const QString &_b,
                    Qt::CaseSensitivity caseSensitivity = Qt::CaseSensitive);
 
 /**
@@ -54,11 +62,38 @@ which is never used).
 inline bool naturalSortCompare(const QString &a, const QString &b,
                    Qt::CaseSensitivity caseSensitivity = Qt::CaseSensitive)
 {
+    // NOLINTNEXTLINE(modernize-use-nullptr)
     return naturalCompare(a, b, caseSensitivity) < 0;
 }
 
 MBASE_PUBLIC QString formatKBytes(int64_t sizeKB, int prec=1);
 MBASE_PUBLIC QString formatBytes(int64_t sizeB, int prec=1);
+
+/**
+Split a `std::string_view` into a `std::vector` of `std::string_view`s.
+
+@param s String to split, may be empty.
+@param delimiter String to determine where to split.
+@return Will always have a size >= 1.  Only valid as long as the data
+        referenced by s remains valid.
+*/
+inline std::vector<std::string_view> split_sv(const std::string_view s, const std::string_view delimiter)
+{
+    // There are infinitely many empty strings at each position, avoid infinite loop
+    if (delimiter.empty())
+        return {s};
+    std::vector<std::string_view> tokens;
+    size_t last_pos = 0;
+    size_t pos = s.find(delimiter);
+    while (pos != std::string_view::npos)
+    {
+        tokens.emplace_back(s.substr(last_pos, pos - last_pos));
+        last_pos = pos + delimiter.size();
+        pos = s.find(delimiter, last_pos);
+    }
+    tokens.emplace_back(s.substr(last_pos));
+    return tokens;
+}
 
 } // namespace StringUtil
 

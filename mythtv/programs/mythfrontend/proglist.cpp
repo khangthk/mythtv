@@ -3,6 +3,7 @@
 #include <deque>                        // for _Deque_iterator, operator-, etc
 #include <functional>
 #include <iterator>                     // for reverse_iterator
+#include <ranges>
 #include <utility>
 
 // Qt
@@ -13,6 +14,7 @@
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythdb.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythbase/stringutil.h"
 #include "libmythtv/channelinfo.h"
 #include "libmythtv/channelutil.h"
@@ -20,6 +22,7 @@
 #include "libmythtv/recordingrule.h"
 #include "libmythtv/scheduledrecording.h"
 #include "libmythtv/tv_actions.h"       // for ACTION_CHANNELSEARCH
+#include "libmythtv/tv_play.h"
 #include "libmythui/mythdialogbox.h"
 #include "libmythui/mythuibuttonlist.h"
 #include "libmythui/mythuistatetype.h"
@@ -31,6 +34,21 @@
 #define LOC      QString("ProgLister: ")
 #define LOC_WARN QString("ProgLister, Warning: ")
 #define LOC_ERR  QString("ProgLister, Error: ")
+
+void *ProgLister::RunProgramList(void *player, ProgListType pltype,
+                                 const QString & extraArg)
+{
+    MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
+    auto *vsb = new ProgLister(mainStack, static_cast<TV*>(player),
+                               pltype, extraArg);
+
+    if (vsb->Create())
+        mainStack->AddScreen(vsb, (player == nullptr));
+    else
+        delete vsb;
+
+    return nullptr;
+}
 
 ProgLister::ProgLister(MythScreenStack *parent, ProgListType pltype,
                        QString view, QString extraArg,
@@ -71,6 +89,37 @@ ProgLister::ProgLister(MythScreenStack *parent, ProgListType pltype,
     }
 }
 
+// From tv_play
+ProgLister::ProgLister(MythScreenStack *parent, TV* player,
+                       ProgListType pltype, const QString & extraArg) :
+    ScheduleCommon(parent, "ProgLister"),
+    m_type(pltype),
+    m_extraArg(extraArg),
+    m_startTime(MythDate::current()),
+    m_searchTime(m_startTime),
+    m_channelOrdering(gCoreContext->GetSetting("ChannelOrdering", "channum")),
+    m_player(player)
+{
+    if (m_player)
+        m_player->IncrRef();
+
+    switch (pltype)
+    {
+        case plTitleSearch:   m_searchType = kTitleSearch;   break;
+        case plKeywordSearch: m_searchType = kKeywordSearch; break;
+        case plPeopleSearch:  m_searchType = kPeopleSearch;  break;
+        case plPowerSearch:
+        case plSQLSearch:
+        case plStoredSearch:  m_searchType = kPowerSearch;   break;
+        default:              m_searchType = kNoSearch;      break;
+    }
+
+    m_view = extraArg;
+    m_viewList.push_back(extraArg);
+    m_viewTextList.push_back(extraArg);
+    m_curView = m_viewList.size() - 1;
+}
+
 // previously recorded ctor
 ProgLister::ProgLister(
     MythScreenStack *parent, uint recid, QString title) :
@@ -86,14 +135,30 @@ ProgLister::ProgLister(
 {
 }
 
-ProgLister::~ProgLister()
+ProgLister::~ProgLister(void)
 {
     m_itemList.clear();
     m_itemListSave.clear();
     gCoreContext->removeListener(this);
+
+    // if we have a player, we need to tell we are done
+    if (m_player)
+    {
+        emit m_player->RequestEmbedding(false);
+        m_player->DecrRef();
+    }
 }
 
-bool ProgLister::Create()
+void ProgLister::Close(void)
+{
+    // don't fade the screen if we are returning to the player
+    if (m_player)
+        GetScreenStack()->PopScreen(this, false);
+    else
+        GetScreenStack()->PopScreen(this, true);
+}
+
+bool ProgLister::Create(void)
 {
     if (!LoadWindowFromXML("schedule-ui.xml", "programlist", this))
         return false;
@@ -104,6 +169,7 @@ bool ProgLister::Create()
     UIUtilW::Assign(this, m_schedText, "sched", &err);
     UIUtilW::Assign(this, m_messageText, "msg", &err);
     UIUtilW::Assign(this, m_positionText, "position", &err);
+    UIUtilW::Assign(this, m_groupByText, "groupby");
 
     if (err)
     {
@@ -163,6 +229,9 @@ bool ProgLister::Create()
 
     LoadInBackground();
 
+    if (m_player)
+        emit m_player->RequestEmbedding(true);
+
     return true;
 }
 
@@ -200,28 +269,29 @@ bool ProgLister::keyPressEvent(QKeyEvent *e)
         const QString& action = actions[i];
         handled = true;
 
-        if (action == "PREVVIEW")
+        if (action == "PREVVIEW") {
             SwitchToPreviousView();
-        else if (action == "NEXTVIEW")
+        } else if (action == "NEXTVIEW") {
             SwitchToNextView();
-        else if (action == "CUSTOMEDIT")
+        } else if (action == "CUSTOMEDIT") {
             EditCustom();
-        else if (action == "EDIT")
+        } else if (action == "EDIT") {
             EditScheduled();
-        else if (action == "DELETE")
+        } else if (action == "DELETE") {
             ShowDeleteItemMenu();
-        else if (action == "UPCOMING" && m_type != plTitle)
+        } else if (action == "UPCOMING" && m_type != plTitle) {
             ShowUpcoming();
-        else if (action == "PREVRECORDED" && m_type != plPreviouslyRecorded)
+        } else if (action == "PREVRECORDED" && m_type != plPreviouslyRecorded) {
             ShowPrevious();
-        else if (action == "DETAILS" || action == "INFO")
+        } else if (action == "DETAILS" || action == "INFO") {
             ShowDetails();
-        else if (action == "GUIDE")
+        } else if (action == "GUIDE") {
             ShowGuide();
-        else if (action == ACTION_CHANNELSEARCH && m_type != plChannel)
+        } else if (action == ACTION_CHANNELSEARCH && m_type != plChannel) {
             ShowChannelSearch();
-        else if (action == "TOGGLERECORD")
+        } else if (action == "TOGGLERECORD") {
             QuickRecord();
+        }
         else if (action == "1")
         {
             if (m_titleSort)
@@ -267,10 +337,11 @@ bool ProgLister::keyPressEvent(QKeyEvent *e)
 
 void ProgLister::ShowMenu(void)
 {
-    auto *sortMenu = new MythMenu(tr("Sort Options"), this, "sortmenu");
-    sortMenu->AddItem(tr("Reverse Sort Order"));
-    sortMenu->AddItem(tr("Sort By Title"));
-    sortMenu->AddItem(tr("Sort By Time"));
+    auto *sortGroupMenu = new MythMenu(tr("Sort/Group Options"), this,
+                                       "sortgroupmenu");
+    sortGroupMenu->AddItem(tr("Reverse Sort Order"));
+    sortGroupMenu->AddItem(tr("Sort By Title"));
+    sortGroupMenu->AddItem(tr("Sort By Time"));
 
     auto *menu = new MythMenu(tr("Options"), this, "menu");
 
@@ -279,7 +350,14 @@ void ProgLister::ShowMenu(void)
         menu->AddItem(tr("Choose Search Phrase..."), &ProgLister::ShowChooseViewMenu);
     }
 
-    menu->AddItem(tr("Sort"), nullptr, sortMenu);
+    if (m_type != plChannel
+        && m_type != plTime
+        && m_type != plPreviouslyRecorded)
+    {
+        AddGroupMenuItems(sortGroupMenu);
+    }
+
+    menu->AddItem(tr("Sort/Group"), nullptr, sortGroupMenu);
 
     if (m_type != plPreviouslyRecorded)
         menu->AddItem(tr("Record"), &ProgLister::QuickRecord);
@@ -876,6 +954,7 @@ void ProgLister::FillViewList(const QString &view)
         }
         else
         {
+            LOG(VB_GENERAL, LOG_WARNING, LOC + QString("Failed to load viewList"));
             m_curView = -1;
         }
     }
@@ -922,7 +1001,7 @@ void ProgLister::FillViewList(const QString &view)
         m_viewTextList.push_back(tr("%n star(s)", "", 10));
         for (int i = 9; i > 0; i--)
         {
-            float stars = ((i - 0.5 ) / 10.0) - 0.001;
+            float stars = ((i - 0.5F ) / 10.0F) - 0.001F;
             m_viewList.push_back(QString(">= %1").arg(stars));
             m_viewTextList.push_back(tr("%n star(s) and above", "", i));
         }
@@ -1002,6 +1081,8 @@ void ProgLister::FillViewList(const QString &view)
         m_curView = m_viewList.size() - 1;
 }
 
+// For the spaceship operator, the c++ standard library explicitly
+// requires '0' and not nullptr.  NOLINTBEGIN(modernize-use-nullptr)
 static bool plTitleSort(const ProgramInfo *a, const ProgramInfo *b)
 {
     if (a->GetSortTitle() != b->GetSortTitle())
@@ -1043,6 +1124,7 @@ static bool plPrevTitleSort(const ProgramInfo *a, const ProgramInfo *b)
 
     return a->GetScheduledStartTime() < b->GetScheduledStartTime();
 };
+// NOLINTEND(modernize-use-nullptr)
 
 static bool plTimeSort(const ProgramInfo *a, const ProgramInfo *b)
 {
@@ -1054,6 +1136,10 @@ static bool plTimeSort(const ProgramInfo *a, const ProgramInfo *b)
 
 void ProgLister::FillItemList(bool restorePosition, bool updateDisp)
 {
+    ProgGroupBy::Type groupBy = GetProgramListGroupBy();
+    if (m_groupByText)
+	m_groupByText->SetText(ProgGroupBy::toString(groupBy));
+
     if (m_type == plPreviouslyRecorded && m_curviewText)
     {
         if (!m_titleSort)
@@ -1202,6 +1288,7 @@ void ProgLister::FillItemList(bool restorePosition, bool updateDisp)
     }
     else if (m_type == plChannel) // list by channel
     {
+        groupBy = ProgGroupBy::None;
         where = "WHERE channel.deleted IS NULL "
             "  AND channel.visible > 0 "
             "  AND program.endtime > :PGILSTART "
@@ -1256,6 +1343,7 @@ void ProgLister::FillItemList(bool restorePosition, bool updateDisp)
     }
     else if (m_type == plTime) // list by time
     {
+        groupBy = ProgGroupBy::ChanNum;
         QDateTime searchTime(m_searchTime);
         searchTime.setTime(QTime(searchTime.time().hour(), 0, 0));
         bindings[":PGILSEARCHTIME1"] = searchTime;
@@ -1320,7 +1408,7 @@ void ProgLister::FillItemList(bool restorePosition, bool updateDisp)
     }
 
     ProgramInfo        selected;
-    const ProgramInfo *selectedP = (restorePosition) ? GetCurrentProgram() : nullptr;
+    const ProgramInfo *selectedP = restorePosition ? GetCurrentProgram() : nullptr;
     if (selectedP)
     {
         selected = *selectedP;
@@ -1343,7 +1431,7 @@ void ProgLister::FillItemList(bool restorePosition, bool updateDisp)
     else
     {
         LoadFromScheduler(m_schedList);
-        LoadFromProgram(m_itemList, where, bindings, m_schedList);
+        LoadFromProgram(m_itemList, where, bindings, m_schedList, groupBy);
     }
 
     if (m_type == plNewListings || m_titleSort)
@@ -1391,31 +1479,31 @@ void ProgLister::SortList(SortBy sortby, bool reverseSort)
     {
         if (kTimeSort == sortby)
         {
-            std::stable_sort(m_itemList.rbegin(), m_itemList.rend(), plTimeSort);
+            std::ranges::stable_sort(std::ranges::reverse_view(m_itemList), plTimeSort);
         }
         else if (kPrevTitleSort == sortby)
         {
-            std::stable_sort(m_itemList.rbegin(), m_itemList.rend(),
+            std::ranges::stable_sort(std::ranges::reverse_view(m_itemList),
                         plPrevTitleSort);
         }
         else
         {
-            std::stable_sort(m_itemList.rbegin(), m_itemList.rend(), plTitleSort);
+            std::ranges::stable_sort(std::ranges::reverse_view(m_itemList), plTitleSort);
         }
     }
     else
     {
         if (kTimeSort == sortby)
         {
-            std::stable_sort(m_itemList.begin(), m_itemList.end(), plTimeSort);
+            std::ranges::stable_sort(m_itemList, plTimeSort);
         }
         else if (kPrevTitleSort == sortby)
         {
-            std::stable_sort(m_itemList.begin(), m_itemList.end(),plPrevTitleSort);
+            std::ranges::stable_sort(m_itemList,plPrevTitleSort);
         }
         else
         {
-            std::stable_sort(m_itemList.begin(), m_itemList.end(), plTitleSort);
+            std::ranges::stable_sort(m_itemList, plTitleSort);
         }
     }
 }
@@ -1451,7 +1539,9 @@ void ProgLister::UpdateDisplay(const ProgramInfo *selected)
     UpdateButtonList();
 
     if (selected)
+    {
         RestoreSelection(selected, offset);
+    }
     else if (m_selectedTime.isValid())
     {
         size_t i = 0;
@@ -1585,13 +1675,13 @@ void ProgLister::customEvent(QEvent *event)
 
     if (event->type() == DialogCompletionEvent::kEventType)
     {
-        auto *dce = (DialogCompletionEvent*)(event);
+        auto *dce = (DialogCompletionEvent*)event;
 
         QString resultid   = dce->GetId();
 //      QString resulttext = dce->GetResultText();
         int     buttonnum  = dce->GetResult();
 
-        if (resultid == "sortmenu")
+        if (resultid == "sortgroupmenu")
         {
             switch (buttonnum)
             {
@@ -1608,6 +1698,9 @@ void ProgLister::customEvent(QEvent *event)
                     m_titleSort   = false;
                     m_reverseSort = (m_type == plPreviouslyRecorded);
                     needUpdate    = true;
+                    break;
+                default:
+                    ScheduleCommon::customEvent(event);
                     break;
             }
         }
@@ -1654,7 +1747,7 @@ void ProgLister::customEvent(QEvent *event)
     }
     else if (event->type() == ScreenLoadCompletionEvent::kEventType)
     {
-        auto *slce = (ScreenLoadCompletionEvent*)(event);
+        auto *slce = (ScreenLoadCompletionEvent*)event;
         QString id = slce->GetId();
 
         if (id == objectName())
@@ -1676,10 +1769,13 @@ void ProgLister::customEvent(QEvent *event)
 
         if (m_allowViewDialog && message == "CHOOSE_VIEW")
             ShowChooseViewMenu();
-        else if (message == "SCHEDULE_CHANGE")
+        else if (message == "SCHEDULE_CHANGE"
+                 || message == "GROUPBY_CHANGE")
             needUpdate = true;
     }
 
     if (needUpdate)
         FillItemList(true);
 }
+
+#include "moc_proglist.cpp"

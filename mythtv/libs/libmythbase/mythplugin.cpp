@@ -1,5 +1,10 @@
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
+
 // C includes
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
 #include <dlfcn.h>
 #else
 #include "compat.h"
@@ -214,7 +219,7 @@ MythPlugin *MythPluginManager::GetPlugin(const QString &plugname)
 {
     QString newname = FindPluginName(plugname);
 
-    if (m_moduleMap.find(newname) == m_moduleMap.end())
+    if (!m_moduleMap.contains(newname))
         return nullptr;
 
     return m_moduleMap[newname];
@@ -235,6 +240,7 @@ void MythPluginManager::DestroyAllPlugins(void)
 QStringList MythPluginManager::EnumeratePlugins(void)
 {
     QStringList ret;
+    ret.reserve(m_dict.size());
     for (auto *it : std::as_const(m_dict))
         ret << it->getName();
     return ret;

@@ -1,5 +1,12 @@
+#include <fstream>
+#include <thread>
+
 #include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QAtomicInt>
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QMutex>
 #include <QMutexLocker>
 #include <QWaitCondition>
@@ -13,17 +20,17 @@
 #include <QSocketNotifier>
 #include <iostream>
 
+#include "mythconfig.h"
 #include "mythlogging.h"
 #include "logging.h"
 #include "loggingserver.h"
 #include "mythdb.h"
-#include "mythcorecontext.h"
 #include "dbutil.h"
 #include "exitcodes.h"
 #include "compat.h"
 
 #include <cstdlib>
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
 #include "mythsyslog.h"
 #if CONFIG_SYSTEMD_JOURNAL
 #define SD_JOURNAL_SUPPRESS_LOCATION 1 // NOLINT(cppcoreguidelines-macro-usage)
@@ -41,18 +48,6 @@
 #include <sys/time.h>
 #endif
 #include <csignal>
-
-// Various ways to get to thread's tid
-#if defined(__linux__)
-#include <sys/syscall.h>
-#elif defined(__FreeBSD__)
-extern "C" {
-#include <sys/ucontext.h>
-#include <sys/thr.h>
-}
-#elif defined(Q_OS_DARWIN)
-#include <mach/mach.h>
-#endif
 
 static QMutex                      loggerMapMutex;
 static QMap<QString, LoggerBase *> loggerMap;
@@ -105,9 +100,8 @@ LoggerBase::~LoggerBase()
 /// \param filename Filename of the logfile.
 FileLogger::FileLogger(const char *filename) :
         LoggerBase(filename),
-        m_fd(open(filename, O_WRONLY|O_CREAT|O_APPEND, 0664))
+        m_ofstream(filename, std::ios::app)
 {
-    m_opened = (m_fd != -1);
     LOG(VB_GENERAL, LOG_INFO, QString("Added logging to %1")
              .arg(filename));
 }
@@ -116,13 +110,11 @@ FileLogger::FileLogger(const char *filename) :
 /// \brief FileLogger deconstructor - close the logfile
 FileLogger::~FileLogger()
 {
-    if( m_opened )
+    if(m_ofstream.is_open())
     {
         LOG(VB_GENERAL, LOG_INFO, QString("Removed logging to %1")
             .arg(m_handle));
-        close(m_fd);
-        m_fd = -1;
-        m_opened = false;
+        m_ofstream.close();
     }
 }
 
@@ -131,7 +123,7 @@ FileLogger *FileLogger::create(const QString& filename, QMutex *mutex)
     QByteArray ba = filename.toLocal8Bit();
     const char *file = ba.constData();
     auto *logger =
-        qobject_cast<FileLogger *>(loggerMap.value(filename, nullptr));
+        dynamic_cast<FileLogger *>(loggerMap.value(filename, nullptr));
 
     if (logger)
         return logger;
@@ -149,10 +141,9 @@ FileLogger *FileLogger::create(const QString& filename, QMutex *mutex)
 ///        This allows for logrollers to be used.
 void FileLogger::reopen(void)
 {
-    close(m_fd);
+    m_ofstream.close();
 
-    m_fd = open(qPrintable(m_handle), O_WRONLY|O_CREAT|O_APPEND, 0664);
-    m_opened = (m_fd != -1);
+    m_ofstream.open(qPrintable(m_handle), std::ios::app);
     LOG(VB_GENERAL, LOG_INFO, QString("Rolled logging on %1") .arg(m_handle));
 }
 
@@ -160,49 +151,24 @@ void FileLogger::reopen(void)
 /// \param item LoggingItem containing the log message to process
 bool FileLogger::logmsg(LoggingItem *item)
 {
-    if (!m_opened)
+    if (!m_ofstream.is_open())
         return false;
 
-    QString timestamp = item->getTimestampUs();
-    QChar shortname = item->getLevelChar();
+    std::string line = item->toString();
 
-    std::string line;
-    if( item->tid() )
-    {
-        line = qPrintable(QString("%1 %2 [%3/%4] %5 %6:%7 (%8) - %9\n")
-                          .arg(timestamp, shortname,
-                               QString::number(item->pid()),
-                               QString::number(item->tid()),
-                               item->threadName(), item->file(),
-                               QString::number(item->line()),
-                               item->function(),
-                               item->message()));
-    }
-    else
-    {
-        line = qPrintable(QString("%1 %2 [%3] %5 %6:%7 (%8) - %9\n")
-                          .arg(timestamp, shortname,
-                               QString::number(item->pid()),
-                               item->threadName(), item->file(),
-                               QString::number(item->line()),
-                               item->function(),
-                               item->message()));
-    }
+    m_ofstream << line << std::flush;
 
-    int result = write(m_fd, line.data(), line.size());
-
-    if( result == -1 )
+    if (m_ofstream.bad())
     {
         LOG(VB_GENERAL, LOG_ERR,
-                 QString("Closed Log output on fd %1 due to errors").arg(m_fd));
-        m_opened = false;
-        close( m_fd );
+            QString("Closed Log output to %1 due to unrecoverable error(s).").arg(m_handle));
+        m_ofstream.close();
         return false;
     }
     return true;
 }
 
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
 /// \brief SyslogLogger constructor \param facility Syslog facility to
 /// use in logging
 SyslogLogger::SyslogLogger(bool open) :
@@ -227,7 +193,7 @@ SyslogLogger::~SyslogLogger()
 
 SyslogLogger *SyslogLogger::create(QMutex *mutex, bool open)
 {
-    auto *logger = qobject_cast<SyslogLogger *>(loggerMap.value("", nullptr));
+    auto *logger = dynamic_cast<SyslogLogger *>(loggerMap.value("", nullptr));
     if (logger)
         return logger;
 
@@ -273,7 +239,7 @@ JournalLogger::~JournalLogger()
 
 JournalLogger *JournalLogger::create(QMutex *mutex)
 {
-    auto *logger = qobject_cast<JournalLogger *>(loggerMap.value("", nullptr));
+    auto *logger = dynamic_cast<JournalLogger *>(loggerMap.value("", nullptr));
     if (logger)
         return logger;
 
@@ -307,7 +273,7 @@ bool JournalLogger::logmsg(LoggingItem *item)
 #endif
 #endif
 
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
 /// \brief Signal handler for SIGHUP.  This passes it to the LogForwardThread
 ///        for processing.
 
@@ -406,7 +372,7 @@ void LogForwardThread::run(void)
 /// \brief  SIGHUP handler - reopen all open logfiles for logrollers
 void LogForwardThread::handleSigHup(void)
 {
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
     LOG(VB_GENERAL, LOG_INFO, "SIGHUP received, rolling log files.");
 
     /* SIGHUP was sent.  Close and reopen debug logfiles */
@@ -445,7 +411,7 @@ void LogForwardThread::forwardMessage(LoggingItem *item)
                 loggers->insert(0, logger);
         }
 
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
         // SyslogLogger from facility
         int facility = item->facility();
         if (facility > 0)
@@ -497,7 +463,7 @@ bool logForwardStart(void)
     logForwardThread = new LogForwardThread();
     logForwardThread->start();
 
-    usleep(10000);
+    std::this_thread::sleep_for(10ms);
     return (logForwardThread && logForwardThread->isRunning());
 }
 
@@ -525,6 +491,4 @@ void logForwardMessage(LoggingItem *item)
         gLogItemListNotEmpty.wakeAll();
 }
 
-/*
- * vim:ts=4:sw=4:ai:et:si:sts=4
- */
+#include "moc_loggingserver.cpp"

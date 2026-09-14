@@ -20,6 +20,8 @@
 
 #include "test_metadatagrabber.h"
 
+#include "libmythbase/mythcorecontext.h"
+
 void TestMetadataGrabber::initTestCase()
 {
     gCoreContext = new MythCoreContext("test_mythmetadatagrabber_1.0", nullptr);
@@ -60,3 +62,5 @@ void TestMetadataGrabber::cleanupTestCase()
 }
 
 QTEST_APPLESS_MAIN(TestMetadataGrabber)
+
+#include "moc_test_metadatagrabber.cpp"

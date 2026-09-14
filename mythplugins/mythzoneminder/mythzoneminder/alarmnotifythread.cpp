@@ -1,7 +1,7 @@
-// Qt headers
+#include <thread>
 
 // MythTV headers
-#include <libmyth/mythcontext.h>
+#include <libmythbase/mythcorecontext.h>
 
 // MythZoneMinder headers
 #include "alarmnotifythread.h"
@@ -66,8 +66,7 @@ void AlarmNotifyThread::run()
             }
         }
 
-        const struct timespec onesec {1, 0};
-        nanosleep(&onesec, nullptr);
+        std::this_thread::sleep_for(1s);
     }
 
     RunEpilog();

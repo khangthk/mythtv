@@ -1,9 +1,11 @@
 #ifndef PLAYGROUP_H
 #define PLAYGROUP_H
 
+#include "libmythbase/mythconfig.h"
+
 #include <QStringList>
 
-#include "libmyth/standardsettings.h"
+#include "libmythui/standardsettings.h"
 #include "libmythtv/mythtvexp.h"
 
 class ProgramInfo;
@@ -17,8 +19,12 @@ class MTV_PUBLIC PlayGroup
     static int GetSetting(const QString &name, const QString &field,
                           int defval);
     template <typename T>
-        static std::enable_if_t<std::chrono::__is_duration<T>::value, T>
-        GetDurSetting(const QString &name, const QString &field, T defval)
+    static T GetDurSetting(const QString &name, const QString &field, T defval)
+#if HAVE_IS_DURATION_V
+    requires (std::chrono::__is_duration_v<T>)
+#else
+    requires (std::chrono::__is_duration<T>::value)
+#endif
     { return T(GetSetting(name, field, static_cast<int>(defval.count()))); }
 };
 

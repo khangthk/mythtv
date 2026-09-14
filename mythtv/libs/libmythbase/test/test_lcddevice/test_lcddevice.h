@@ -17,9 +17,11 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
+#ifndef LIBMYTHBASE_TEST_LCDDEVICE_H
+#define LIBMYTHBASE_TEST_LCDDEVICE_H
 
-#include <iostream>
-
+#include <QChar>     // Fix Qt6 GCC SFINAE warning
+#include <QBitArray> // Fix Qt6 GCC SFINAE warning
 #include <QTest>
 #include <QTimer>
 
@@ -34,3 +36,5 @@ private slots:
     static void test_quotedString_data(void);
     static void test_quotedString (void);
 };
+
+#endif // LIBMYTHBASE_TEST_LCDDEVICE_H

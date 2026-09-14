@@ -9,11 +9,11 @@
 #include <QThread>
 
 // MythTV
-#include <libmyth/mythcontext.h>
-#include <libmythbase/mythcoreutil.h>
+#include <libmythbase/mythdb.h>
 #include <libmythbase/mythdbcon.h>
 #include <libmythbase/mythdirs.h>
 #include <libmythbase/mythdownloadmanager.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythmetadata/musicutils.h>
 #include <libmythui/mythdialogbox.h>
 #include <libmythui/mythmainwindow.h>
@@ -172,7 +172,7 @@ void StreamView::customEvent(QEvent *event)
 
         updateTrackInfo(gPlayer->getCurrentMetadata());
     }
-    else if (event->type() == OutputEvent::kPlaying)
+    else if (event->type() == AudioOutput::Event::kPlaying)
     {
         if (gPlayer->isPlaying())
         {
@@ -190,7 +190,7 @@ void StreamView::customEvent(QEvent *event)
         // pass it on to the default handler in MusicCommon
         handled = false;
     }
-    else if (event->type() == OutputEvent::kStopped)
+    else if (event->type() == AudioOutput::Event::kStopped)
     {
         if (m_streamList)
         {
@@ -205,7 +205,7 @@ void StreamView::customEvent(QEvent *event)
         // pass it on to the default handler in MusicCommon
         handled = false;
     }
-    else if (event->type() == OutputEvent::kBuffering)
+    else if (event->type() == AudioOutput::Event::kBuffering)
     {
     }
     else if (event->type() == MythEvent::kMythEventMessage)
@@ -233,7 +233,9 @@ void StreamView::customEvent(QEvent *event)
                 const QString& filename = args[1];
 
                 if ((errorCode != 0) || (fileSize == 0))
+                {
                     LOG(VB_GENERAL, LOG_ERR, QString("StreamView: failed to download radio icon from '%1'").arg(url));
+                }
                 else
                 {
                     for (int x = 0; x < m_streamList->GetCount(); x++)
@@ -429,16 +431,17 @@ void StreamView::doRemoveStream(bool ok)
 
 void StreamView::updateStreamList(void)
 {
-    if (!gPlayer->getCurrentPlaylist())
+    Playlist *playlist = gPlayer->getCurrentPlaylist();
+    if (nullptr == playlist)
         return;
 
     m_streamList->Reset();
 
     bool foundActiveStream = false;
 
-    for (int x = 0; x < gPlayer->getCurrentPlaylist()->getTrackCount(); x++)
+    for (int x = 0; x < playlist->getTrackCount(); x++)
     {
-        MusicMetadata *mdata = gPlayer->getCurrentPlaylist()->getSongAt(x);
+        MusicMetadata *mdata = playlist->getSongAt(x);
         auto *item = new MythUIButtonListItem(m_streamList, "",
                                               QVariant::fromValue(mdata));
         InfoMap metadataMap;
@@ -1160,3 +1163,5 @@ void SearchStream::doUpdateStreams(void)
 
     m_updating = false;
 }
+
+#include "moc_streamview.cpp"

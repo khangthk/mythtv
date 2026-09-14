@@ -4,18 +4,33 @@ import { MythCountryList, Country } from '../../../services/interfaces/country.i
 import { MythLanguageList, Language } from "../../../services/interfaces/language.interface";
 import { ConfigService } from '../../../services/config.service';
 import { WizardData } from '../../../services/interfaces/wizarddata.interface';
-import { SetupWizardService } from 'src/app/services/setupwizard.service';
-import { NgForm } from '@angular/forms';
-import { SetupService } from 'src/app/services/setup.service';
+import { SetupWizardService } from '../../../services/setupwizard.service';
+import { NgForm, FormsModule } from '@angular/forms';
+import { SetupService } from '../../../services/setup.service';
 import { Observable, of } from 'rxjs';
-import { TranslateService } from '@ngx-translate/core';
-import { MythService } from 'src/app/services/myth.service';
+import { TranslateService, TranslatePipe } from '@ngx-translate/core';
+import { MythService } from '../../../services/myth.service';
+import { ButtonModule } from 'primeng/button';
+import { MessageModule } from 'primeng/message';
+
+import { ListboxModule } from 'primeng/listbox';
+import { SharedModule } from 'primeng/api';
+import { CardModule } from 'primeng/card';
 
 @Component({
     selector: 'app-selectlanguage',
     templateUrl: './selectlanguage.component.html',
     styleUrls: ['./selectlanguage.component.css'],
     encapsulation: ViewEncapsulation.None,
+    imports: [
+        FormsModule,
+        CardModule,
+        SharedModule,
+        ListboxModule,
+        MessageModule,
+        ButtonModule,
+        TranslatePipe
+    ]
 })
 
 export class SelectLanguageComponent implements OnInit, AfterViewInit {
@@ -41,7 +56,7 @@ export class SelectLanguageComponent implements OnInit, AfterViewInit {
     constructor(public router: Router, private translate: TranslateService,
         public setupService: SetupService, private configService: ConfigService,
         private wizardService: SetupWizardService, private mythService: MythService) {
-        this.translate.get(this.warningText).subscribe(data => {
+        translate.stream(this.warningText).subscribe(data => {
             this.warningText = data
         });
     }

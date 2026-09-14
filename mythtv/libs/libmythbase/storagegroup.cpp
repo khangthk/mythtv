@@ -6,8 +6,9 @@
 #include "mythcorecontext.h"
 #include "mythdb.h"
 #include "mythlogging.h"
-#include "mythcoreutil.h"
+#include "filesysteminfo.h"
 #include "mythdirs.h"
+#include "mythsocket.h"
 
 #define LOC QString("SG(%1): ").arg(m_groupname)
 
@@ -225,13 +226,16 @@ QStringList StorageGroup::GetDirFileList(const QString &dir,
         QStringList list =
             d.entryList(QDir::Dirs|QDir::NoDotAndDotDot|QDir::Readable);
 
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+        files.reserve(files.capacity() + list.size());
+#endif
         for (const auto& p : std::as_const(list))
         {
             LOG(VB_FILE, LOG_DEBUG, LOC +
                 QString("GetDirFileList: Dir: %1/%2").arg(base, p));
 
             if (onlyDirs)
-                files.append(base + p);
+                files.append(base + p); // clazy:exclude=reserve-candidates
 
             files << GetDirFileList(dir + "/" + p, base + p, true, onlyDirs);
         }
@@ -240,14 +244,17 @@ QStringList StorageGroup::GetDirFileList(const QString &dir,
     if (!onlyDirs)
     {
         QStringList list = d.entryList(QDir::Files|QDir::Readable);
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+        files.reserve(files.capacity() + list.size());
+#endif
         for (const auto& p : std::as_const(list))
         {
             LOG(VB_FILE, LOG_DEBUG, LOC +
                 QString("GetDirFileList: File: %1%2").arg(base, p));
             if (recursive)
-                files.append(base + p);
+                files.append(base + p); // clazy:exclude=reserve-candidates
             else
-                files.append(p);
+                files.append(p); // clazy:exclude=reserve-candidates
         }
     }
     return files;
@@ -294,6 +301,7 @@ QStringList StorageGroup::GetFileInfoList(const QString &Path)
 
     if (Path.isEmpty() || Path == "/")
     {
+        files.reserve(m_dirlist.size());
         for (const auto& dir : std::as_const(m_dirlist))
             files << QString("sgdir::%1").arg(dir);
 
@@ -335,7 +343,9 @@ QStringList StorageGroup::GetFileInfoList(const QString &Path)
         QString tmp;
 
         if (entry.isDir())
+        {
             tmp = QString("dir::%1::0").arg(entry.fileName());
+        }
         else
         {
             tmp = QString("file::%1::%2::%3%4").arg(entry.fileName())
@@ -558,25 +568,21 @@ bool StorageGroup::FindDirs(const QString &group, const QString &hostname,
 
     if (!query.exec() || !query.isActive())
         MythDB::DBError("StorageGroup::StorageGroup()", query);
-    else if (query.next())
-    {
-        do
-        {
-            /* The storagegroup.dirname column uses utf8_bin collation, so Qt
-             * uses QString::fromLatin1() for toString(). Explicitly convert the
-             * value using QString::fromUtf8() to prevent corruption. */
-            dirname = QString::fromUtf8(query.value(0)
-                                        .toByteArray().constData());
-            dirname = dirname.trimmed();
-            if (dirname.endsWith("/"))
-                dirname.remove(dirname.length() - 1, 1);
 
-            if (dirlist)
-                (*dirlist) << dirname;
-            else
-                return true;
-        }
-        while (query.next());
+    while (query.next())
+    {
+        /* The storagegroup.dirname column uses utf8_bin collation, so Qt
+         * uses QString::fromLatin1() for toString(). Explicitly convert the
+         * value using QString::fromUtf8() to prevent corruption. */
+        dirname = QString::fromUtf8(query.value(0)
+                                    .toByteArray().constData());
+        dirname = dirname.trimmed();
+        if (dirname.endsWith("/"))
+            dirname.remove(dirname.length() - 1, 1);
+
+        if (nullptr == dirlist)
+            return true;
+        (*dirlist) << dirname;
         found = true;
     }
 
@@ -667,44 +673,31 @@ QString StorageGroup::FindNextDirMostFree(void)
 {
     QString nextDir;
     int64_t nextDirFree = 0;
-    int64_t thisDirTotal = 0;
-    int64_t thisDirUsed = 0;
-    int64_t thisDirFree = 0;
 
     LOG(VB_FILE, LOG_DEBUG, LOC + QString("FindNextDirMostFree: Starting"));
 
     if (m_allowFallback)
         nextDir = kDefaultStorageDir;
 
-    if (!m_dirlist.empty())
-        nextDir = m_dirlist[0];
-
-    QDir checkDir("");
-    int curDir = 0;
-    while (curDir < m_dirlist.size())
+    for (const auto & dir : std::as_const(m_dirlist))
     {
-        checkDir.setPath(m_dirlist[curDir]);
-        if (!checkDir.exists())
+        if (!QDir(dir).exists())
         {
             LOG(VB_GENERAL, LOG_ERR, LOC +
-                QString("FindNextDirMostFree: '%1' does not exist!")
-                    .arg(m_dirlist[curDir]));
-            curDir++;
+                QString("FindNextDirMostFree: '%1' does not exist!").arg(dir));
             continue;
         }
 
-        thisDirFree = getDiskSpace(m_dirlist[curDir], thisDirTotal,
-                                   thisDirUsed);
+        int64_t thisDirFree = FileSystemInfo(QString(), dir).getFreeSpace();
         LOG(VB_FILE, LOG_DEBUG, LOC +
             QString("FindNextDirMostFree: '%1' has %2 KiB free")
-                .arg(m_dirlist[curDir], QString::number(thisDirFree)));
+                .arg(dir, QString::number(thisDirFree)));
 
         if (thisDirFree > nextDirFree)
         {
-            nextDir     = m_dirlist[curDir];
+            nextDir     = dir;
             nextDirFree = thisDirFree;
         }
-        curDir++;
     }
 
     if (nextDir.isEmpty())
@@ -769,7 +762,9 @@ void StorageGroup::CheckAllStorageGroupDirs(void)
         {
             testFile.setFileName(dirname + "/.test");
             if (testFile.open(QIODevice::WriteOnly))
+            {
                 testFile.remove();
+            }
             else
             {
                 LOG(VB_GENERAL, LOG_ERR, LOC +
@@ -890,6 +885,67 @@ QString StorageGroup::GetGroupToUse(
     }
 
     return tmpGroup;
+}
+
+QString StorageGroup::generate_file_url(const QString &storage_group,
+                                        const QString &host,
+                                        const QString &path)
+{
+    return MythCoreContext::GenMythURL(host, gCoreContext->GetBackendServerPort(host),
+        path, StorageGroup::GetGroupToUse(host, storage_group));
+
+}
+
+bool StorageGroup::remoteGetFileList(const QString& host, const QString& path, QStringList* list,
+                       QString sgroup, bool fileNamesOnly)
+{
+
+    // Make sure the list is empty when we get started
+    list->clear();
+
+    if (sgroup.isEmpty())
+        sgroup = "Videos";
+
+    *list << "QUERY_SG_GETFILELIST";
+    *list << host;
+    *list << StorageGroup::GetGroupToUse(host, sgroup);
+    *list << path;
+    *list << QString::number(static_cast<int>(fileNamesOnly));
+
+    bool ok = false;
+
+    if (gCoreContext->IsMasterBackend())
+    {
+        // since the master backend cannot connect back around to
+        // itself, and the libraries do not have access to the list
+        // of connected slave backends to query an existing connection
+        // start up a new temporary connection directly to the slave
+        // backend to query the file list
+        QString ann = QString("ANN Playback %1 0")
+                        .arg(gCoreContext->GetHostName());
+        QString addr = gCoreContext->GetBackendServerIP(host);
+        int port = gCoreContext->GetBackendServerPort(host);
+        bool mismatch = false;
+
+        MythSocket *sock = gCoreContext->ConnectCommandSocket(
+                                            addr, port, ann, &mismatch);
+        if (sock)
+        {
+            ok = sock->SendReceiveStringList(*list);
+            sock->DecrRef();
+        }
+        else
+        {
+            list->clear();
+        }
+    }
+    else
+    {
+        ok = gCoreContext->SendReceiveStringList(*list);
+    }
+
+    // Should the SLAVE UNREACH test be here ?
+    return ok;
 }
 
 /* vim: set expandtab tabstop=4 shiftwidth=4: */

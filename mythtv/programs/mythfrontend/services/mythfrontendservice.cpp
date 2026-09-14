@@ -12,8 +12,8 @@
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythversion.h"
+#include "libmythbase/storagegroup.h"
 #include "libmythmetadata/videometadatalistmanager.h"
-#include "libmythmetadata/videoutils.h"
 #include "libmythtv/recordinginfo.h"
 #include "libmythtv/tv_actions.h"
 #include "libmythtv/tv_play.h"
@@ -192,10 +192,9 @@ bool MythFrontendService::SendNotification(bool  Error,                const QSt
 FrontendActionList* MythFrontendService::GetActionList(const QString& Context)
 {
     QVariantMap result;
-    QHashIterator<QString,QStringList> contexts(s_actions->Descriptions());
-    while (contexts.hasNext())
+    for (auto contexts = s_actions->Descriptions().cbegin();
+         contexts != s_actions->Descriptions().cend(); ++contexts)
     {
-        contexts.next();
         if (!Context.isEmpty() && contexts.key() != Context)
             continue;
 
@@ -346,7 +345,7 @@ bool MythFrontendService::PlayVideo(const QString& Id, bool UseBookmark)
         return false;
     }
 
-    QString mrl = generate_file_url("Videos", metadata->GetHost(), metadata->GetFilename());
+    QString mrl = StorageGroup::generate_file_url("Videos", metadata->GetHost(), metadata->GetFilename());
     LOG(VB_GENERAL, LOG_INFO, LOC + QString("PlayVideo ID: %1 UseBookmark: %2 URL: '%3'")
         .arg(id).arg(UseBookmark).arg(mrl));
 
@@ -364,6 +363,16 @@ bool MythFrontendService::PlayVideo(const QString& Id, bool UseBookmark)
     qApp->postEvent(GetMythMainWindow(), me);
     return true;
 }
+
+QString MythFrontendService::GetSetting(
+                            const QString &sKey,
+                            const QString &sDefault )
+{
+    if (sKey.isEmpty())
+        throw( QString("Missing or empty Key (settings.value)") );
+    return gCoreContext->GetSetting(sKey, sDefault);
+}
+
 
 FrontendStatus::FrontendStatus(QString Name, QString Version, QVariantMap State)
     : m_Name(std::move(Name)),
@@ -411,3 +420,5 @@ FrontendActionList::FrontendActionList(QVariantMap List)
     : m_ActionList(std::move(List))
 {
 }
+
+#include "moc_mythfrontendservice.cpp"

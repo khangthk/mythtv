@@ -23,7 +23,7 @@ MythVideoDRM::MythVideoDRM(MythVideoColourSpace* ColourSpace)
     if (m_colourSpace)
         m_colourSpace->IncrRef();
 
-    if (auto *drmdisplay = HasMythMainWindow() ? dynamic_cast<MythDisplayDRM*>(GetMythMainWindow()->GetDisplay()) : nullptr; drmdisplay)
+    if (auto *drmdisplay = HasMythMainWindow() ? qobject_cast<MythDisplayDRM*>(GetMythMainWindow()->GetDisplay()) : nullptr; drmdisplay)
     {
         if (m_device = drmdisplay->GetDevice(); m_device && m_device->Atomic() && m_device->Authenticated())
         {
@@ -144,3 +144,5 @@ bool MythVideoDRM::RenderFrame(AVDRMFrameDescriptor* DRMDesc, MythVideoFrame* Fr
 
     return m_device->QueueAtomics({{ id, m_videoPlane->m_fbIdProp->m_id, handle->GetFB() }});
 }
+
+#include "moc_mythvideodrm.cpp"

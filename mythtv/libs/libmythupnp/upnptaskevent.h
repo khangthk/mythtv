@@ -13,8 +13,11 @@
 #ifndef UPNPTASKEVENT_H
 #define UPNPTASKEVENT_H
 
-#include "libmythupnp/upnp.h"
-#include "libmythupnp/bufferedsocketdevice.h"
+#include <QChar> // Fix Qt6 GCC SFINAE warning
+#include <QByteArray>
+#include <QHostAddress>
+
+#include "libmythupnp/taskqueue.h"
 
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
@@ -49,7 +52,7 @@ class UPnpEventTask : public Task
             m_pPayload(pPayload)  // We take ownership of this pointer.
         {}
 
-        QString Name() override { return( "Event" ); } // Task
+        QString Name() override { return "Event"; } // Task
         void Execute( TaskQueue *pQueue ) override; // Task
 
 };

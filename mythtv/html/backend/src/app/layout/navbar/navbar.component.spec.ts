@@ -1,4 +1,4 @@
-import { HttpClientModule } from '@angular/common/http';
+import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 
@@ -10,10 +10,9 @@ describe('NavbarComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [ NavbarComponent ],
-      imports:      [ HttpClientModule,
-                      TranslateModule.forRoot() ]
-    })
+    imports: [TranslateModule.forRoot(), NavbarComponent],
+    providers: [provideHttpClient(withInterceptorsFromDi())]
+})
     .compileComponents();
   });
 

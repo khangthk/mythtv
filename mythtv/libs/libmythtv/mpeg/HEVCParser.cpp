@@ -3,7 +3,6 @@
 #include <iostream>
 
 #include "libmythbase/mythlogging.h"
-#include "recorders/dtvrecorder.h" // for FrameRate
 
 #include <cmath>
 #include <strings.h>
@@ -744,6 +743,8 @@ bool HEVCParser::profileTierLevel(BitReader& br,
 
     std::vector<bool> sub_layer_profile_present_flag;
     std::vector<bool> sub_layer_level_present_flag;
+    sub_layer_profile_present_flag.reserve(maxNumSubLayersMinus1);
+    sub_layer_level_present_flag.reserve(maxNumSubLayersMinus1);
     for (i = 0; i < maxNumSubLayersMinus1; ++i)
     {
         sub_layer_profile_present_flag.push_back(br.get_bits(1)); // u(1)
@@ -1092,7 +1093,7 @@ static bool shortTermRefPicSet(BitReader& br, int stRPSIdx,
         if (abs_delta_rps_minus1 > 32767)
             LOG(VB_RECORD, LOG_WARNING, LOC +
                 QString("Invalid abs_delta_rps_minus1"));
-        int deltaRPS = ( 1 - 2 * delta_rps_sign ) * ( abs_delta_rps_minus1 + 1 );
+        int deltaRPS = ( 1 - (2 * delta_rps_sign) ) * ( abs_delta_rps_minus1 + 1 );
 
         /*
           The variable RefRPSIdx is derived as follows:
@@ -1257,7 +1258,7 @@ bool HEVCParser::parseSliceSegmentHeader(BitReader& br)
     }
 
     int pps_id = br.get_ue_golomb(); // slice_pic_parameter_set_id; ue(v)
-    if (m_pps.find(pps_id) == m_pps.end())
+    if (!m_pps.contains(pps_id))
     {
         LOG(VB_RECORD, LOG_DEBUG, LOC +
             QString("PPS Id %1 not valid yet. Skipping parsing of slice.")
@@ -1588,10 +1589,12 @@ bool HEVCParser::parseSPS(BitReader& br)
     uint max_sub_layers_minus1 = 0;
 
     if (m_nuhLayerId == 0)
+    {
         max_sub_layers_minus1 = ext_or_max_sub_layers_minus1;
+    }
     else
     {
-        if (m_vps.find(vps_id) == m_vps.end())
+        if (!m_vps.contains(vps_id))
         {
             LOG(VB_RECORD, LOG_WARNING, LOC +
                 QString("Could not find VPS[%1]").arg(vps_id));
@@ -2067,8 +2070,8 @@ uint HEVCParser::pictureHeightCropped(void) const
                            m_frameCropBottomOffset) * crop_unit_y);
 }
 
-void HEVCParser::getFrameRate(FrameRate &result) const
+MythAVRational HEVCParser::getFrameRate() const
 {
-    result = (m_unitsInTick == 0) ? FrameRate(0) :
-             FrameRate(m_timeScale, m_unitsInTick);
+    return (m_unitsInTick == 0) ? MythAVRational(0) :
+             MythAVRational(m_timeScale, m_unitsInTick);
 }

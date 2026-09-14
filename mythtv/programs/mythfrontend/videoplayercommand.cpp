@@ -1,15 +1,17 @@
+// Standard UNIX C headers
+#include <algorithm>
+
 // Qt
 #include <QDir>
 
 // MythTV
-#include "libmyth/mythcontext.h"
 #include "libmythbase/lcddevice.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythmiscutil.h"
 #include "libmythbase/mythsystemlegacy.h"
-#include "libmythbase/remoteutil.h"
+#include "libmythbase/storagegroup.h"
 #include "libmythmetadata/dbaccess.h"
 #include "libmythmetadata/videometadata.h"
-#include "libmythmetadata/videoutils.h"
 #include "libmythui/mythmainwindow.h"
 
 // MythFrontend
@@ -188,7 +190,7 @@ class VideoPlayerCommandPrivate
     VideoPlayerCommandPrivate(const VideoPlayerCommandPrivate &other)
     {
         auto playerclone = [](auto *player) { return player->Clone(); };
-        std::transform(other.m_playerProcs.cbegin(), other.m_playerProcs.cend(),
+        std::ranges::transform(other.m_playerProcs,
                        std::back_inserter(m_playerProcs), playerclone);
     }
 
@@ -209,7 +211,7 @@ class VideoPlayerCommandPrivate
 
             if (item->IsHostSet())
             {
-                filename = generate_file_url("Videos", item->GetHost(),
+                filename = StorageGroup::generate_file_url("Videos", item->GetHost(),
                         item->GetFilename());
             }
             else
@@ -242,7 +244,7 @@ class VideoPlayerCommandPrivate
 
             if (item->IsHostSet())
             {
-                filename = generate_file_url("Videos", item->GetHost(),
+                filename = StorageGroup::generate_file_url("Videos", item->GetHost(),
                         item->GetFilename());
             }
             else
@@ -283,7 +285,7 @@ class VideoPlayerCommandPrivate
         auto sameext = [extension](const auto & fa)
             { return fa.extension.toLower() == extension.toLower() &&
                      !fa.use_default; };
-        auto fa = std::find_if(fa_list.cbegin(), fa_list.cend(), sameext);
+        auto fa = std::ranges::find_if(fa_list, sameext);
         if (fa != fa_list.cend())
             play_command = fa->playcommand;
 
@@ -329,7 +331,7 @@ class VideoPlayerCommandPrivate
     void Play() const
     {
         // Do this until one of the players returns true
-        (void)std::any_of(m_playerProcs.cbegin(), m_playerProcs.cend(),
+        (void)std::ranges::any_of(m_playerProcs,
                           [](auto *player){ return player->Play(); } );
     }
 

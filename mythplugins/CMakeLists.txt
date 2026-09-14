@@ -5,6 +5,13 @@
 #
 
 #
+# Catch running cmake in the wrong directory.
+#
+if(NOT SUPER_VERSION)
+  message(FATAL_ERROR "You must run cmake from the parent of this directory.")
+endif()
+
+#
 # Can use cmake features introduced in 3.20.  Super-project has already
 # validated the higher version required for android.
 #
@@ -29,13 +36,6 @@ endif()
 # From the sources:
 list(APPEND CMAKE_MODULE_PATH "${SUPER_SOURCE_DIR}/cmake")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-
-#
-# Require the C++17 standard, and allow compiler extensions.
-#
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS ON)
 
 #
 # Set CMake features
@@ -100,7 +100,6 @@ include(StaticAnalysis)
 #
 # Check compiler and installed header files
 #
-include(CompilerCaching)
 include(SetCompilerOptions)
 
 # Debian policy requires that shared libraries be installed without executable
@@ -118,7 +117,6 @@ message(VERBOSE "including MythFindFFmpeg")
 include(MythFindFFmpeg)
 message(VERBOSE "including MythFindQt")
 include(MythFindQt)
-add_compile_definitions(QT_DISABLE_DEPRECATED_BEFORE=${QT_MIN_VERSION_HEX})
 
 # Qt changes target build names. Reset them.
 include(ResetTargetSuffixes)

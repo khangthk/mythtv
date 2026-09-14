@@ -1,6 +1,7 @@
 // -*- Mode: c++ -*-
 
 // POSIX headers
+#include <algorithm>
 #include <chrono> // for milliseconds
 #include <fcntl.h>
 #include <sys/ioctl.h>
@@ -31,7 +32,7 @@ QMap<QString,DVBStreamHandler*> DVBStreamHandler::s_handlers;
 QMap<QString,uint>              DVBStreamHandler::s_handlersRefCnt;
 QMutex                          DVBStreamHandler::s_handlersLock;
 
-#if !defined(__suseconds_t)
+#ifndef __suseconds_t
 #ifdef Q_OS_MACOS
 using __suseconds_t = __darwin_suseconds_t;
 #else
@@ -234,7 +235,7 @@ void DVBStreamHandler::RunTS(void)
         else
         {
             // timeout gets reset by select, so we need to create new one
-            struct timeval timeout = { 0, k50Milliseconds };
+            struct timeval timeout = { .tv_sec=0, .tv_usec=k50Milliseconds };
             int ret = select(dvr_fd+1, &fd_select_set, nullptr, nullptr, &timeout);
             if (ret == -1 && errno != EINTR)
             {
@@ -399,7 +400,7 @@ void DVBStreamHandler::CycleFiltersByPriority(void)
     }
 
     for (auto & it : priority_queue)
-        std::sort(it.begin(), it.end());
+        std::ranges::sort(it);
 
     for (PIDPriority i = kPIDPriorityHigh; i > kPIDPriorityNone;
          i = (PIDPriority)((int)i-1))

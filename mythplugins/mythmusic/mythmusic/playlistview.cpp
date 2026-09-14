@@ -4,6 +4,7 @@
 #include <QKeyEvent>
 
 // MythTV
+#include <libmythbase/mythlogging.h>
 #include <libmythui/mythdialogbox.h>
 
 // mythmusic
@@ -55,3 +56,5 @@ bool PlaylistView::keyPressEvent(QKeyEvent *event)
 
     return handled;
 }
+
+#include "moc_playlistview.cpp"

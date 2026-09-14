@@ -5,7 +5,6 @@
 #include <QList>
 
 // MythTV headers
-#include <libmyth/mythcontext.h>
 #include <libmythui/mythdialogbox.h>
 #include <libmythui/mythmainwindow.h>
 #include <libmythui/mythscreentype.h>
@@ -71,6 +70,8 @@ class ScreenSetup : public MythScreenType
 
     bool Create(void) override; // MythScreenType
     bool keyPressEvent(QKeyEvent *event) override; // MythScreenType
+
+  protected:
     void customEvent(QEvent *event) override; // MythUIType
 
   protected slots:

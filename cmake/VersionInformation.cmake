@@ -17,7 +17,7 @@ endif()
 #
 
 # See mythtv/libs/libmythbase/mythversion.h.in
-set(MYTHTV_BINARY_CHANGED "20220913-1")
+set(MYTHTV_BINARY_CHANGED "20251207-1")
 set(MYTHTV_BINARY_VERSION "${PROJECT_VERSION_MAJOR}.${MYTHTV_BINARY_CHANGED}")
 
 # See mythtv/bindings/python/MythTV/static.py.in
@@ -40,9 +40,22 @@ set(MYTHTV_VERSION_MAJMIN ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR})
 include(VersionToNumber)
 set(QT5_MIN_VERSION_STR "5.15.2")
 set(QT6_MIN_VERSION_STR "6.4.0")
+if(QT_VERSION_MAJOR EQUAL 6)
+  set(QT_MIN_VERSION_STR ${QT6_MIN_VERSION_STR})
+else()
+  set(QT_MIN_VERSION_STR ${QT5_MIN_VERSION_STR})
+endif()
 version_to_number(QT_MIN_VERSION ${QT${QT_VERSION_MAJOR}_MIN_VERSION_STR} FALSE)
 version_to_number(QT_MIN_VERSION_HEX ${QT${QT_VERSION_MAJOR}_MIN_VERSION_STR}
                   TRUE)
 set(QT_PKG_NAME Qt${QT_VERSION_MAJOR})
 set(QT_PKG_NAME_UC QT${QT_VERSION_MAJOR})
 set(QT_PKG_NAME_LC qt${QT_VERSION_MAJOR})
+
+#
+# Qt deprecated code removed up to this version.  The compiler
+# argument is now version dependent, so its definition is in the
+# MythFindQt.cmake file after we know the current version.
+#
+set(QT5_DEPRECATION_FIXED "5.15.2")
+set(QT6_DEPRECATION_FIXED "6.10.0")

@@ -1,7 +1,10 @@
 // C++
+#include <algorithm>
 #include <utility>
 
 // MythTV
+#include "libmythbase/mythcorecontext.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythui/mythdialogbox.h"
 #include "libmythui/mythmainwindow.h"
 #include "libmythui/mythuitext.h"
@@ -16,7 +19,8 @@
 static QString clean_comment(const QString &comment)
 {
     QString result;
-    std::copy_if(comment.cbegin(), comment.cend(), std::back_inserter(result), [](QChar x) { return x.isPrint(); } );
+    std::ranges::copy_if(std::as_const(comment), std::back_inserter(result),
+                         [](QChar x) { return x.isPrint(); } );
     return result;
 }
 
@@ -152,17 +156,29 @@ bool GallerySlideView::keyPressEvent(QKeyEvent *event)
         handled = true;
 
         if (action == "LEFT")
+        {
             ShowPrevSlide(1);
+        }
         else if (action == "RIGHT")
+        {
             ShowNextSlide(1);
+        }
         else if (action == "UP")
+        {
             ShowPrevSlide(10);
+        }
         else if (action == "DOWN")
+        {
             ShowNextSlide(10);
+        }
         else if (action == "INFO")
+        {
             ShowInfo();
+        }
         else if (action == "MENU")
+        {
             MenuMain();
+        }
         else if (action == "PLAY")
         {
             if (m_playing)
@@ -276,7 +292,7 @@ void GallerySlideView::customEvent(QEvent *event)
     }
     else if (event->type() == DialogCompletionEvent::kEventType)
     {
-        auto *dce = (DialogCompletionEvent *)(event);
+        auto *dce = (DialogCompletionEvent *)event;
 
         QString resultid  = dce->GetId();
         int     buttonnum = dce->GetResult();
@@ -607,7 +623,7 @@ void GallerySlideView::ShowSlide(int direction)
 void GallerySlideView::SlideAvailable(int count)
 {
     // Transition speed = 0.5x for every slide waiting. Min = 1x, Max = Half buffer size
-    float speed = 0.5 + (count / 2.0);
+    float speed = 0.5F + (count / 2.0F);
 
     // Are we transitioning ?
     if (m_transitioning)
@@ -819,3 +835,10 @@ void GallerySlideView::ClearStatus(const Slide &slide)
         }
     }
 }
+
+void GallerySlideView::RepeatOn(int on)
+{
+    gCoreContext->SaveSetting("GalleryRepeat", on);
+}
+
+#include "moc_galleryslideview.cpp"

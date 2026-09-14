@@ -1,9 +1,10 @@
 #include <algorithm> // for min
 #include <cstdint>
 
+#include "libmythbase/mythconfig.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythlogging.h"
-#include "libmythbase/programinfo.h"
 
 #include "firewirerecorder.h"
 #include "recordingprofile.h"
@@ -30,10 +31,8 @@
 #include "ExternalChannel.h"
 #include "io/mythmediabuffer.h"
 #include "cardutil.h"
+#include "programinfo.h"
 #include "tv_rec.h"
-#if CONFIG_LIBMP3LAME
-#include "NuppelVideoRecorder.h"
-#endif
 #if CONFIG_V4L2
 #include "v4l2encrecorder.h"
 #include "v4lchannel.h"
@@ -155,9 +154,13 @@ void RecorderBase::SetNextRecording(const RecordingInfo *ri, MythMediaBuffer *Bu
 void RecorderBase::SetOption(const QString &name, const QString &value)
 {
     if (name == "videocodec")
+    {
         m_videocodec = value;
+    }
     else if (name == "videodevice")
+    {
         m_videodevice = value;
+    }
     else if (name == "tvformat")
     {
         m_ntsc = false;
@@ -208,7 +211,7 @@ void RecorderBase::SetIntOption(RecordingProfile *profile, const QString &name)
     if (setting)
         SetOption(name, setting->getValue().toInt());
     else
-        LOG(VB_GENERAL, LOG_ERR, LOC +
+        LOG(VB_GENERAL, LOG_WARNING, LOC +
             QString("SetIntOption(...%1): Option not in profile.").arg(name));
 }
 
@@ -218,7 +221,7 @@ void RecorderBase::SetStrOption(RecordingProfile *profile, const QString &name)
     if (setting)
         SetOption(name, setting->getValue());
     else
-        LOG(VB_GENERAL, LOG_ERR, LOC +
+        LOG(VB_GENERAL, LOG_WARNING, LOC +
             QString("SetStrOption(...%1): Option not in profile.").arg(name));
 }
 
@@ -371,7 +374,7 @@ bool RecorderBase::CheckForRingBufferSwitch(void)
         ResetForNewFile();
 
         m_videoAspect = m_videoWidth = m_videoHeight = 0;
-        m_frameRate = FrameRate(0);
+        m_frameRate = MythAVRational(0);
 
         SetRingBuffer(m_nextRingBuffer);
         SetRecording(m_nextRecording);
@@ -758,7 +761,7 @@ void RecorderBase::AspectChange(uint aspect, long long frame)
         else if (m_videoWidth && m_videoHeight)
             customAspect = m_videoWidth * 1000000 / m_videoHeight;
 
-        mark = (customAspect) ? MARK_ASPECT_CUSTOM : mark;
+        mark = customAspect ? MARK_ASPECT_CUSTOM : mark;
     }
     if (aspect == ASPECT_4_3)
         mark = MARK_ASPECT_4_3;
@@ -877,7 +880,7 @@ RecorderBase *RecorderBase::CreateRecorder(
 
     RecorderBase *recorder = nullptr;
     if (genOpt.m_inputType == "IMPORT")
-    {
+    { //NOLINT(bugprone-branch-clone)
         recorder = new ImportRecorder(tvrec);
     }
     else if (genOpt.m_inputType == "EXTERNAL")
@@ -885,10 +888,10 @@ RecorderBase *RecorderBase::CreateRecorder(
         if (dynamic_cast<ExternalChannel*>(channel))
             recorder = new ExternalRecorder(tvrec, dynamic_cast<ExternalChannel*>(channel));
     }
-#ifdef USING_V4L2
+#if CONFIG_V4L2
     else if ((genOpt.m_inputType == "MPEG") ||
-	     (genOpt.m_inputType == "HDPVR") ||
-	     (genOpt.m_inputType == "DEMO"))
+             (genOpt.m_inputType == "HDPVR") ||
+             (genOpt.m_inputType == "DEMO"))
     {
         recorder = new MpegRecorder(tvrec);
     }
@@ -899,18 +902,18 @@ RecorderBase *RecorderBase::CreateRecorder(
     }
 #else
     else if (genOpt.m_inputType == "DEMO")
-    {
+    { //NOLINT(bugprone-branch-clone)
         recorder = new ImportRecorder(tvrec);
     }
-#endif // USING_V4L2
-#ifdef USING_FIREWIRE
+#endif // CONFIG_V4L2
+#if CONFIG_FIREWIRE
     else if (genOpt.m_inputType == "FIREWIRE")
     {
         if (dynamic_cast<FirewireChannel*>(channel))
             recorder = new FirewireRecorder(tvrec, dynamic_cast<FirewireChannel*>(channel));
     }
-#endif // USING_FIREWIRE
-#ifdef USING_HDHOMERUN
+#endif // CONFIG_FIREWIRE
+#if CONFIG_HDHOMERUN
     else if (genOpt.m_inputType == "HDHOMERUN")
     {
         if (dynamic_cast<HDHRChannel*>(channel))
@@ -919,8 +922,8 @@ RecorderBase *RecorderBase::CreateRecorder(
             recorder->SetBoolOption("wait_for_seqstart", genOpt.m_waitForSeqstart);
         }
     }
-#endif // USING_HDHOMERUN
-#ifdef USING_CETON
+#endif // CONFIG_HDHOMERUN
+#if CONFIG_CETON
     else if (genOpt.m_inputType == "CETON")
     {
         if (dynamic_cast<CetonChannel*>(channel))
@@ -929,8 +932,8 @@ RecorderBase *RecorderBase::CreateRecorder(
             recorder->SetBoolOption("wait_for_seqstart", genOpt.m_waitForSeqstart);
         }
     }
-#endif // USING_CETON
-#ifdef USING_DVB
+#endif // CONFIG_CETON
+#if CONFIG_DVB
     else if (genOpt.m_inputType == "DVB")
     {
         if (dynamic_cast<DVBChannel*>(channel))
@@ -939,8 +942,8 @@ RecorderBase *RecorderBase::CreateRecorder(
             recorder->SetBoolOption("wait_for_seqstart", genOpt.m_waitForSeqstart);
         }
     }
-#endif // USING_DVB
-#ifdef USING_IPTV
+#endif // CONFIG_DVB
+#if CONFIG_IPTV
     else if (genOpt.m_inputType == "FREEBOX")
     {
         if (dynamic_cast<IPTVChannel*>(channel))
@@ -949,22 +952,22 @@ RecorderBase *RecorderBase::CreateRecorder(
             recorder->SetOption("mrl", genOpt.m_videoDev);
         }
     }
-#endif // USING_IPTV
-#ifdef USING_VBOX
+#endif // CONFIG_IPTV
+#if CONFIG_VBOX
     else if (genOpt.m_inputType == "VBOX")
     {
         if (dynamic_cast<IPTVChannel*>(channel))
             recorder = new IPTVRecorder(tvrec, dynamic_cast<IPTVChannel*>(channel));
     }
-#endif // USING_VBOX
-#ifdef USING_SATIP
+#endif // CONFIG_VBOX
+#if CONFIG_SATIP
     else if (genOpt.m_inputType == "SATIP")
     {
         if (dynamic_cast<SatIPChannel*>(channel))
             recorder = new SatIPRecorder(tvrec, dynamic_cast<SatIPChannel*>(channel));
     }
-#endif // USING_SATIP
-#ifdef USING_ASI
+#endif // CONFIG_SATIP
+#if CONFIG_ASI
     else if (genOpt.m_inputType == "ASI")
     {
         if (dynamic_cast<ASIChannel*>(channel))
@@ -973,15 +976,7 @@ RecorderBase *RecorderBase::CreateRecorder(
             recorder->SetBoolOption("wait_for_seqstart", genOpt.m_waitForSeqstart);
         }
     }
-#endif // USING_ASI
-#if CONFIG_LIBMP3LAME && defined(USING_V4L2)
-    else if (CardUtil::IsV4L(genOpt.m_inputType))
-    {
-        // V4L/MJPEG/GO7007 from here on
-        recorder = new NuppelVideoRecorder(tvrec, channel);
-        recorder->SetBoolOption("skipbtaudio", genOpt.m_skipBtAudio);
-    }
-#endif // USING_V4L2
+#endif // CONFIG_ASI
 
     if (recorder)
     {

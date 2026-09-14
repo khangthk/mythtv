@@ -10,6 +10,7 @@
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythtimer.h"
 #include "libmythupnp/ssdp.h"
+#include "libmythupnp/ssdpcache.h"
 
 #include "cardutil.h"
 #include "satiputils.h"
@@ -41,7 +42,7 @@ QStringList SatIP::probeDevices(void)
         if (searchTime.elapsed() > 249ms && ttl > 1s)
         {
             auto ttl_s = duration_cast<std::chrono::seconds>(ttl);
-            LOG(VB_GENERAL, LOG_DEBUG, LOC + QString("UPNP search %1 ms")
+            LOG(VB_GENERAL, LOG_DEBUG, LOC + QString("UPNP search %1 secs")
                 .arg(ttl_s.count()));
             SSDP::Instance()->PerformSearch(SATIP_URI, ttl_s);
             searchTime.start();
@@ -55,7 +56,7 @@ QStringList SatIP::doUPNPsearch(bool loginfo)
 {
     QStringList result;
 
-    SSDPCacheEntries *satipservers = SSDP::Find(SATIP_URI);
+    SSDPCacheEntries *satipservers = SSDPCache::Instance()->Find(SATIP_URI);
 
     if (!satipservers)
     {
@@ -73,7 +74,7 @@ QStringList SatIP::doUPNPsearch(bool loginfo)
     }
     else
     {
-        LOG(VB_GENERAL, LOG_ERR, LOC + "No UPnP Sat>IP servers found, but SSDP::Find() != NULL");
+        LOG(VB_GENERAL, LOG_ERR, LOC + "No UPnP Sat>IP servers found, but SSDPCache::Instance()->Find() != NULL");
     }
 
     EntryMap map;
@@ -100,6 +101,7 @@ QStringList SatIP::doUPNPsearch(bool loginfo)
             {
                 QStringList caps = attrib.m_sValue.split(",");
 
+                int tuner_id = 0;
                 for (const auto& cap : std::as_const(caps))
                 {
                     QStringList tuner = cap.split("-");
@@ -114,9 +116,10 @@ QStringList SatIP::doUPNPsearch(bool loginfo)
                                             .arg(id,
                                                  friendlyName.remove(" "),
                                                  ip,
-                                                 QString::number(i),
+                                                 QString::number(tuner_id),
                                                  tuner.at(0));
                         result << device;
+                        tuner_id++;
                         if (loginfo)
                         {
                             LOG(VB_GENERAL, LOG_INFO, LOC + QString("Found %1").arg(device));
@@ -137,7 +140,7 @@ QStringList SatIP::doUPNPsearch(bool loginfo)
 QStringList SatIP::findServers(void)
 {
     QStringList devs;
-    SSDPCacheEntries *satipservers = SSDP::Find(SATIP_URI);
+    SSDPCacheEntries *satipservers = SSDPCache::Instance()->Find(SATIP_URI);
     if (satipservers && satipservers->Count() > 0)
     {
         devs = SatIP::doUPNPsearch(false);
@@ -171,31 +174,31 @@ CardUtil::INPUT_TYPES SatIP::toDVBInputType(const QString& deviceid)
     QStringList dev = deviceid.split(":");
     if (dev.length() < 3)
     {
-        return CardUtil::ERROR_UNKNOWN;
+        return CardUtil::INPUT_TYPES::ERROR_UNKNOWN;
     }
 
     QString type = dev.at(2).toUpper();
     if (type == "DVBC")
     {
-        return CardUtil::DVBC;
+        return CardUtil::INPUT_TYPES::DVBC;
     }
     if (type == "DVBC2")
     {
-        return CardUtil::DVBC; // DVB-C2 is not supported yet.
+        return CardUtil::INPUT_TYPES::DVBC; // DVB-C2 is not supported yet.
     }
     if (type == "DVBT")
     {
-        return CardUtil::DVBT;
+        return CardUtil::INPUT_TYPES::DVBT;
     }
     if (type == "DVBT2")
     {
-        return CardUtil::DVBT2;
+        return CardUtil::INPUT_TYPES::DVBT2;
     }
     if (type == "DVBS2")
     {
-        return CardUtil::DVBS2;
+        return CardUtil::INPUT_TYPES::DVBS2;
     }
-    return CardUtil::ERROR_UNKNOWN;
+    return CardUtil::INPUT_TYPES::ERROR_UNKNOWN;
 }
 
 int SatIP::toTunerType(const QString& deviceid)

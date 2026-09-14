@@ -3,7 +3,12 @@
 
 #include "mythsorthelper.h"
 
+// C++ headers
+#include <algorithm>
+
+// MythTV
 #include "mythcorecontext.h"
+#include "mythlogging.h"
 
 /**
  *  \brief Common code for creating a MythSortHelper object.
@@ -129,8 +134,7 @@ static std::shared_ptr<MythSortHelper> singleton = nullptr;
 std::shared_ptr<MythSortHelper> getMythSortHelper(void)
 {
     if (singleton == nullptr)
-        // coverity[resource_leak]
-        singleton = std::make_shared<MythSortHelper>(new MythSortHelper());
+        singleton = std::make_shared<MythSortHelper>();
     return singleton;
 }
 
@@ -203,7 +207,7 @@ QString MythSortHelper::doPathname(const QString& pathname) const
     QStringList parts = lpathname.split("/");
     // NOLINTNEXTLINE(modernize-loop-convert)
     for (int i = 0; i < parts.size(); ++i) {
-        if (std::any_of(m_exclList.cbegin(), m_exclList.cend(),
+        if (std::ranges::any_of(std::as_const(m_exclList),
                         [&parts,i](const QString& excl)
                             { return parts[i].startsWith(excl); } ))
             continue;

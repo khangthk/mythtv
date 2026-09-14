@@ -18,9 +18,11 @@
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
-#include "libmythbase/programinfo.h"
+#ifndef __cpp_size_t_suffix
 #include "libmythbase/sizetliteral.h"
+#endif
 
 #include "bytereader.h"
 #include "dtvrecorder.h"
@@ -32,6 +34,7 @@
 #include "mpeg/mpegstreamdata.h"
 #include "mpeg/mpegtables.h"
 #include "mythsystemevent.h"
+#include "programinfo.h"
 #include "tv_rec.h"
 
 #define LOC ((m_tvrec) ? \
@@ -53,7 +56,11 @@ DTVRecorder::DTVRecorder(TVRec *rec) :
     m_h2645Parser(reinterpret_cast<H2645Parser *>(new AVCParser))
 {
     SetPositionMapType(MARK_GOP_BYFRAME);
+#ifdef __cpp_size_t_suffix
+    m_payloadBuffer.reserve(TSPacket::kSize * (50UZ + 1));
+#else
     m_payloadBuffer.reserve(TSPacket::kSize * (50_UZ + 1));
+#endif
 
     DTVRecorder::ResetForNewFile();
 
@@ -196,7 +203,7 @@ void DTVRecorder::ClearStatistics(void)
     m_totalDuration              = 0;
     m_tdBase                     = 0;
     m_tdTickCount                = 0;
-    m_tdTickFramerate            = FrameRate(0);
+    m_tdTickFramerate            = MythAVRational(0);
 
 }
 
@@ -367,13 +374,13 @@ static QDateTime ts_to_qdatetime(
     return dt.addMSecs((pts - pts_first)/90);
 }
 
-static const std::array<const FrameRate,16> frameRateMap = {
-    FrameRate(0),  FrameRate(24000, 1001), FrameRate(24),
-    FrameRate(25), FrameRate(30000, 1001), FrameRate(30),
-    FrameRate(50), FrameRate(60000, 1001), FrameRate(60),
-    FrameRate(0),  FrameRate(0),           FrameRate(0),
-    FrameRate(0),  FrameRate(0),           FrameRate(0),
-    FrameRate(0)
+static const std::array<const MythAVRational,16> frameRateMap = {
+    MythAVRational(0),  MythAVRational(24000, 1001), MythAVRational(24),
+    MythAVRational(25), MythAVRational(30000, 1001), MythAVRational(30),
+    MythAVRational(50), MythAVRational(60000, 1001), MythAVRational(60),
+    MythAVRational(0),  MythAVRational(0),           MythAVRational(0),
+    MythAVRational(0),  MythAVRational(0),           MythAVRational(0),
+    MythAVRational(0)
 };
 
 /** \fn DTVRecorder::FindMPEG2Keyframes(const TSPacket* tspacket)
@@ -414,7 +421,7 @@ bool DTVRecorder::FindMPEG2Keyframes(const TSPacket* tspacket)
     // looking for first byte of MPEG start code (3 bytes 0 0 1)
     // otherwise, pick up search where we left off.
     const bool payloadStart = tspacket->PayloadStart();
-    m_startCode = (payloadStart) ? 0xffffffff : m_startCode;
+    m_startCode = payloadStart ? 0xffffffff : m_startCode;
 
     // Just make these local for efficiency reasons (gcc not so smart..)
     const uint maxKFD = kMaxKeyFrameDistance;
@@ -424,7 +431,7 @@ bool DTVRecorder::FindMPEG2Keyframes(const TSPacket* tspacket)
     uint aspectRatio = 0;
     uint height = 0;
     uint width = 0;
-    FrameRate frameRate(0);
+    MythAVRational frameRate {0};
 
     // Scan for PES header codes; specifically picture_start
     // sequence_start (SEQ) and group_start (GOP).
@@ -612,7 +619,9 @@ bool DTVRecorder::FindMPEG2Keyframes(const TSPacket* tspacket)
         m_bufferPackets = false;  // We now know if it is a keyframe, or not
         m_framesSeenCount++;
         if (!m_waitForKeyframeOption || m_firstKeyframe >= 0)
+        {
             UpdateFramesWritten();
+        }
         else
         {
             /* Found a frame that is not a keyframe, and we want to
@@ -744,8 +753,9 @@ void DTVRecorder::UpdateFramesWritten(void)
     m_tdTickCount += (2 + m_repeatPict);
     if (m_tdTickFramerate.isNonzero())
     {
-        m_totalDuration = m_tdBase + (int64_t) 500 * m_tdTickCount *
-            m_tdTickFramerate.getDen() / (double) m_tdTickFramerate.getNum();
+        // not 1000 since m_tdTickCount needs to be divided by 2 to get an equivalent frame count
+        m_totalDuration = m_tdBase + ((int64_t) 500 * m_tdTickCount *
+            m_tdTickFramerate.invert().toDouble());
     }
 
     if (m_framesWrittenCount < 2000 || m_framesWrittenCount % 1000 == 0)
@@ -896,7 +906,7 @@ bool DTVRecorder::FindH2645Keyframes(const TSPacket *tspacket)
     uint aspectRatio = 0;
     uint height = 0;
     uint width = 0;
-    FrameRate frameRate(0);
+    MythAVRational frameRate {0};
     SCAN_t scantype(SCAN_t::UNKNOWN_SCAN);
 
     bool hasFrame = false;
@@ -995,7 +1005,7 @@ bool DTVRecorder::FindH2645Keyframes(const TSPacket *tspacket)
                 height = m_h2645Parser->pictureHeight();
                 aspectRatio = m_h2645Parser->aspectRatio();
                 scantype = m_h2645Parser->GetScanType();
-                m_h2645Parser->getFrameRate(frameRate);
+                frameRate   = m_h2645Parser->getFrameRate();
             }
         }
     } // for (; i < TSPacket::kSize; ++i)
@@ -1037,7 +1047,9 @@ bool DTVRecorder::FindH2645Keyframes(const TSPacket *tspacket)
         m_bufferPackets = false;  // We now know if this is a keyframe
         m_framesSeenCount++;
         if (!m_waitForKeyframeOption || m_firstKeyframe >= 0)
+        {
             UpdateFramesWritten();
+        }
         else
         {
             /* Found a frame that is not a keyframe, and we want to
@@ -1129,7 +1141,7 @@ void DTVRecorder::FindPSKeyFrames(const uint8_t *buffer, uint len)
     uint aspectRatio = 0;
     uint height = 0;
     uint width = 0;
-    FrameRate frameRate(0);
+    MythAVRational frameRate {0};
 
     uint skip = std::max(m_audioBytesRemaining, m_otherBytesRemaining);
     while (bufptr + skip < bufend)

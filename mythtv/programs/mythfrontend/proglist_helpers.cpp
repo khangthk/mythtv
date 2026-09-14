@@ -1,6 +1,7 @@
 // MythTV
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythtv/channelinfo.h"
 #include "libmythtv/channelutil.h"
 #include "libmythtv/recordingrule.h"
@@ -269,7 +270,9 @@ void PowerSearchPopup::phraseClicked(MythUIButtonListItem *item)
     int pos = m_phraseList->GetCurrentPos();
 
     if (pos == 0)
+    {
         editClicked();
+    }
     else
     {
         emit haveResult(m_phraseList->GetValue());
@@ -551,3 +554,5 @@ void EditPowerSearchPopup::initLists(void)
             m_channelList->SetItemCurrent(m_channelList->GetCount() - 1);
     }
 }
+
+#include "moc_proglist_helpers.cpp"

@@ -9,11 +9,10 @@
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythsystemlegacy.h"
-#include "libmythbase/programinfo.h"
-#include "libmythbase/remoteutil.h"
 
 #include "cardutil.h"
 #include "mythsystemevent.h"
+#include "programinfo.h"
 
 #define LOC      QString("MythSystemEventHandler: ")
 
@@ -72,7 +71,7 @@ class SystemEventThread : public QRunnable
 /** \fn MythSystemEventHandler::MythSystemEventHandler(void)
  *  \brief Null Constructor
  *
- *  Adds this object as a gContext event listener.
+ *  Adds this object as a gCoreContext event listener.
  */
 MythSystemEventHandler::MythSystemEventHandler(void)
 {
@@ -83,7 +82,7 @@ MythSystemEventHandler::MythSystemEventHandler(void)
 /** \fn MythSystemEventHandler::~MythSystemEventHandler()
  *  \brief Destructor
  *
- *  Removes this object as a gContext event listener.
+ *  Removes this object as a gCoreContext event listener.
  */
 MythSystemEventHandler::~MythSystemEventHandler()
 {
@@ -187,14 +186,18 @@ void MythSystemEventHandler::SubstituteMatches(const QStringList &tokens,
     RecordingInfo recinfo(chanid, recstartts);
     bool loaded = recinfo.GetChanID() != 0U;
     if (loaded)
+    {
         recinfo.SubstituteMatches(command);
+    }
     else
     {
         // 2rd Try searching for RecordingInfo
         RecordingInfo::LoadStatus status = RecordingInfo::kNoProgram;
         RecordingInfo recinfo2(chanid, recstartts, false, 0h, &status);
         if (status == RecordingInfo::kFoundProgram)
+        {
             recinfo2.SubstituteMatches(command);
+        }
         else
         {
             // 3th just use what we know
@@ -230,7 +233,11 @@ QString MythSystemEventHandler::EventNameToSetting(const QString &name)
     for (const auto & part : std::as_const(parts))
     {
         result += part.at(0).toUpper();
-        result += part.mid(1);
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+        result += part.midRef(1);
+#else
+        result += QStringView(part).mid(1);
+#endif
     }
 
     return result;
@@ -474,4 +481,4 @@ MythSystemEventEditor::MythSystemEventEditor(MythScreenStack *parent,
         tr("Any event");
 }
 
-/* vim: set expandtab tabstop=4 shiftwidth=4: */
+#include "moc_mythsystemevent.cpp"

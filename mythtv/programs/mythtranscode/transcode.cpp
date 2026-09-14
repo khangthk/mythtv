@@ -16,24 +16,19 @@
 #include <QtAlgorithms>
 
 // MythTV
-#include "libmythbase/mythconfig.h"
-
-#include "libmyth/audio/audiooutput.h"
+#include "libmythtv/audio/audiooutput.h"
 #include "libmythbase/exitcodes.h"
 #include "libmythbase/mthreadpool.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdbcon.h"
-#include "libmythbase/programinfo.h"
-#include "libmythtv/HLS/httplivestream.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythtv/deletemap.h"
 #include "libmythtv/io/mythavformatwriter.h"
 #include "libmythtv/jobqueue.h"
 #include "libmythtv/mythavutil.h"
+#include "libmythtv/programinfo.h"
 #include "libmythtv/recordingprofile.h"
 #include "libmythtv/tvremoteutil.h"
-#if CONFIG_LIBMP3LAME
-#include "libmythtv/recorders/NuppelVideoRecorder.h"
-#endif
 
 // MythTranscode
 #include "audioreencodebuffer.h"
@@ -57,25 +52,10 @@ Transcode::Transcode(ProgramInfo *pginfo) :
 
 Transcode::~Transcode()
 {
-#if CONFIG_LIBMP3LAME
-    delete m_nvr;
-#endif
     SetPlayerContext(nullptr);
     delete m_outBuffer;
     delete m_fifow;
-    delete m_kfaTable;
     delete m_recProfile;
-}
-void Transcode::ReencoderAddKFA(long curframe, long lastkey, long num_keyframes)
-{
-    long delta = curframe - lastkey;
-    if (delta != 0 && delta != m_keyframeDist)
-    {
-        struct kfatable_entry kfate {};
-        kfate.adjust = m_keyframeDist - delta;
-        kfate.keyframe_number = num_keyframes;
-        m_kfaTable->push_back(kfate);
-    }
 }
 
 bool Transcode::GetProfile(const QString& profileName, const QString& encodingType,
@@ -128,7 +108,9 @@ bool Transcode::GetProfile(const QString& profileName, const QString& encodingTy
         int profileID = profileName.toInt(&isNum);
         // If a bad profile is specified, there will be trouble
         if (isNum && profileID > 0)
+        {
             m_recProfile->loadByID(profileID);
+        }
         else if (!m_recProfile->loadByGroup(profileName, "Transcoders"))
         {
             LOG(VB_GENERAL, LOG_ERR, QString("Couldn't find profile #: %1")
@@ -148,50 +130,6 @@ void Transcode::SetPlayerContext(PlayerContext *player_ctx)
     m_ctx = player_ctx;
 }
 
-#if CONFIG_LIBMP3LAME
-static QString get_str_option(RecordingProfile *profile, const QString &name)
-{
-    const StandardSetting *setting = profile->byName(name);
-    if (setting)
-        return setting->getValue();
-
-    LOG(VB_GENERAL, LOG_ERR, LOC +
-        QString("get_str_option(...%1): Option not in profile.").arg(name));
-
-    return {};
-}
-
-static int get_int_option(RecordingProfile *profile, const QString &name)
-{
-    QString ret_str = get_str_option(profile, name);
-    if (ret_str.isEmpty())
-        return 0;
-
-    bool ok = false;
-    int ret_int = ret_str.toInt(&ok);
-
-    if (!ok)
-    {
-        LOG(VB_GENERAL, LOG_ERR, LOC +
-            QString("get_int_option(...%1): Option is not an int.").arg(name));
-    }
-
-    return ret_int;
-}
-
-static bool get_bool_option(RecordingProfile *profile, const QString &name)
-{
-    return get_int_option(profile, name) != 0;
-}
-
-static void TranscodeWriteText(void *ptr, unsigned char *buf, int len,
-                               std::chrono::milliseconds timecode, int pagenr)
-{
-    auto *nvr = (NuppelVideoRecorder *)ptr;
-    nvr->WriteText(buf, len, timecode, pagenr);
-}
-#endif // CONFIG_LIBMP3LAME
-
 int Transcode::TranscodeFile(const QString &inputname,
                              const QString &outputname,
                              [[maybe_unused]] const QString &profileName,
@@ -207,47 +145,20 @@ int Transcode::TranscodeFile(const QString &inputname,
     int audioFrame = 0;
     std::unique_ptr<Cutter> cutter = nullptr;
     std::unique_ptr<MythAVFormatWriter> avfw = nullptr;
-    std::unique_ptr<MythAVFormatWriter> avfw2 = nullptr;
-    std::unique_ptr<HTTPLiveStream> hls = nullptr;
-    int hlsSegmentSize = 0;
-    int hlsSegmentFrames = 0;
 
     if (jobID >= 0)
         JobQueue::ChangeJobComment(jobID, "0% " + QObject::tr("Completed"));
 
-    if (m_hlsMode)
+    if (!m_avfMode && fifodir.isEmpty())
     {
-        m_avfMode = true;
-
-        if (m_hlsStreamID != -1)
-        {
-            hls = std::make_unique<HTTPLiveStream>(m_hlsStreamID);
-            hls->UpdateStatus(kHLSStatusStarting);
-            hls->UpdateStatusMessage("Transcoding Starting");
-            m_cmdWidth = hls->GetWidth();
-            m_cmdHeight = hls->GetHeight();
-            m_cmdBitrate = hls->GetBitrate();
-            m_cmdAudioBitrate = hls->GetAudioBitrate();
-        }
-    }
-
-    if (!m_avfMode)
-    {
-#if CONFIG_LIBMP3LAME
-        m_nvr = new NuppelVideoRecorder(nullptr, nullptr);
-#else
-        LOG(VB_GENERAL, LOG_ERR,
-            "Not compiled with libmp3lame support");
+        LOG(VB_GENERAL, LOG_ERR, "No output mode is set.");
         return REENCODE_ERROR;
-#endif
     }
 
     // Input setup
     auto *player_ctx = new PlayerContext(kTranscoderInUseID);
     player_ctx->SetPlayingInfo(m_proginfo);
-    MythMediaBuffer *rb = (hls && (m_hlsStreamID != -1)) ?
-        MythMediaBuffer::Create(hls->GetSourceFile(), false, false) :
-        MythMediaBuffer::Create(inputname, false, false);
+    MythMediaBuffer *rb = MythMediaBuffer::Create(inputname, false, false);
     if (!rb || !rb->GetLastError().isEmpty())
     {
         LOG(VB_GENERAL, LOG_ERR,
@@ -259,7 +170,7 @@ int Transcode::TranscodeFile(const QString &inputname,
     player_ctx->SetRingBuffer(rb);
     player_ctx->SetPlayer(new MythTranscodePlayer(player_ctx, static_cast<PlayerFlags>(kVideoIsNull | kNoITV)));
     SetPlayerContext(player_ctx);
-    auto * player = dynamic_cast<MythTranscodePlayer*>(GetPlayer());
+    auto * player = qobject_cast<MythTranscodePlayer*>(GetPlayer());
     if (player == nullptr)
     {
         LOG(VB_GENERAL, LOG_ERR,
@@ -328,7 +239,9 @@ int Transcode::TranscodeFile(const QString &inputname,
             }
         }
         if (cutStr.isEmpty())
+        {
             cutStr = "Is Empty";
+        }
         else if (cutStr.endsWith('-') && (total_frame_count > lastStart))
         {
             new_frame_count -= (total_frame_count - lastStart);
@@ -352,13 +265,8 @@ int Transcode::TranscodeFile(const QString &inputname,
     }
 
     player->GetAudio()->ReinitAudio();
-    QString encodingType = player->GetEncodingType();
-    bool copyvideo = false;
-    bool copyaudio = false;
 
     QString vidsetting = nullptr;
-    QString audsetting = nullptr;
-    QString vidfilters = nullptr;
 
     QSize buf_size = player->GetVideoBufferSize();
     int video_width = buf_size.width();
@@ -379,30 +287,10 @@ int Transcode::TranscodeFile(const QString &inputname,
     bool halfFramerate = false;
     bool skippedLastFrame = false;
 
-    m_kfaTable = new std::vector<struct kfatable_entry>;
-
     if (m_avfMode)
     {
         newWidth = m_cmdWidth;
         newHeight = m_cmdHeight;
-
-        // Absolutely no purpose is served by scaling video up beyond it's
-        // original resolution, quality is degraded, transcoding is
-        // slower and in future we may wish to scale bitrate according to
-        // resolution, so it would also waste bandwidth (when streaming)
-        //
-        // This change could be said to apply for all transcoding, but for now
-        // we're limiting it to HLS where it's uncontroversial
-        if (m_hlsMode)
-        {
-//             if (newWidth > video_width)
-//                 newWidth = video_width;
-            if (newHeight > video_height)
-            {
-                newHeight = video_height;
-                newWidth = 0;
-            }
-        }
 
         // TODO: is this necessary?  It got commented out, but may still be
         // needed.
@@ -410,9 +298,13 @@ int Transcode::TranscodeFile(const QString &inputname,
 
         // If height or width are 0, then we need to calculate them
         if (newHeight == 0 && newWidth > 0)
+        {
             newHeight = (int)(1.0F * newWidth / video_aspect);
+        }
         else if (newWidth == 0 && newHeight > 0)
+        {
             newWidth = (int)(1.0F * newHeight * video_aspect);
+        }
         else if (newWidth == 0 && newHeight == 0)
         {
             newHeight = 480;
@@ -446,87 +338,6 @@ int Transcode::TranscodeFile(const QString &inputname,
         avfw->SetAudioFrameRate(arb->m_eff_audiorate);
         avfw->SetAudioFormat(FORMAT_S16);
 
-        if (m_hlsMode)
-        {
-
-            if (m_hlsStreamID == -1)
-            {
-                hls = std::make_unique<HTTPLiveStream>(inputname, newWidth, newHeight,
-                                         m_cmdBitrate, m_cmdAudioBitrate,
-                                         m_hlsMaxSegments, 0, 0);
-
-                m_hlsStreamID = hls->GetStreamID();
-                if (!hls || m_hlsStreamID == -1)
-                {
-                    LOG(VB_GENERAL, LOG_ERR, "Unable to create new stream");
-                    SetPlayerContext(nullptr);
-                    return REENCODE_ERROR;
-                }
-            }
-
-            int segmentSize = hls->GetSegmentSize();
-
-            LOG(VB_GENERAL, LOG_NOTICE,
-                QString("HLS: Using segment size of %1 seconds")
-                    .arg(segmentSize));
-
-            if (!m_hlsDisableAudioOnly)
-            {
-                int audioOnlyBitrate = hls->GetAudioOnlyBitrate();
-
-                avfw2 = std::make_unique<MythAVFormatWriter>();
-                avfw2->SetContainer("mpegts");
-                avfw2->SetAudioCodec("aac");
-                avfw2->SetAudioBitrate(audioOnlyBitrate);
-                avfw2->SetAudioChannels(arb->m_channels);
-                avfw2->SetAudioFrameRate(arb->m_eff_audiorate);
-                avfw2->SetAudioFormat(FORMAT_S16);
-            }
-
-            avfw->SetContainer("mpegts");
-            avfw->SetVideoCodec("libx264");
-            avfw->SetAudioCodec("aac");
-            hls->UpdateStatus(kHLSStatusStarting);
-            hls->UpdateStatusMessage("Transcoding Starting");
-            hls->UpdateSizeInfo(newWidth, newHeight, video_width, video_height);
-
-            if (!hls->InitForWrite())
-            {
-                LOG(VB_GENERAL, LOG_ERR, "hls->InitForWrite() failed");
-                SetPlayerContext(nullptr);
-                return REENCODE_ERROR;
-            }
-
-            if (video_frame_rate > 30)
-            {
-                halfFramerate = true;
-                avfw->SetFramerate(video_frame_rate/2);
-
-                if (avfw2)
-                    avfw2->SetFramerate(video_frame_rate/2);
-
-                hlsSegmentSize = (int)(segmentSize * video_frame_rate / 2);
-            }
-            else
-            {
-                avfw->SetFramerate(video_frame_rate);
-
-                if (avfw2)
-                    avfw2->SetFramerate(video_frame_rate);
-
-                hlsSegmentSize = (int)(segmentSize * video_frame_rate);
-            }
-
-            avfw->SetKeyFrameDist(30);
-            if (avfw2)
-                avfw2->SetKeyFrameDist(30);
-
-            hls->AddSegment();
-            avfw->SetFilename(hls->GetCurrentFilename());
-            if (avfw2)
-                avfw2->SetFilename(hls->GetCurrentFilename(true));
-        }
-        else
         {
             avfw->SetContainer(m_cmdContainer);
             avfw->SetVideoCodec(m_cmdVideoCodec);
@@ -541,15 +352,12 @@ int Transcode::TranscodeFile(const QString &inputname,
         QString tune   = gCoreContext->GetSetting("HTTPLiveStreamTune", "film");
 
         LOG(VB_GENERAL, LOG_NOTICE,
-            QString("x264 HLS using: %1 threads, '%2' profile and '%3' tune")
+            QString("x264 using: %1 threads, '%2' profile and '%3' tune")
                 .arg(QString::number(threads), preset, tune));
 
         avfw->SetThreadCount(threads);
         avfw->SetEncodingPreset(preset);
         avfw->SetEncodingTune(tune);
-
-        if (avfw2)
-            avfw2->SetThreadCount(1);
 
         if (!avfw->Init())
         {
@@ -565,252 +373,8 @@ int Transcode::TranscodeFile(const QString &inputname,
             return REENCODE_ERROR;
         }
 
-        if (avfw2 && !avfw2->Init())
-        {
-            LOG(VB_GENERAL, LOG_ERR, "avfw2->Init() failed");
-            SetPlayerContext(nullptr);
-            return REENCODE_ERROR;
-        }
-
-        if (avfw2 && !avfw2->OpenFile())
-        {
-            LOG(VB_GENERAL, LOG_ERR, "avfw2->OpenFile() failed");
-            SetPlayerContext(nullptr);
-            return REENCODE_ERROR;
-        }
-
         arb->m_audioFrameSize = avfw->GetAudioFrameSize() * arb->m_channels * 2;
     }
-#if CONFIG_LIBMP3LAME 
-    else if (fifodir.isEmpty())
-    {
-        if (!GetProfile(profileName, encodingType, video_height,
-                        (int)round(video_frame_rate))) {
-            LOG(VB_GENERAL, LOG_ERR, "Transcoding aborted, no profile found.");
-            SetPlayerContext(nullptr);
-            return REENCODE_ERROR;
-        }
-
-        // For overriding settings on the command line
-        QMap<QString, QString> recorderOptionsMap;
-        if (!m_recorderOptions.isEmpty())
-        {
-            QStringList options = m_recorderOptions
-                .split(",", Qt::SkipEmptyParts);
-            int loop = 0;
-            while (loop < options.size())
-            {
-                QStringList tokens = options[loop].split("=");
-                if (tokens.length() < 2)
-                {
-                    LOG(VB_GENERAL, LOG_ERR, "Transcoding aborted, invalid option settings.");
-                    return REENCODE_ERROR;
-                }
-                recorderOptionsMap[tokens[0]] = tokens[1];
-
-                loop++;
-            }
-        }
-
-        vidsetting = get_str_option(m_recProfile, "videocodec");
-        audsetting = get_str_option(m_recProfile, "audiocodec");
-        vidfilters = get_str_option(m_recProfile, "transcodefilters");
-
-        if (encodingType == "MPEG-2" &&
-            get_bool_option(m_recProfile, "transcodelossless"))
-        {
-            LOG(VB_GENERAL, LOG_NOTICE, "Switching to MPEG-2 transcoder.");
-            SetPlayerContext(nullptr);
-            return REENCODE_MPEG2TRANS;
-        }
-
-        // Recorder setup
-        if (get_bool_option(m_recProfile, "transcodelossless"))
-        {
-            vidsetting = encodingType;
-            audsetting = "MP3";
-        }
-        else if (get_bool_option(m_recProfile, "transcoderesize"))
-        {
-            int actualHeight = (video_height == 1088 ? 1080 : video_height);
-
-            //player->SetVideoFilters(vidfilters);
-            newWidth = get_int_option(m_recProfile, "width");
-            newHeight = get_int_option(m_recProfile, "height");
-
-            // If height or width are 0, then we need to calculate them
-            if (newHeight == 0 && newWidth > 0)
-                newHeight = (int)(1.0 * newWidth * actualHeight / video_width);
-            else if (newWidth == 0 && newHeight > 0)
-                newWidth = (int)(1.0 * newHeight * video_width / actualHeight);
-            else if (newWidth == 0 && newHeight == 0)
-            {
-                newHeight = 480;
-                newWidth = (int)(1.0 * 480 * video_width / actualHeight);
-                if (newWidth > 640)
-                {
-                    newWidth = 640;
-                    newHeight = (int)(1.0 * 640 * actualHeight / video_width);
-                }
-            }
-
-            if (encodingType.startsWith("mpeg", Qt::CaseInsensitive))
-            {
-                // make sure dimensions are valid for MPEG codecs
-                newHeight = (newHeight + 15) & ~0xF;
-                newWidth  = (newWidth  + 15) & ~0xF;
-            }
-
-            LOG(VB_GENERAL, LOG_INFO, QString("Resizing from %1x%2 to %3x%4")
-                    .arg(video_width).arg(video_height)
-                    .arg(newWidth).arg(newHeight));
-        }
-        else  // lossy and no resize
-        {
-            //player->SetVideoFilters(vidfilters);
-        }
-
-        // this is ripped from tv_rec SetupRecording. It'd be nice to merge
-        m_nvr->SetOption("inpixfmt", FMT_YV12);
-
-        m_nvr->SetOption("width", newWidth);
-        m_nvr->SetOption("height", newHeight);
-
-        m_nvr->SetOption("tvformat", gCoreContext->GetSetting("TVFormat"));
-        m_nvr->SetOption("vbiformat", gCoreContext->GetSetting("VbiFormat"));
-
-        m_nvr->SetFrameRate(video_frame_rate);
-        m_nvr->SetVideoAspect(video_aspect);
-        m_nvr->SetTranscoding(true);
-
-        if ((vidsetting == "MPEG-4") ||
-            (recorderOptionsMap["videocodec"] == "mpeg4"))
-        {
-            m_nvr->SetOption("videocodec", "mpeg4");
-
-            m_nvr->SetIntOption(m_recProfile, "mpeg4bitrate");
-            m_nvr->SetIntOption(m_recProfile, "scalebitrate");
-            m_nvr->SetIntOption(m_recProfile, "mpeg4maxquality");
-            m_nvr->SetIntOption(m_recProfile, "mpeg4minquality");
-            m_nvr->SetIntOption(m_recProfile, "mpeg4qualdiff");
-            m_nvr->SetIntOption(m_recProfile, "mpeg4optionvhq");
-            m_nvr->SetIntOption(m_recProfile, "mpeg4option4mv");
-#ifdef USING_FFMPEG_THREADS
-            m_nvr->SetIntOption(m_recProfile, "encodingthreadcount");
-#endif
-        }
-        else if ((vidsetting == "MPEG-2") ||
-                 (recorderOptionsMap["videocodec"] == "mpeg2video"))
-        {
-            m_nvr->SetOption("videocodec", "mpeg2video");
-
-            m_nvr->SetIntOption(m_recProfile, "mpeg2bitrate");
-            m_nvr->SetIntOption(m_recProfile, "scalebitrate");
-#ifdef USING_FFMPEG_THREADS
-            m_nvr->SetIntOption(m_recProfile, "encodingthreadcount");
-#endif
-        }
-        else if ((vidsetting == "RTjpeg") ||
-                 (recorderOptionsMap["videocodec"] == "rtjpeg"))
-        {
-            m_nvr->SetOption("videocodec", "rtjpeg");
-            m_nvr->SetIntOption(m_recProfile, "rtjpegquality");
-            m_nvr->SetIntOption(m_recProfile, "rtjpegchromafilter");
-            m_nvr->SetIntOption(m_recProfile, "rtjpeglumafilter");
-        }
-        else if (vidsetting.isEmpty())
-        {
-            LOG(VB_GENERAL, LOG_ERR, "No video information found!");
-            LOG(VB_GENERAL, LOG_ERR, "Please ensure that recording profiles "
-                                     "for the transcoder are set");
-            SetPlayerContext(nullptr);
-            return REENCODE_ERROR;
-        }
-        else
-        {
-            LOG(VB_GENERAL, LOG_ERR,
-                QString("Unknown video codec: %1").arg(vidsetting));
-            SetPlayerContext(nullptr);
-            return REENCODE_ERROR;
-        }
-
-        m_nvr->SetOption("samplerate", arb->m_eff_audiorate);
-        if (audsetting == "MP3")
-        {
-            m_nvr->SetOption("audiocompression", 1);
-            m_nvr->SetIntOption(m_recProfile, "mp3quality");
-            copyaudio = true;
-        }
-        else if (audsetting == "Uncompressed")
-        {
-            m_nvr->SetOption("audiocompression", 0);
-        }
-        else
-        {
-            LOG(VB_GENERAL, LOG_ERR,
-                QString("Unknown audio codec: %1").arg(audsetting));
-        }
-
-        m_nvr->AudioInit(true);
-
-        // For overriding settings on the command line
-        if (!recorderOptionsMap.empty())
-        {
-            QMap<QString, QString>::Iterator it;
-            QString key;
-            QString value;
-            for (it = recorderOptionsMap.begin();
-                 it != recorderOptionsMap.end(); ++it)
-            {
-                key   = it.key();
-                value = *it;
-
-                LOG(VB_GENERAL, LOG_NOTICE,
-                    QString("Forcing Recorder option '%1' to '%2'")
-                        .arg(key, value));
-
-                static const QRegularExpression kNonDigitRE { "\\D" };
-                if (value.contains(kNonDigitRE))
-                    m_nvr->SetOption(key, value);
-                else
-                    m_nvr->SetOption(key, value.toInt());
-
-                if (key == "width")
-                    newWidth  = (value.toInt() + 15) & ~0xF;
-                else if (key == "height")
-                    newHeight = (value.toInt() + 15) & ~0xF;
-                else if (key == "videocodec")
-                {
-                    if (value == "mpeg4")
-                        vidsetting = "MPEG-4";
-                    else if (value == "mpeg2video")
-                        vidsetting = "MPEG-2";
-                    else if (value == "rtjpeg")
-                        vidsetting = "RTjpeg";
-                }
-            }
-        }
-
-        if ((vidsetting == "MPEG-4") ||
-            (vidsetting == "MPEG-2"))
-            m_nvr->SetupAVCodecVideo();
-        else if (vidsetting == "RTjpeg")
-            m_nvr->SetupRTjpeg();
-
-        m_outBuffer = MythMediaBuffer::Create(outputname, true, false);
-        m_nvr->SetRingBuffer(m_outBuffer);
-        m_nvr->WriteHeader();
-        m_nvr->StreamAllocate();
-    }
-
-    if (vidsetting == encodingType && !framecontrol && !m_avfMode &&
-        fifodir.isEmpty() && honorCutList &&
-        video_width == newWidth && video_height == newHeight)
-    {
-        copyvideo = true;
-        LOG(VB_GENERAL, LOG_INFO, "Reencoding video in 'raw' mode");
-    }
-#endif // CONFIG_LIBMP3LAME
 
     if (honorCutList && !deleteMap.empty())
     {
@@ -830,7 +394,7 @@ int Transcode::TranscodeFile(const QString &inputname,
         }
     }
 
-    player->InitForTranscode(copyaudio, copyvideo);
+    player->InitForTranscode();
     if (player->IsErrored())
     {
         LOG(VB_GENERAL, LOG_ERR,
@@ -838,10 +402,6 @@ int Transcode::TranscodeFile(const QString &inputname,
         SetPlayerContext(nullptr);
         return REENCODE_ERROR;
     }
-
-    // must come after InitForTranscode - which creates the VideoOutput instance
-    if (m_hlsMode && player->GetVideoOutput())
-        player->GetVideoOutput()->SetDeinterlacing(true, false, DEINT_CPU | DEINT_MEDIUM);
 
     MythVideoFrame frame;
     // Do not use padding when compressing to RTjpeg or when in fifomode.
@@ -973,13 +533,6 @@ int Transcode::TranscodeFile(const QString &inputname,
         LOG(VB_GENERAL, LOG_INFO, "Created fifos. Waiting for connection.");
     }
 
-#if CONFIG_LIBMP3LAME
-    bool forceKeyFrames = (m_fifow == nullptr) ? framecontrol : false;
-    bool writekeyframe = true;
-    long lastKeyFrame = 0;
-    int num_keyframes = 0;
-#endif
-
     frm_dir_map_t::iterator dm_iter;
 
     int did_ff = 0;
@@ -1001,17 +554,12 @@ int Transcode::TranscodeFile(const QString &inputname,
     int wait_recover = 0;
     MythVideoOutput *videoOutput = player->GetVideoOutput();
     bool is_key = false;
-    bool first_loop = true;
     AVFrame imageIn;
     AVFrame imageOut;
     struct SwsContext  *scontext = nullptr;
 
     if (m_fifow)
         LOG(VB_GENERAL, LOG_INFO, "Dumping Video and Audio data to fifos");
-    else if (copyaudio)
-        LOG(VB_GENERAL, LOG_INFO, "Copying Audio while transcoding Video");
-    else if (m_hlsMode)
-        LOG(VB_GENERAL, LOG_INFO, "Transcoding for HTTP Live Streaming");
     else if (m_avfMode)
         LOG(VB_GENERAL, LOG_INFO, "Transcoding to libavformat container");
     else
@@ -1030,21 +578,9 @@ int Transcode::TranscodeFile(const QString &inputname,
     bool stopSignalled = false;
     MythVideoFrame *lastDecode = nullptr;
 
-    if (hls)
-    {
-        hls->UpdateStatus(kHLSStatusRunning);
-        hls->UpdateStatusMessage("Transcoding");
-    }
-
     while ((!stopSignalled) &&
            (lastDecode = videoBuffer->GetFrame(did_ff, is_key)))
     {
-        if (first_loop)
-        {
-            copyaudio = player->GetRawAudioState();
-            first_loop = false;
-        }
-
         float new_aspect = lastDecode->m_aspect;
 
         if (cutter)
@@ -1174,118 +710,6 @@ int Transcode::TranscodeFile(const QString &inputname,
             player->GetCC608Reader()->FlushTxtBuffers();
             lasttimecode = frame.m_timecode;
         }
-        else if (copyaudio)
-        {
-#if CONFIG_LIBMP3LAME
-            // Encoding from NuppelVideo to NuppelVideo with MP3 audio
-            // So let's not decode/reencode audio
-            if (!player->GetRawAudioState())
-            {
-                // The Raw state changed during decode.  This is not good
-                LOG(VB_GENERAL, LOG_ERR, "Transcoding aborted, MythPlayer "
-                                         "is not in raw audio mode.");
-
-                unlink(outputname.toLocal8Bit().constData());
-                SetPlayerContext(nullptr);
-                if (videoBuffer)
-                    videoBuffer->stop();
-                if (hls)
-                {
-                    hls->UpdateStatus(kHLSStatusErrored);
-                    hls->UpdateStatusMessage("Transcoding Errored");
-                }
-                return REENCODE_ERROR;
-            }
-
-            if (forceKeyFrames)
-                writekeyframe = true;
-            else
-            {
-                writekeyframe = is_key;
-                if (writekeyframe)
-                {
-                    // Currently, we don't create new sync frames,
-                    // (though we do create new 'I' frames), so we mark
-                    // the key-frames before deciding whether we need a
-                    // new 'I' frame.
-
-                    //need to correct the frame# and timecode here
-                    // Question:  Is it necessary to change the timecodes?
-                    long sync_offset =
-                        player->UpdateStoredFrameNum(curFrameNum);
-                    m_nvr->UpdateSeekTable(num_keyframes, sync_offset);
-                    ReencoderAddKFA(curFrameNum, lastKeyFrame, num_keyframes);
-                    num_keyframes++;
-                    lastKeyFrame = curFrameNum;
-
-                    if (did_ff)
-                        did_ff = 0;
-                }
-            }
-
-            if (did_ff == 1)
-            {
-                timecodeOffset += (frame.m_timecode - lasttimecode - vidFrameTimeMs);
-            }
-            lasttimecode = frame.m_timecode;
-// from here on the timecode is on the output time base
-            frame.m_timecode -= timecodeOffset;
-
-            if (!player->WriteStoredData(m_outBuffer, (did_ff == 0), timecodeOffset))
-            {
-                if (video_aspect != new_aspect)
-                {
-                    video_aspect = new_aspect;
-                    m_nvr->SetNewVideoParams(video_aspect);
-                }
-
-                QSize buf_size3 = player->GetVideoBufferSize();
-
-                if (video_width != buf_size3.width() ||
-                    video_height != buf_size3.height())
-                {
-                    video_width = buf_size3.width();
-                    video_height = buf_size3.height();
-
-                    LOG(VB_GENERAL, LOG_INFO,
-                        QString("Resizing from %1x%2 to %3x%4")
-                            .arg(video_width).arg(video_height)
-                            .arg(newWidth).arg(newHeight));
-
-                }
-
-                if (did_ff == 1)
-                {
-                  // Create a new 'I' frame if we just processed a cut.
-                  did_ff = 2;
-                  writekeyframe = true;
-                }
-
-                if (rescale)
-                {
-                    MythAVUtil::FillAVFrame(&imageIn, lastDecode);
-                    MythAVUtil::FillAVFrame(&imageOut, &frame);
-
-                    int bottomBand = (lastDecode->m_height == 1088) ? 8 : 0;
-                    scontext = sws_getCachedContext(scontext,
-                                   lastDecode->m_width, lastDecode->m_height, MythAVUtil::FrameTypeToPixelFormat(lastDecode->m_type),
-                                   frame.m_width, frame.m_height, MythAVUtil::FrameTypeToPixelFormat(frame.m_type),
-                                   SWS_FAST_BILINEAR, nullptr, nullptr, nullptr);
-
-                    sws_scale(scontext, imageIn.data, imageIn.linesize, 0,
-                              lastDecode->m_height - bottomBand,
-                              imageOut.data, imageOut.linesize);
-                }
-
-                m_nvr->WriteVideo(rescale ? &frame : lastDecode, true, writekeyframe);
-            }
-            player->GetCC608Reader()->FlushTxtBuffers();
-#else
-        LOG(VB_GENERAL, LOG_ERR,
-            "Not compiled with libmp3lame support. Should never get here");
-        return REENCODE_ERROR;
-#endif // CONFIG_LIBMP3LAME
-        }
         else
         {
             if (did_ff == 1)
@@ -1298,10 +722,6 @@ int Transcode::TranscodeFile(const QString &inputname,
             if (video_aspect != new_aspect)
             {
                 video_aspect = new_aspect;
-#if CONFIG_LIBMP3LAME
-                if (m_nvr)
-                    m_nvr->SetNewVideoParams(video_aspect);
-#endif
             }
 
 
@@ -1347,54 +767,17 @@ int Transcode::TranscodeFile(const QString &inputname,
                         std::chrono::milliseconds tc = ab->m_time - timecodeOffset;
                         avfw->WriteAudioFrame(buf, audioFrame, tc);
 
-                        if (avfw2)
-                        {
-                            if ((avfw2->GetTimecodeOffset() == -1ms) &&
-                                (avfw->GetTimecodeOffset() != -1ms))
-                            {
-                                avfw2->SetTimecodeOffset(
-                                    avfw->GetTimecodeOffset());
-                            }
-
-                            tc = ab->m_time - timecodeOffset;
-                            avfw2->WriteAudioFrame(buf, audioFrame, tc);
-                        }
-
                         ++audioFrame;
                     }
                 }
-#if CONFIG_LIBMP3LAME
-                else
-                {
-                    m_nvr->SetOption("audioframesize", ab->size());
-                    m_nvr->WriteAudio(buf, audioFrame++,
-                                      (ab->m_time - timecodeOffset));
-                    if (m_nvr->IsErrored())
-                    {
-                        LOG(VB_GENERAL, LOG_ERR,
-                            "Transcode: Encountered irrecoverable error in "
-                            "NVR::WriteAudio");
-                        SetPlayerContext(nullptr);
-                        if (videoBuffer)
-                            videoBuffer->stop();
-                        delete ab;
-                        return REENCODE_ERROR;
-                    }
-                }
-#endif
                 delete ab;
             }
 
             if (!m_avfMode)
             {
-#if CONFIG_LIBMP3LAME
-                player->GetCC608Reader()->
-                    TranscodeWriteText(&TranscodeWriteText, (void *)(m_nvr));
-#else
                 LOG(VB_GENERAL, LOG_ERR,
-                    "Not compiled with libmp3lame support");
+                    "AVFormat mode not set.");
                 return REENCODE_ERROR;
-#endif
             }
             lasttimecode = frame.m_timecode;
             frame.m_timecode -= timecodeOffset;
@@ -1409,39 +792,13 @@ int Transcode::TranscodeFile(const QString &inputname,
                 {
                     skippedLastFrame = false;
 
-                    if ((hls) &&
-                        (avfw->GetFramesWritten()) &&
-                        (hlsSegmentFrames > hlsSegmentSize) &&
-                        (avfw->NextFrameIsKeyFrame()))
-                    {
-                        hls->AddSegment();
-                        avfw->ReOpen(hls->GetCurrentFilename());
-
-                        if (avfw2)
-                            avfw2->ReOpen(hls->GetCurrentFilename(true));
-
-                        hlsSegmentFrames = 0;
-                    }
-
                     if (avfw->WriteVideoFrame(rescale ? &frame : lastDecode) > 0)
                     {
                         lastWrittenTime = frame.m_timecode + timecodeOffset;
-                        if (hls)
-                            ++hlsSegmentFrames;
                     }
 
                 }
             }
-#if CONFIG_LIBMP3LAME
-            else
-            {
-                if (forceKeyFrames)
-                    m_nvr->WriteVideo(rescale ? &frame : lastDecode, true, true);
-                else
-                    m_nvr->WriteVideo(rescale ? &frame : lastDecode);
-                lastWrittenTime = frame.m_timecode + timecodeOffset;
-            }
-#endif
         }
         if (MythDate::current() > statustime)
         {
@@ -1451,12 +808,6 @@ int Transcode::TranscodeFile(const QString &inputname,
                     QString("Processed: %1 of %2 frames(%3 seconds)").
                         arg(curFrameNum).arg((long)total_frame_count).
                         arg((long)(curFrameNum / video_frame_rate)));
-            }
-
-            if (hls && hls->CheckStop())
-            {
-                hls->UpdateStatus(kHLSStatusStopping);
-                stopSignalled = true;
             }
 
             statustime = MythDate::current().addSecs(5);
@@ -1487,24 +838,16 @@ int Transcode::TranscodeFile(const QString &inputname,
                     SetPlayerContext(nullptr);
                     if (videoBuffer)
                         videoBuffer->stop();
-                    if (hls)
-                    {
-                        hls->UpdateStatus(kHLSStatusStopped);
-                        hls->UpdateStatusMessage("Transcoding Stopped");
-                    }
                     return REENCODE_STOPPED;
                 }
 
                 float flagFPS = 0.0;
-                float elapsed = flagTime.elapsed() / 1000.0;
+                float elapsed = flagTime.elapsed() / 1000.0F;
                 if (elapsed != 0.0F)
                     flagFPS = curFrameNum / elapsed;
 
                 total_frame_count = player->GetCurrentFrameCount();
                 int percentage = curFrameNum * 100 / total_frame_count;
-
-                if (hls)
-                    hls->UpdatePercentComplete(percentage);
 
                 if (jobID >= 0)
                 {
@@ -1536,9 +879,6 @@ int Transcode::TranscodeFile(const QString &inputname,
         if (avfw)
             avfw->CloseFile();
 
-        if (avfw2)
-            avfw2->CloseFile();
-
         if (!m_avfMode && m_proginfo)
         {
             m_proginfo->ClearPositionMap(MARK_KEYFRAME);
@@ -1546,32 +886,8 @@ int Transcode::TranscodeFile(const QString &inputname,
             m_proginfo->ClearPositionMap(MARK_GOP_BYFRAME);
             m_proginfo->ClearPositionMap(MARK_DURATION_MS);
         }
-
-#if CONFIG_LIBMP3LAME
-        if (m_nvr)
-        {
-            m_nvr->WriteSeekTable();
-            if (!m_kfaTable->empty())
-                m_nvr->WriteKeyFrameAdjustTable(*m_kfaTable);
-        }
-#endif // CONFIG_LIBMP3LAME
     } else {
         m_fifow->FIFODrain();
-    }
-
-    if (hls)
-    {
-        if (!stopSignalled)
-        {
-            hls->UpdateStatus(kHLSStatusCompleted);
-            hls->UpdateStatusMessage("Transcoding Completed");
-            hls->UpdatePercentComplete(100);
-        }
-        else
-        {
-            hls->UpdateStatus(kHLSStatusStopped);
-            hls->UpdateStatusMessage("Transcoding Stopped");
-        }
     }
 
     if (videoBuffer)

@@ -8,9 +8,13 @@
 #ifndef MYTHFEXML_H_
 #define MYTHFEXML_H_
 
-#include "libmyth/mythcontext.h"
+#include <cstdint>
+
+#include <QString>
+#include <QStringList>
+
 #include "libmythupnp/eventing.h"
-#include "libmythupnp/upnp.h"
+#include "libmythupnp/httprequest.h"
 
 enum MythFEXMLMethod : std::uint8_t
 {
@@ -18,7 +22,6 @@ enum MythFEXMLMethod : std::uint8_t
     MFEXML_GetServiceDescription,
     MFEXML_GetScreenShot,
     MFEXML_ActionListTest,
-    MFEXML_GetRemote,
 };
 
 class MythFEXML : public Eventing
@@ -47,7 +50,6 @@ class MythFEXML : public Eventing
 
     static void GetScreenShot    ( HTTPRequest *pRequest );
     static void GetActionListTest( HTTPRequest *pRequest );
-    static void GetRemote        ( HTTPRequest *pRequest );
 
   public:
     MythFEXML( UPnpDevice *pDevice ,  const QString &sSharePath);

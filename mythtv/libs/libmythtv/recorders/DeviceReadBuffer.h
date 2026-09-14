@@ -4,6 +4,7 @@
 #ifndef DEVICEREADBUFFER_H
 #define DEVICEREADBUFFER_H
 
+#include <array>
 #include <unistd.h>
 
 #include <QMutex>
@@ -11,7 +12,6 @@
 #include <QString>
 
 #include "libmythbase/mthread.h"
-#include "libmythbase/mythbaseutil.h"
 #include "libmythbase/mythtimer.h"
 
 #include "mpeg/tspacket.h"
@@ -62,9 +62,10 @@ class DeviceReadBuffer : protected MThread
     uint Read(unsigned char *buf, uint count);
     uint GetUsed(void) const;
 
-  private:
+  protected:
     void run(void) override; // MThread
 
+  private:
     void SetPaused(bool val);
     void IncrWritePointer(uint len);
     void IncrReadPointer(uint len);
@@ -83,6 +84,10 @@ class DeviceReadBuffer : protected MThread
 
     bool CheckForErrors(ssize_t read_len, size_t requested_len, uint &errcnt);
     void ReportStats(void);
+
+    using pipe_fd_array = std::array<int,2>;
+    using pipe_flag_array = std::array<long,2>;
+    static void setup_pipe(pipe_fd_array& mypipe, pipe_flag_array& myflags);
 
     QString                 m_videoDevice;
     int                     m_streamFd              {-1};

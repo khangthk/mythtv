@@ -4,12 +4,17 @@
 #define DVB_DESCRIPTORS_H
 
 #include <cassert>
+#include <cstdint>
+#include <ctime>
 
+using uint = unsigned int;
+
+#include <QDateTime>
 #include <QMutex>
 #include <QString>
 
-#include "libmythbase/programinfo.h" // for subtitle types and audio and video properties
 #include "libmythtv/mythtvexp.h" // MTV_PUBLIC - Symbol Visibility
+#include "libmythtv/programinfo.h" // for subtitle types and audio and video properties
 #include "mpegdescriptors.h"
 
 MTV_PUBLIC QDateTime dvbdate2qt(const unsigned char *buf);
@@ -862,7 +867,7 @@ class SatelliteDeliverySystemDescriptor : public MPEGDescriptor
     double OrbitalPositionFloat()  const
         { return ((double) OrbitalPosition()) / 10.0; }
     /// west_east_flag          1   8.0
-    bool IsEast(void)             const { return ( (m_data[8]&0x80) ) != 0; }
+    bool IsEast(void)             const { return (m_data[8]&0x80) != 0; }
     bool IsWest(void)             const { return !IsEast(); }
     // polarization             2   8.1
     uint Polarization(void)       const { return (m_data[8]>>5)&0x3; }
@@ -2652,6 +2657,8 @@ class FreesatLCNDescriptor : public MPEGDescriptor
         MPEGDescriptor(data, len, PrivateDescriptorID::freesat_lcn_table)
     {
         assert(m_data && PrivateDescriptorID::freesat_lcn_table== DescriptorTag());
+        if (nullptr == m_data) // assert is disabled when NDEBUG is defined
+            return;
 
         const unsigned char *payload = &data[2];
 
@@ -2717,6 +2724,8 @@ class FreesatRegionDescriptor : public MPEGDescriptor
         MPEGDescriptor(data, len, PrivateDescriptorID::freesat_region_table)
     {
         assert(m_data && PrivateDescriptorID::freesat_region_table == DescriptorTag());
+        if (nullptr == m_data) // assert is disabled when NDEBUG is defined
+            return;
 
         const unsigned char *payload = &data[2];
 

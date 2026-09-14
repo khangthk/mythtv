@@ -1,4 +1,31 @@
 /* You can add global styles to this file, and also import other style files */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+/* This is the usgae for when we get to tailwindcss V4 */
+/* @import "tailwindcss" source("./"); */
+
+h1 {
+  font-size: 2rem;
+  font-weight: bold;
+  color: var(--p-text-color)
+}
+
+h2 {
+  font-size: x-large;
+  font-weight: bold;
+  color: var(--p-text-color)
+}
+
+h3 {
+  font-size: large;
+  font-weight: bold;
+  color: var(--p-text-color)
+}
+
+input {
+    border-width: 2px;
+}
 
 html, body { height: 100%; }
 /* body { margin: 0; font-family: Roboto, "Helvetica Neue", sans-serif;}  */
@@ -11,7 +38,7 @@ body {
 	background-color: var(--surface-a);
 	font-family: var(--font-family);
 	font-weight: normal;
-	color: var(--text-color);
+	color: var(--p-text-color);
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 }
@@ -64,4 +91,8 @@ div.debug2{
 div.debug3{
   border-style: solid;
   border-color: green;
+}
+
+.form-group {
+    padding-top: 1rem;
 }

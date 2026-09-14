@@ -4,15 +4,16 @@
 #include "jitterometer.h"
 
 // Std
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdlib>
 #include <utility>
 
-#if defined(__linux__) || defined(Q_OS_ANDROID)
+#if defined(Q_OS_LINUX) || defined(Q_OS_ANDROID)
 static constexpr const char* UNIX_PROC_STAT { "/proc/stat" };
 #endif
-#if defined(__linux__) || defined(Q_OS_ANDROID) || defined(Q_OS_MACOS)
+#if defined(Q_OS_LINUX) || defined(Q_OS_ANDROID) || defined(Q_OS_MACOS)
 static constexpr size_t MAX_CORES { 8 };
 #endif
 
@@ -31,7 +32,7 @@ Jitterometer::Jitterometer(QString nname, int ncycles)
     if (m_name.isEmpty())
         m_name = "Jitterometer";
 
-#if defined(__linux__) || defined(Q_OS_ANDROID)
+#if defined(Q_OS_LINUX) || defined(Q_OS_ANDROID)
     // N.B. Access to /proc/stat was revoked on Android for API >=26 (Oreo)
     if (QFile::exists(UNIX_PROC_STAT))
     {
@@ -150,7 +151,7 @@ QString Jitterometer::GetCPUStat(void)
 {
     QString result = "N/A";
 
-#if defined(__linux__) || defined(Q_OS_ANDROID)
+#if defined(Q_OS_LINUX) || defined(Q_OS_ANDROID)
     if (m_cpuStat)
     {
         m_cpuStat->seek(0);
@@ -183,7 +184,7 @@ QString Jitterometer::GetCPUStat(void)
                 float total = load + stats[3] - m_lastStats[ptr + 3];
                 if (total > 0)
                     result += QString("%1% ").arg(load / total * 100, 0, 'f', 0);
-                std::copy(stats.cbegin(), stats.cend(), &m_lastStats[ptr]);
+                std::ranges::copy(stats, &m_lastStats[ptr]);
             }
             line = m_cpuStat->readLine(256);
             cores++;
@@ -193,9 +194,9 @@ QString Jitterometer::GetCPUStat(void)
 #endif
 
 #ifdef Q_OS_MACOS
-    processor_cpu_load_info_t load;
-    mach_msg_type_number_t    msgcount;
-    natural_t                 processorcount;
+    processor_cpu_load_info_t load = nullptr;
+    mach_msg_type_number_t    msgcount = 0;
+    natural_t                 processorcount = 0;
 
     if (host_processor_info(mach_host_self(), PROCESSOR_CPU_LOAD_INFO, &processorcount, (processor_info_array_t *)&load, &msgcount) == KERN_SUCCESS)
     {
@@ -211,7 +212,7 @@ QString Jitterometer::GetCPUStat(void)
             double totaldelta = stats[1] - m_lastStats[ptr + 1];
             if (totaldelta > 0)
                 result += QString("%1% ").arg(((totaldelta - idledelta) / totaldelta) * 100.0, 0, 'f', 0);
-            std::copy(stats.cbegin(), stats.cend(), &m_lastStats[ptr]);
+            std::ranges::copy(stats, &m_lastStats[ptr]);
             ptr += 2;
         }
     }

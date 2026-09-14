@@ -1,4 +1,5 @@
 // Qt headers
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QDateTime>
 #include <QDir>
 #include <QMap>
@@ -34,18 +35,18 @@ struct GrabberOpts {
 };
 
 static const QMap<GrabberType, GrabberOpts> grabberTypes {
-    { kGrabberMovie,      { "%1metadata/Movie/",
-                            "MovieGrabber",
-                            "metadata/Movie/tmdb3.py" } },
-    { kGrabberTelevision, { "%1metadata/Television/",
-                            "TelevisionGrabber",
-                            "metadata/Television/ttvdb4.py" } },
-    { kGrabberGame,       { "%1metadata/Game/",
-                            "mythgame.MetadataGrabber",
-                            "metadata/Game/giantbomb.py" } },
-    { kGrabberMusic,      { "%1metadata/Music",
-                            "",
-                            "" } }
+    { kGrabberMovie,      { .m_path="%1metadata/Movie/",
+                            .m_setting="MovieGrabber",
+                            .m_def="metadata/Movie/tmdb3.py" } },
+    { kGrabberTelevision, { .m_path="%1metadata/Television/",
+                            .m_setting="TelevisionGrabber",
+                            .m_def="metadata/Television/ttvdb4.py" } },
+    { kGrabberGame,       { .m_path="%1metadata/Game/",
+                            .m_setting="mythgame.MetadataGrabber",
+                            .m_def="metadata/Game/giantbomb.py" } },
+    { kGrabberMusic,      { .m_path="%1metadata/Music",
+                            .m_setting="",
+                            .m_def="" } }
 };
 
 static QMap<QString, GrabberType> grabberTypeStrings {
@@ -306,7 +307,11 @@ MetaGrabberScript::MetaGrabberScript(const QString &path)
         return;
 
     QDomDocument doc;
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     doc.setContent(result, true);
+#else
+    doc.setContent(result, QDomDocument::ParseOption::UseNamespaceProcessing);
+#endif
     QDomElement root = doc.documentElement();
     if (root.isNull())
         // no valid XML
@@ -401,7 +406,11 @@ MetadataLookupList MetaGrabberScript::RunGrabber(const QStringList &args,
     if (!result.isEmpty())
     {
         QDomDocument doc;
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
         doc.setContent(result, true);
+#else
+        doc.setContent(result, QDomDocument::ParseOption::UseNamespaceProcessing);
+#endif
         QDomElement root = doc.documentElement();
         QDomElement item = root.firstChildElement("item");
 

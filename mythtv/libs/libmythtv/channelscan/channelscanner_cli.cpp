@@ -29,6 +29,9 @@
 
 // MythTv headers
 #include "channelscanner_cli.h"
+
+#include "libmythbase/mythlogging.h"
+
 #include "channelscan_sm.h"
 #include "channelimporter.h"
 
@@ -40,12 +43,12 @@ void ChannelScannerCLI::HandleEvent(const ScannerEvent *scanEvent)
         (scanEvent->type() == ScannerEvent::kScanShutdown) ||
         (scanEvent->type() == ScannerEvent::kScanErrored))
     {
-        std::cout<<std::endl;
+        std::cout<<'\n';
 
         if (scanEvent->type() == ScannerEvent::kScanShutdown)
-            std::cerr<<"HandleEvent(void) -- scan shutdown"<<std::endl;
+            std::cerr<<"HandleEvent(void) -- scan shutdown\n";
         else
-            std::cerr<<"HandleEvent(void) -- scan complete"<<std::endl;
+            std::cerr<<"HandleEvent(void) -- scan complete\n";
 
         ScanDTVTransportList transports;
         if (m_sigmonScanner)
@@ -87,7 +90,7 @@ void ChannelScannerCLI::HandleEvent(const ScannerEvent *scanEvent)
     }
     else if (scanEvent->type() == ScannerEvent::kSetStatusSignalToNoise)
     {
-        m_statusSnr = scanEvent->intValue() / 65535.0;
+        m_statusSnr = scanEvent->intValue() / 65535.0F;
 }
 #if 0 // THESE_ARE_CURRENTLY_IGNORED
     else if (scanEvent->type() == ScannerEvent::kSetStatusTitleText)
@@ -140,7 +143,7 @@ void ChannelScannerCLI::InformUser(const QString &error)
 {
     if (VERBOSE_LEVEL_NONE())
     {
-        std::cerr<<"ERROR: "<<error.toLatin1().constData()<<std::endl;
+        std::cerr<<"ERROR: "<<error.toLatin1().constData()<<'\n';
     }
     else
     {

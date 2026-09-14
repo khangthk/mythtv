@@ -1,8 +1,11 @@
 #ifndef MYTHCORECONTEXT_H_
 #define MYTHCORECONTEXT_H_
 
+#include "mythconfig.h"
+
 #include <vector>
 
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QHostAddress>
 #include <QMetaMethod>
 #include <QObject>
@@ -12,29 +15,8 @@
 #include "mythbaseexp.h"
 #include "mythobservable.h"
 #include "mythsocket_cb.h"
-#include "mythlogging.h"
 #include "mythlocale.h"
 #include "mythsession.h"
-
-static constexpr const char * MYTH_APPNAME_MYTHBACKEND { "mythbackend" };
-static constexpr const char * MYTH_APPNAME_MYTHJOBQUEUE { "mythjobqueue" };
-static constexpr const char * MYTH_APPNAME_MYTHFRONTEND { "mythfrontend" };
-static constexpr const char * MYTH_APPNAME_MYTHTV_SETUP { "mythtv-setup" };
-static constexpr const char * MYTH_APPNAME_MYTHFILLDATABASE { "mythfilldatabase" };
-static constexpr const char * MYTH_APPNAME_MYTHCOMMFLAG { "mythcommflag" };
-static constexpr const char * MYTH_APPNAME_MYTHCCEXTRACTOR { "mythccextractor" };
-static constexpr const char * MYTH_APPNAME_MYTHPREVIEWGEN { "mythpreviewgen" };
-static constexpr const char * MYTH_APPNAME_MYTHTRANSCODE { "mythtranscode" };
-static constexpr const char * MYTH_APPNAME_MYTHWELCOME { "mythwelcome" };
-static constexpr const char * MYTH_APPNAME_MYTHSHUTDOWN { "mythshutdown" };
-static constexpr const char * MYTH_APPNAME_MYTHLCDSERVER { "mythlcdserver" };
-static constexpr const char * MYTH_APPNAME_MYTHAVTEST { "mythavtest" };
-static constexpr const char * MYTH_APPNAME_MYTHMEDIASERVER { "mythmediaserver" };
-static constexpr const char * MYTH_APPNAME_MYTHMETADATALOOKUP { "mythmetadatalookup" };
-static constexpr const char * MYTH_APPNAME_MYTHUTIL { "mythutil" };
-static constexpr const char * MYTH_APPNAME_MYTHSCREENWIZARD { "mythscreenwizard" };
-static constexpr const char * MYTH_APPNAME_MYTHFFPROBE { "mythffprobe" };
-static constexpr const char * MYTH_APPNAME_MYTHEXTERNRECORDER { "mythexternrecorder" };
 
 class MDBManager;
 class MythCoreContextPrivate;
@@ -72,6 +54,11 @@ class MBASE_PUBLIC MythCoreContext : public QObject, public MythObservable, publ
     void SetServerSocket(MythSocket *serverSock);
     void SetEventSocket(MythSocket *eventSock);
     void SetScheduler(MythScheduler *sched);
+
+    void connected(MythSocket *sock) override { (void)sock; } //MythSocketCBs
+    void connectionFailed(MythSocket *sock) override { (void)sock; } //MythSocketCBs
+    void connectionClosed(MythSocket *sock) override; // MythSocketCBs
+    void readyRead(MythSocket *sock) override; // MythSocketCBs
 
     bool SafeConnectToMasterServer(bool blockingClient = true,
                                    bool openEventSocket = true);
@@ -151,9 +138,13 @@ class MBASE_PUBLIC MythCoreContext : public QObject, public MythObservable, publ
     QString GetSetting(const QString &key, const QString &defaultval = "");
     // No conversion between duration ratios. Just extract the number.
     template <typename T>
-        typename std::enable_if_t<std::chrono::__is_duration<T>::value, void>
-        SaveDurSetting(const QString &key, T newValue)
-        { SaveSetting(key, static_cast<int>(newValue.count())); }
+    void SaveDurSetting(const QString &key, T newValue)
+#if HAVE_IS_DURATION_V
+    requires (std::chrono::__is_duration_v<T>)
+#else
+    requires (std::chrono::__is_duration<T>::value)
+#endif
+    { SaveSetting(key, static_cast<int>(newValue.count())); }
 
     bool SaveSettingOnHost(const QString &key, const QString &newValue,
                            const QString &host);
@@ -164,8 +155,12 @@ class MBASE_PUBLIC MythCoreContext : public QObject, public MythObservable, publ
     bool GetBoolSetting(const QString &key, bool defaultval = false);
     int GetNumSetting(const QString &key, int defaultval = 0);
     template <typename T>
-        typename std::enable_if_t<std::chrono::__is_duration<T>::value, T>
-        GetDurSetting(const QString &key, T defaultval = T::zero())
+    T GetDurSetting(const QString &key, T defaultval = T::zero())
+#if HAVE_IS_DURATION_V
+    requires (std::chrono::__is_duration_v<T>)
+#else
+    requires (std::chrono::__is_duration<T>::value)
+#endif
     { return T(GetNumSetting(key, static_cast<int>(defaultval.count()))); }
     int GetBoolSetting(const QString &key, int defaultval) = delete;
     bool GetNumSetting(const QString &key, bool defaultvalue) = delete;
@@ -218,6 +213,7 @@ class MBASE_PUBLIC MythCoreContext : public QObject, public MythObservable, publ
                                   bool keepscope = false) ;
     bool CheckSubnet(const QAbstractSocket *socket);
     bool CheckSubnet(const QHostAddress &peer);
+    bool IsLocalSubnet(const QHostAddress &peer, bool log);
 
     void ClearSettingsCache(const QString &myKey = QString(""));
     void ActivateSettingsCache(bool activate = true);
@@ -251,8 +247,8 @@ class MBASE_PUBLIC MythCoreContext : public QObject, public MythObservable, publ
     void RegisterForPlayback(QObject *sender, PlaybackStartCb method);
 
     template <class OBJ, typename SLOT>
-    typename std::enable_if_t<std::is_member_function_pointer_v<SLOT>, void>
-    RegisterForPlayback(OBJ *sender, SLOT method)
+    void RegisterForPlayback(OBJ *sender, SLOT method)
+    requires (std::is_member_function_pointer_v<SLOT>)
     {
         RegisterForPlayback(qobject_cast<QObject*>(sender),
                             static_cast<PlaybackStartCb>(method));
@@ -313,11 +309,6 @@ class MBASE_PUBLIC MythCoreContext : public QObject, public MythObservable, publ
   private:
     Q_DISABLE_COPY_MOVE(MythCoreContext)
     MythCoreContextPrivate *d {nullptr}; // NOLINT(readability-identifier-naming)
-
-    void connected(MythSocket *sock) override { (void)sock; } //MythSocketCBs
-    void connectionFailed(MythSocket *sock) override { (void)sock; } //MythSocketCBs
-    void connectionClosed(MythSocket *sock) override; // MythSocketCBs
-    void readyRead(MythSocket *sock) override; // MythSocketCBs
 
     QMap<QString,int>     m_testOverrideInts;
     QMap<QString,double>  m_testOverrideFloats;

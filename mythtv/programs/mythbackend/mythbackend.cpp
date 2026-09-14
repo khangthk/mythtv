@@ -5,9 +5,14 @@
 
 #include <csignal> // for signal
 #include <cstdlib>
+#include <thread>
 
 #include <QtGlobal>
-#ifndef _WIN32
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtEnvironmentVariables>
+#include <QtSystemDetection>
+#endif
+#ifndef Q_OS_WINDOWS
 #include <QCoreApplication>
 #else
 #include <QApplication>
@@ -24,19 +29,18 @@
 #include <unistd.h>
 
 // MythTV
-#include "libmythbase/cleanupguard.h"
+#include "libmyth/mythcontext.h"
 #include "libmythbase/compat.h"
 #include "libmythbase/configuration.h"
 #include "libmythbase/exitcodes.h"
+#include "libmythbase/mythappname.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdb.h"
+#include "libmythbase/mythdirs.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythmiscutil.h"
 #include "libmythbase/mythtranslation.h"
 #include "libmythbase/mythversion.h"
-#include "libmythbase/programinfo.h"
-#include "libmythbase/remoteutil.h"
-#include "libmythbase/signalhandling.h"
 #include "libmythbase/storagegroup.h"
 #include "libmythtv/dbcheck.h"
 #include "libmythtv/jobqueue.h"
@@ -54,6 +58,7 @@
 #include "mythbackend_main_helpers.h"
 #include "scheduler.h"
 
+#include "servicesv2/v2myth.h"
 
 #define LOC      QString("MythBackend: ")
 #define LOC_WARN QString("MythBackend, Warning: ")
@@ -87,7 +92,7 @@ int main(int argc, char **argv)
         return GENERIC_EXIT_OK;
     }
 
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
 #if HAVE_CLOSE_RANGE
     close_range(UNUSED_FILENO, sysconf(_SC_OPEN_MAX) - 1, 0);
 #else
@@ -104,12 +109,12 @@ int main(int argc, char **argv)
 
 #ifdef Q_OS_DARWIN
     QString path = QCoreApplication::applicationDirPath();
-    setenv("PYTHONPATH",
-           QString("%1/../Resources/lib/%2/site-packages:%3")
+    qputenv("PYTHONPATH",
+           QString("%1/../Resources/lib/%2:%1/../Resources/lib/%2/site-packages:%1/../Resources/lib/%2/lib-dynload:%3")
            .arg(path)
            .arg(QFileInfo(PYTHON_EXE).fileName())
            .arg(QProcessEnvironment::systemEnvironment().value("PYTHONPATH"))
-           .toUtf8().constData(), 1);
+           .toUtf8().constData());
 #endif
 
     int retval = cmdline.Daemonize();
@@ -126,40 +131,34 @@ int main(int argc, char **argv)
         // Don't listen to console input if daemonized
         close(0);
 
-    CleanupGuard callCleanup(cleanup);
-
-#ifndef _WIN32
-    SignalHandler::Init();
-#endif
-
 #if CONFIG_SYSTEMD_NOTIFY
     (void)sd_notify(0, "STATUS=Connecting to database.");
 #endif
-    gContext = new MythContext(MYTH_BINARY_VERSION);
 
+    /*
+    InitializeMythDirs() is called by MythContext(), but we need to call it
+    first so XmlConfiguration() can find the configuration file.
+    */
+    InitializeMythDirs();
     // If setup has not been done (ie. the config.xml does not exist),
     // set the ignoreDB flag, which will cause only the web-app to
     // start, so that setup can be done.
-
-    bool ignoreDB = false;
-    {
-        auto config = XmlConfiguration();
-        ignoreDB = !config.FileExists();
-        if (ignoreDB)
-            gContext->setWebOnly(MythContext::kWebOnlyDBSetup);
-    }
+    bool ignoreDB = !(XmlConfiguration().FileExists());
+    if (ignoreDB)
+        V2Myth::s_WebOnlyStartup = V2Myth::kWebOnlyDBSetup;
 
     // Init Parameters:
     // bool Init(bool gui = true,
     //           bool promptForBackend = false,
     //           bool disableAutoDiscovery = false,
     //           bool ignoreDB = false);
-
-    if (!gContext->Init(false,false,false,ignoreDB))
+    MythContext context {MYTH_BINARY_VERSION};
+    if (!context.Init(false,false,false,ignoreDB))
     {
         LOG(VB_GENERAL, LOG_CRIT, "Failed to init MythContext.");
         return GENERIC_EXIT_NO_MYTHCONTEXT;
     }
+    context.setCleanup(cleanup);
 
     MythTranslation::load("mythfrontend");
 
@@ -179,13 +178,29 @@ int main(int argc, char **argv)
     retval = run_backend(cmdline);
     // Retcode 258 is a special value to signal to mythbackend to restart
     // This is used by the V2Myth/Shutdown?Restart=true API call
-    if (retval == 258) {
+    // Retcode 259 is a special value to signal to mythbackend to restart
+    // in webonly mode
+    if (retval == 258 || retval == 259)
+    {
+        char ** newargv = new char * [argc + 2];
+        std::string webonly = "--webonly";
+        newargv[0] = argv[0];
+        int newargc = 1;
+        for (int ix = 1 ; ix < argc ; ++ix)
+        {
+            if (webonly != argv[ix])
+                newargv[newargc++] = argv[ix];
+        }
+        if (retval == 259)
+            newargv[newargc++] = webonly.data();
+        newargv[newargc] = nullptr;
         LOG(VB_GENERAL, LOG_INFO,
             QString("Restarting mythbackend"));
-        usleep(50000);
-        int rc = execvp(argv[0], argv);
+        std::this_thread::sleep_for(50ms);
+        int rc = execvp(newargv[0], newargv);
         LOG(VB_GENERAL, LOG_ERR,
             QString("execvp failed prog %1 rc=%2 errno=%3").arg(argv[0]).arg(rc).arg(errno));
+        delete[] newargv;
     }
     return retval;
 }

@@ -10,6 +10,10 @@
 #include <unistd.h>
 
 // Qt headers
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QString>
 
 // MythTV headers
@@ -94,7 +98,9 @@ bool ThreadedFileWriter::Open(void)
     m_ignoreWrites = false;
 
     if (m_filename == "-")
+    {
         m_fd = fileno(stdout);
+    }
     else
     {
         QByteArray fname = m_filename.toLocal8Bit();
@@ -113,7 +119,7 @@ bool ThreadedFileWriter::Open(void)
 
     LOG(VB_FILE, LOG_INFO, LOC + "Open() successful");
 
-#ifdef _WIN32
+#ifdef Q_OS_WINDOWS
     _setmode(m_fd, _O_BINARY);
 #endif
     if (!m_writeThread)
@@ -408,7 +414,7 @@ void ThreadedFileWriter::SyncLoop(void)
  */
 void ThreadedFileWriter::DiskLoop(void)
 {
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
     // don't exit program if file gets larger than quota limit..
     signal(SIGXFSZ, SIG_IGN);
 #endif

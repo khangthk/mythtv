@@ -17,7 +17,11 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
+#ifndef LIBMYTHTV_TEST_COPYFRAMES_H
+#define LIBMYTHTV_TEST_COPYFRAMES_H
 
+#include <QChar>     // Fix Qt6 GCC SFINAE warning
+#include <QBitArray> // Fix Qt6 GCC SFINAE warning
 #include <QTest>
 
 class TestCopyFrames : public QObject
@@ -25,10 +29,11 @@ class TestCopyFrames : public QObject
     Q_OBJECT
 
   private slots:
-    void initTestCase();
     static void TestInvalidFrames();
     static void TestInvalidFormats();
     static void TestInvalidSizes();
     static void TestInvalidBuffers();
     static void TestCopy();
 };
+
+#endif // LIBMYTHTV_TEST_COPYFRAMES_H

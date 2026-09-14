@@ -29,6 +29,7 @@
 #include "libavutil/common.h"
 #include "libavutil/csp.h"
 #include "libavutil/error.h"
+#include "libavutil/intreadwrite.h"
 #include "libavutil/mem.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/pixfmt.h"
@@ -36,6 +37,8 @@
 
 #include "avcodec.h"
 #include "codec_internal.h"
+#include "decode.h"
+#include "exif_internal.h"
 #include "internal.h"
 
 #include <jxl/decode.h>
@@ -47,17 +50,38 @@ typedef struct LibJxlDecodeContext {
     JxlDecoder *decoder;
     JxlBasicInfo basic_info;
     JxlPixelFormat jxl_pixfmt;
+#if JPEGXL_NUMERIC_VERSION >= JPEGXL_COMPUTE_NUMERIC_VERSION(0, 8, 0)
+    JxlBitDepth jxl_bit_depth;
+#endif
     JxlDecoderStatus events;
     AVBufferRef *iccp;
+    AVPacket *avpkt;
+    int64_t accumulated_pts;
+    int64_t frame_duration;
+    int prev_is_last;
+    AVRational anim_timebase;
+    AVFrame *frame;
+    int frame_complete;
+    JxlDecoderStatus jret;
+    AVBufferRef *exif;
+    size_t exif_pos;
+    int exif_box;
 } LibJxlDecodeContext;
 
 static int libjxl_init_jxl_decoder(AVCodecContext *avctx)
 {
     LibJxlDecodeContext *ctx = avctx->priv_data;
 
-    ctx->events = JXL_DEC_BASIC_INFO | JXL_DEC_FULL_IMAGE | JXL_DEC_COLOR_ENCODING;
+    ctx->events = JXL_DEC_BASIC_INFO | JXL_DEC_FULL_IMAGE
+        | JXL_DEC_COLOR_ENCODING | JXL_DEC_FRAME
+        | JXL_DEC_BOX;
     if (JxlDecoderSubscribeEvents(ctx->decoder, ctx->events) != JXL_DEC_SUCCESS) {
         av_log(avctx, AV_LOG_ERROR, "Error subscribing to JXL events\n");
+        return AVERROR_EXTERNAL;
+    }
+
+    if (JxlDecoderSetDecompressBoxes(ctx->decoder, JXL_TRUE) != JXL_DEC_SUCCESS) {
+        av_log(avctx, AV_LOG_ERROR, "Error setting compress box mode\n");
         return AVERROR_EXTERNAL;
     }
 
@@ -66,8 +90,10 @@ static int libjxl_init_jxl_decoder(AVCodecContext *avctx)
         return AVERROR_EXTERNAL;
     }
 
+    av_buffer_unref(&ctx->exif);
     memset(&ctx->basic_info, 0, sizeof(JxlBasicInfo));
     memset(&ctx->jxl_pixfmt, 0, sizeof(JxlPixelFormat));
+    ctx->prev_is_last = 1;
 
     return 0;
 }
@@ -90,13 +116,25 @@ static av_cold int libjxl_decode_init(AVCodecContext *avctx)
         return AVERROR_EXTERNAL;
     }
 
+    ctx->avpkt = avctx->internal->in_pkt;
+    ctx->frame = av_frame_alloc();
+    if (!ctx->frame)
+        return AVERROR(ENOMEM);
+
     return libjxl_init_jxl_decoder(avctx);
 }
 
-static enum AVPixelFormat libjxl_get_pix_fmt(void *avctx, const JxlBasicInfo *basic_info, JxlPixelFormat *format)
+static enum AVPixelFormat libjxl_get_pix_fmt(AVCodecContext *avctx, LibJxlDecodeContext *ctx)
 {
+    const JxlBasicInfo *basic_info = &ctx->basic_info;
+    JxlPixelFormat *format = &ctx->jxl_pixfmt;
     format->endianness = JXL_NATIVE_ENDIAN;
     format->num_channels = basic_info->num_color_channels + (basic_info->alpha_bits > 0);
+#if JPEGXL_NUMERIC_VERSION >= JPEGXL_COMPUTE_NUMERIC_VERSION(0, 8, 0)
+    ctx->jxl_bit_depth.bits_per_sample = avctx->bits_per_raw_sample = basic_info->bits_per_sample;
+    ctx->jxl_bit_depth.type = JXL_BIT_DEPTH_FROM_PIXEL_FORMAT;
+    ctx->jxl_bit_depth.exponent_bits_per_sample = basic_info->exponent_bits_per_sample;
+#endif
     /* Gray */
     if (basic_info->num_color_channels == 1) {
         if (basic_info->bits_per_sample <= 8) {
@@ -104,10 +142,11 @@ static enum AVPixelFormat libjxl_get_pix_fmt(void *avctx, const JxlBasicInfo *ba
             return basic_info->alpha_bits ? AV_PIX_FMT_YA8 : AV_PIX_FMT_GRAY8;
         }
         if (basic_info->exponent_bits_per_sample || basic_info->bits_per_sample > 16) {
-            if (basic_info->alpha_bits)
-                return AV_PIX_FMT_NONE;
-            format->data_type = JXL_TYPE_FLOAT;
-            return AV_PIX_FMT_GRAYF32;
+            if (!basic_info->alpha_bits) {
+                format->data_type = JXL_TYPE_FLOAT;
+                return AV_PIX_FMT_GRAYF32;
+            }
+            av_log(avctx, AV_LOG_WARNING, "Downsampling gray+alpha float to 16-bit integer via libjxl\n");
         }
         format->data_type = JXL_TYPE_UINT16;
         return basic_info->alpha_bits ? AV_PIX_FMT_YA16 : AV_PIX_FMT_GRAY16;
@@ -119,10 +158,10 @@ static enum AVPixelFormat libjxl_get_pix_fmt(void *avctx, const JxlBasicInfo *ba
             format->data_type = JXL_TYPE_UINT8;
             return basic_info->alpha_bits ? AV_PIX_FMT_RGBA : AV_PIX_FMT_RGB24;
         }
-        if (basic_info->bits_per_sample > 16)
-            av_log(avctx, AV_LOG_WARNING, "Downsampling larger integer to 16-bit via libjxl\n");
-        if (basic_info->exponent_bits_per_sample)
-            av_log(avctx, AV_LOG_WARNING, "Downsampling float to 16-bit integer via libjxl\n");
+        if (basic_info->exponent_bits_per_sample || basic_info->bits_per_sample > 16) {
+            format->data_type = JXL_TYPE_FLOAT;
+            return basic_info->alpha_bits ? AV_PIX_FMT_RGBAF32 : AV_PIX_FMT_RGBF32;
+        }
         format->data_type = JXL_TYPE_UINT16;
         return basic_info->alpha_bits ? AV_PIX_FMT_RGBA64 : AV_PIX_FMT_RGB48;
     }
@@ -167,9 +206,9 @@ static enum AVColorTransferCharacteristic libjxl_get_trc(void *avctx, const JxlC
     case JXL_TRANSFER_FUNCTION_DCI: return AVCOL_TRC_SMPTE428;
     case JXL_TRANSFER_FUNCTION_HLG: return AVCOL_TRC_ARIB_STD_B67;
     case JXL_TRANSFER_FUNCTION_GAMMA:
-        if (jxl_color->gamma > 2.199 && jxl_color->gamma < 2.201)
+        if (jxl_color->gamma > 0.45355 && jxl_color->gamma < 0.45555)
             return AVCOL_TRC_GAMMA22;
-        else if (jxl_color->gamma > 2.799 && jxl_color->gamma < 2.801)
+        else if (jxl_color->gamma > 0.35614 && jxl_color->gamma < 0.35814)
             return AVCOL_TRC_GAMMA28;
         else
             av_log(avctx, AV_LOG_WARNING, "Unsupported gamma transfer: %f\n", jxl_color->gamma);
@@ -188,14 +227,22 @@ static int libjxl_get_icc(AVCodecContext *avctx)
     JxlDecoderStatus jret;
     /* an ICC profile is present, and we can meaningfully get it,
      * because the pixel data is not XYB-encoded */
+#if JPEGXL_NUMERIC_VERSION < JPEGXL_COMPUTE_NUMERIC_VERSION(0, 9, 0)
     jret = JxlDecoderGetICCProfileSize(ctx->decoder, &ctx->jxl_pixfmt, JXL_COLOR_PROFILE_TARGET_DATA, &icc_len);
+#else
+    jret = JxlDecoderGetICCProfileSize(ctx->decoder, JXL_COLOR_PROFILE_TARGET_DATA, &icc_len);
+#endif
     if (jret == JXL_DEC_SUCCESS && icc_len > 0) {
         av_buffer_unref(&ctx->iccp);
         ctx->iccp = av_buffer_alloc(icc_len);
         if (!ctx->iccp)
             return AVERROR(ENOMEM);
+#if JPEGXL_NUMERIC_VERSION < JPEGXL_COMPUTE_NUMERIC_VERSION(0, 9, 0)
         jret = JxlDecoderGetColorAsICCProfile(ctx->decoder, &ctx->jxl_pixfmt, JXL_COLOR_PROFILE_TARGET_DATA,
-                                                ctx->iccp->data, icc_len);
+                                              ctx->iccp->data, icc_len);
+#else
+        jret = JxlDecoderGetColorAsICCProfile(ctx->decoder, JXL_COLOR_PROFILE_TARGET_DATA, ctx->iccp->data, icc_len);
+#endif
         if (jret != JXL_DEC_SUCCESS) {
             av_log(avctx, AV_LOG_WARNING, "Unable to obtain ICC Profile\n");
             av_buffer_unref(&ctx->iccp);
@@ -231,12 +278,21 @@ static int libjxl_color_encoding_event(AVCodecContext *avctx, AVFrame *frame)
     /* set this flag if we need to fall back on wide gamut */
     int fallback = 0;
 
+#if JPEGXL_NUMERIC_VERSION < JPEGXL_COMPUTE_NUMERIC_VERSION(0, 9, 0)
     jret = JxlDecoderGetColorAsEncodedProfile(ctx->decoder, NULL, JXL_COLOR_PROFILE_TARGET_ORIGINAL, &jxl_color);
+#else
+    jret = JxlDecoderGetColorAsEncodedProfile(ctx->decoder, JXL_COLOR_PROFILE_TARGET_ORIGINAL, &jxl_color);
+#endif
     if (jret == JXL_DEC_SUCCESS) {
         /* enum values describe the colors of this image */
         jret = JxlDecoderSetPreferredColorProfile(ctx->decoder, &jxl_color);
         if (jret == JXL_DEC_SUCCESS)
-            jret = JxlDecoderGetColorAsEncodedProfile(ctx->decoder, &ctx->jxl_pixfmt, JXL_COLOR_PROFILE_TARGET_DATA, &jxl_color);
+#if JPEGXL_NUMERIC_VERSION < JPEGXL_COMPUTE_NUMERIC_VERSION(0, 9, 0)
+            jret = JxlDecoderGetColorAsEncodedProfile(ctx->decoder, &ctx->jxl_pixfmt,
+                                                      JXL_COLOR_PROFILE_TARGET_DATA, &jxl_color);
+#else
+            jret = JxlDecoderGetColorAsEncodedProfile(ctx->decoder, JXL_COLOR_PROFILE_TARGET_DATA, &jxl_color);
+#endif
         /* if we couldn't successfully request the pixel data space, we fall back on wide gamut */
         /* this code path is very unlikely to happen in practice */
         if (jret != JXL_DEC_SUCCESS)
@@ -259,7 +315,7 @@ static int libjxl_color_encoding_event(AVCodecContext *avctx, AVFrame *frame)
     }
 
     avctx->color_range = frame->color_range = AVCOL_RANGE_JPEG;
-    if (ctx->jxl_pixfmt.num_channels >= 3)
+    if (ctx->basic_info.num_color_channels > 1)
         avctx->colorspace = AVCOL_SPC_RGB;
     avctx->color_primaries = AVCOL_PRI_UNSPECIFIED;
     avctx->color_trc = AVCOL_TRC_UNSPECIFIED;
@@ -295,7 +351,7 @@ static int libjxl_color_encoding_event(AVCodecContext *avctx, AVFrame *frame)
         }
         /* all colors will be in-gamut so we want accurate colors */
         jxl_color.rendering_intent = JXL_RENDERING_INTENT_RELATIVE;
-        jxl_color.color_space = avctx->colorspace == AVCOL_SPC_RGB ? JXL_COLOR_SPACE_RGB : JXL_COLOR_SPACE_GRAY;
+        jxl_color.color_space = ctx->basic_info.num_color_channels > 1 ? JXL_COLOR_SPACE_RGB : JXL_COLOR_SPACE_GRAY;
         jret = JxlDecoderSetPreferredColorProfile(ctx->decoder, &jxl_color);
         if (jret != JXL_DEC_SUCCESS) {
             av_log(avctx, AV_LOG_WARNING, "Unable to set fallback color encoding\n");
@@ -318,43 +374,119 @@ static int libjxl_color_encoding_event(AVCodecContext *avctx, AVFrame *frame)
     return 0;
 }
 
-static int libjxl_decode_frame(AVCodecContext *avctx, AVFrame *frame, int *got_frame, AVPacket *avpkt)
+static int libjxl_attach_sidedata(AVCodecContext *avctx)
 {
     LibJxlDecodeContext *ctx = avctx->priv_data;
-    const uint8_t *buf = avpkt->data;
-    size_t remaining = avpkt->size;
-    JxlDecoderStatus jret;
+    int ret = 0;
+
+    if (ctx->iccp) {
+        ret = ff_frame_new_side_data_from_buf(avctx, ctx->frame, AV_FRAME_DATA_ICC_PROFILE, &ctx->iccp);
+        if (ret < 0)
+            return ret;
+    }
+
+    if (ctx->exif) {
+        AVExifMetadata ifd = { 0 };
+        /* size may be larger than exif_pos due to the realloc loop */
+        ret = av_exif_parse_buffer(avctx, ctx->exif->data, ctx->exif_pos, &ifd, AV_EXIF_T_OFF);
+        av_buffer_unref(&ctx->exif);
+        if (ret < 0) {
+            av_log(avctx, AV_LOG_ERROR, "Unable to parse EXIF buffer: %s\n", av_err2str(ret));
+            return ret;
+        }
+        /*
+         * JPEG XL Codestream orientation overrides EXIF orientation in all cases.
+         * As a result, we remove the EXIF Orientation tag rather than just zeroing it
+         * in order to prevent any ambiguity. libjxl autorotates the image for us so we
+         * do not need to worry about that.
+         */
+        ret = av_exif_remove_entry(avctx, &ifd, av_exif_get_tag_id("Orientation"), 0);
+        if (ret < 0)
+            av_log(avctx, AV_LOG_WARNING, "Unable to remove orientation from EXIF buffer: %s\n", av_err2str(ret));
+        ret = ff_decode_exif_attach_ifd(avctx, ctx->frame, &ifd);
+        if (ret < 0)
+            av_log(avctx, AV_LOG_ERROR, "Unable to attach EXIF ifd: %s\n", av_err2str(ret));
+        av_exif_free(&ifd);
+    }
+
+    return ret;
+}
+
+static int libjxl_finalize_frame(AVCodecContext *avctx, AVFrame *dst, AVFrame *src)
+{
+    LibJxlDecodeContext *ctx = avctx->priv_data;
+    if (ctx->exif_box) {
+        /* last box was Exif */
+        size_t remainder = JxlDecoderReleaseBoxBuffer(ctx->decoder);
+        ctx->exif_pos = ctx->exif->size - remainder;
+        ctx->exif_box = 0;
+    }
+    int ret = libjxl_attach_sidedata(avctx);
+    av_frame_move_ref(dst, src);
+    ctx->frame_complete = 0;
+    return ret;
+}
+
+static int libjxl_receive_frame(AVCodecContext *avctx, AVFrame *frame)
+{
+    LibJxlDecodeContext *ctx = avctx->priv_data;
     int ret;
-    *got_frame = 0;
+    AVPacket *pkt = ctx->avpkt;
 
     while (1) {
+        size_t remaining;
+        JxlFrameHeader header;
 
-        jret = JxlDecoderSetInput(ctx->decoder, buf, remaining);
+        if (!pkt->size) {
+            av_packet_unref(pkt);
+            ret = ff_decode_get_packet(avctx, pkt);
+            if (ret < 0 && ret != AVERROR_EOF)
+                return ret;
+            ctx->accumulated_pts = 0;
+            ctx->frame_duration = 0;
+            if (!pkt->size) {
+                /* jret set by the last iteration of the loop */
+                if (ctx->jret == JXL_DEC_NEED_MORE_INPUT && !ctx->frame_complete) {
+                    av_log(avctx, AV_LOG_ERROR, "Unexpected end of JXL codestream\n");
+                    return AVERROR_INVALIDDATA;
+                } else if (ctx->frame_complete) {
+                    ctx->jret = JXL_DEC_SUCCESS;
+                    goto success;
+                }
+                return AVERROR_EOF;
+            }
+        }
 
-        if (jret == JXL_DEC_ERROR) {
+        ctx->jret = JxlDecoderSetInput(ctx->decoder, pkt->data, pkt->size);
+        if (ctx->jret == JXL_DEC_ERROR) {
             /* this should never happen here unless there's a bug in libjxl */
             av_log(avctx, AV_LOG_ERROR, "Unknown libjxl decode error\n");
             return AVERROR_EXTERNAL;
         }
 
-        jret = JxlDecoderProcessInput(ctx->decoder);
+        ctx->jret = JxlDecoderProcessInput(ctx->decoder);
         /*
          * JxlDecoderReleaseInput returns the number
          * of bytes remaining to be read, rather than
          * the number of bytes that it did read
          */
         remaining = JxlDecoderReleaseInput(ctx->decoder);
-        buf = avpkt->data + avpkt->size - remaining;
+        size_t consumed = pkt->size - remaining;
+        pkt->data += consumed;
+        pkt->size = remaining;
 
-        switch(jret) {
+        switch(ctx->jret) {
         case JXL_DEC_ERROR:
             av_log(avctx, AV_LOG_ERROR, "Unknown libjxl decode error\n");
+            /*
+             * we consume all remaining input on error, if nothing was consumed
+             * this prevents libjxl from consuming nothing forever
+             * and just dumping the last error over and over
+             */
+            if (!consumed)
+                av_packet_unref(pkt);
             return AVERROR_INVALIDDATA;
         case JXL_DEC_NEED_MORE_INPUT:
-            if (remaining == 0) {
-                av_log(avctx, AV_LOG_ERROR, "Unexpected end of JXL codestream\n");
-                return AVERROR_INVALIDDATA;
-            }
             av_log(avctx, AV_LOG_DEBUG, "NEED_MORE_INPUT event emitted\n");
             continue;
         case JXL_DEC_BASIC_INFO:
@@ -367,64 +499,148 @@ static int libjxl_decode_frame(AVCodecContext *avctx, AVFrame *frame, int *got_f
                 av_log(avctx, AV_LOG_ERROR, "Bad libjxl basic info event\n");
                 return AVERROR_EXTERNAL;
             }
-            avctx->pix_fmt = libjxl_get_pix_fmt(avctx, &ctx->basic_info, &ctx->jxl_pixfmt);
+            avctx->pix_fmt = libjxl_get_pix_fmt(avctx, ctx);
             if (avctx->pix_fmt == AV_PIX_FMT_NONE) {
                 av_log(avctx, AV_LOG_ERROR, "Bad libjxl pixel format\n");
                 return AVERROR_EXTERNAL;
             }
             if ((ret = ff_set_dimensions(avctx, ctx->basic_info.xsize, ctx->basic_info.ysize)) < 0)
                 return ret;
+            if (ctx->basic_info.have_animation)
+                ctx->anim_timebase = av_make_q(ctx->basic_info.animation.tps_denominator,
+                                               ctx->basic_info.animation.tps_numerator);
+            if (ctx->basic_info.alpha_bits) {
+                if (ctx->basic_info.alpha_premultiplied)
+                    avctx->alpha_mode = AVALPHA_MODE_PREMULTIPLIED;
+                else
+                    avctx->alpha_mode = AVALPHA_MODE_STRAIGHT;
+            }
             continue;
         case JXL_DEC_COLOR_ENCODING:
             av_log(avctx, AV_LOG_DEBUG, "COLOR_ENCODING event emitted\n");
-            if ((ret = libjxl_color_encoding_event(avctx, frame)) < 0)
+            ret = libjxl_color_encoding_event(avctx, ctx->frame);
+            if (ret < 0)
                 return ret;
             continue;
         case JXL_DEC_NEED_IMAGE_OUT_BUFFER:
             av_log(avctx, AV_LOG_DEBUG, "NEED_IMAGE_OUT_BUFFER event emitted\n");
-            if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
+            ret = ff_get_buffer(avctx, ctx->frame, 0);
+            if (ret < 0)
                 return ret;
-            ctx->jxl_pixfmt.align = frame->linesize[0];
-            if (JxlDecoderSetImageOutBuffer(ctx->decoder, &ctx->jxl_pixfmt, frame->data[0], frame->buf[0]->size)
-                != JXL_DEC_SUCCESS) {
+            ctx->jxl_pixfmt.align = ctx->frame->linesize[0];
+            if (JxlDecoderSetImageOutBuffer(ctx->decoder, &ctx->jxl_pixfmt,
+                    ctx->frame->data[0], ctx->frame->buf[0]->size)
+                    != JXL_DEC_SUCCESS) {
                 av_log(avctx, AV_LOG_ERROR, "Bad libjxl dec need image out buffer event\n");
                 return AVERROR_EXTERNAL;
             }
+#if JPEGXL_NUMERIC_VERSION >= JPEGXL_COMPUTE_NUMERIC_VERSION(0, 8, 0)
+            if (JxlDecoderSetImageOutBitDepth(ctx->decoder, &ctx->jxl_bit_depth) != JXL_DEC_SUCCESS) {
+                av_log(avctx, AV_LOG_ERROR, "Error setting output bit depth\n");
+                return AVERROR_EXTERNAL;
+            }
+#endif
+            continue;
+        case JXL_DEC_FRAME:
+            /* Frame here refers to the Frame bundle, not a decoded picture */
+            av_log(avctx, AV_LOG_DEBUG, "FRAME event emitted\n");
+            if (ctx->prev_is_last) {
+                /*
+                 * The last frame sent was tagged as "is_last" which
+                 * means this is a new image file altogether.
+                 */
+                ctx->frame->pict_type = AV_PICTURE_TYPE_I;
+                ctx->frame->flags |= AV_FRAME_FLAG_KEY;
+            }
+            if (JxlDecoderGetFrameHeader(ctx->decoder, &header) != JXL_DEC_SUCCESS) {
+                av_log(avctx, AV_LOG_ERROR, "Bad libjxl dec frame event\n");
+                return AVERROR_EXTERNAL;
+            }
+            ctx->prev_is_last = header.is_last;
+            /* zero duration for animation means the frame is not presented */
+            if (ctx->basic_info.have_animation && header.duration)
+                ctx->frame_duration = header.duration;
             continue;
         case JXL_DEC_FULL_IMAGE:
             /* full image is one frame, even if animated */
             av_log(avctx, AV_LOG_DEBUG, "FULL_IMAGE event emitted\n");
-            frame->pict_type = AV_PICTURE_TYPE_I;
-            frame->key_frame = 1;
-            if (ctx->iccp) {
-                AVFrameSideData *sd = av_frame_new_side_data_from_buf(frame, AV_FRAME_DATA_ICC_PROFILE, ctx->iccp);
-                if (!sd)
-                    return AVERROR(ENOMEM);
-                /* ownership is transfered, and it is not ref-ed */
-                ctx->iccp = NULL;
+            if (ctx->basic_info.have_animation) {
+                ctx->frame->pts = av_rescale_q(ctx->accumulated_pts, ctx->anim_timebase, avctx->pkt_timebase);
+                ctx->frame->duration = av_rescale_q(ctx->frame_duration, ctx->anim_timebase, avctx->pkt_timebase);
+            } else {
+                ctx->frame->pts = 0;
+                ctx->frame->duration = pkt->duration;
             }
-            *got_frame = 1;
-            return avpkt->size - remaining;
+            if (pkt->pts != AV_NOPTS_VALUE)
+                ctx->frame->pts += pkt->pts;
+            ctx->accumulated_pts += ctx->frame_duration;
+            ctx->frame->pkt_dts = pkt->dts;
+            if (ctx->basic_info.have_animation && !ctx->prev_is_last) {
+                libjxl_finalize_frame(avctx, frame, ctx->frame);
+                return 0;
+            } else {
+                ctx->frame_complete = 1;
+                continue;
+            }
         case JXL_DEC_SUCCESS:
             av_log(avctx, AV_LOG_DEBUG, "SUCCESS event emitted\n");
             /*
-             * The SUCCESS event isn't fired until after JXL_DEC_FULL_IMAGE. If this
-             * stream only contains one JXL image then JXL_DEC_SUCCESS will never fire.
-             * If the image2 sequence being decoded contains several JXL files, then
-             * libjxl will fire this event after the next AVPacket has been passed,
-             * which means the current packet is actually the next image in the sequence.
-             * This is why we reset the decoder and populate the packet data now, since
-             * this is the next packet and it has not been decoded yet. The decoder does
-             * have to be reset to allow us to use it for the next image, or libjxl
-             * will become very confused if the header information is not identical.
+             * this event will be fired when the zero-length EOF
+             * packet is sent to the decoder by the client,
+             * but it will also be fired when the next image of
+             * an image2pipe sequence is loaded up
              */
+success:
+            libjxl_finalize_frame(avctx, frame, ctx->frame);
             JxlDecoderReset(ctx->decoder);
             libjxl_init_jxl_decoder(avctx);
-            buf = avpkt->data;
-            remaining = avpkt->size;
+            return 0;
+        case JXL_DEC_BOX: {
+            char type[4];
+            av_log(avctx, AV_LOG_DEBUG, "BOX event emitted\n");
+            if (ctx->exif_box) {
+                /* last box was Exif */
+                size_t remainder = JxlDecoderReleaseBoxBuffer(ctx->decoder);
+                ctx->exif_pos = ctx->exif->size - remainder;
+            }
+            if (JxlDecoderGetBoxType(ctx->decoder, type, JXL_TRUE) != JXL_DEC_SUCCESS) {
+                av_log(avctx, AV_LOG_ERROR, "Error getting box type\n");
+                return AVERROR_EXTERNAL;
+            }
+            if (AV_RL32(type) != MKTAG('E','x','i','f')) {
+                ctx->exif_box = 0;
+                continue;
+            }
+            ctx->exif_box = 1;
+            av_buffer_unref(&ctx->exif);
+            ctx->exif_pos = 0;
+            // 4k buffer should usually be enough
+            ret = av_buffer_realloc(&ctx->exif, 4096);
+            if (ret < 0)
+                return AVERROR(ENOMEM);
+            if (JxlDecoderSetBoxBuffer(ctx->decoder, ctx->exif->data, ctx->exif->size) != JXL_DEC_SUCCESS) {
+                av_log(avctx, AV_LOG_ERROR, "Error setting box buffer\n");
+                return AVERROR_EXTERNAL;
+            }
             continue;
+        }
+        case JXL_DEC_BOX_NEED_MORE_OUTPUT: {
+            av_log(avctx, AV_LOG_DEBUG, "BOX_NEED_MORE_OUTPUT event emitted\n");
+            size_t remainder = JxlDecoderReleaseBoxBuffer(ctx->decoder);
+            ctx->exif_pos = ctx->exif->size - remainder;
+            size_t new_size = ctx->exif->size << 1;
+            ret = av_buffer_realloc(&ctx->exif, new_size);
+            if (ret < 0)
+                return AVERROR(ENOMEM);
+            if (JxlDecoderSetBoxBuffer(ctx->decoder, ctx->exif->data + ctx->exif_pos,
+                                       ctx->exif->size - ctx->exif_pos) != JXL_DEC_SUCCESS) {
+                av_log(avctx, AV_LOG_ERROR, "Error setting box buffer\n");
+                return AVERROR_EXTERNAL;
+            }
+            continue;
+        }
         default:
-             av_log(avctx, AV_LOG_ERROR, "Bad libjxl event: %d\n", jret);
+             av_log(avctx, AV_LOG_ERROR, "Bad libjxl event: %d\n", ctx->jret);
              return AVERROR_EXTERNAL;
         }
     }
@@ -440,21 +656,41 @@ static av_cold int libjxl_decode_close(AVCodecContext *avctx)
     if (ctx->decoder)
         JxlDecoderDestroy(ctx->decoder);
     ctx->decoder = NULL;
+    av_buffer_unref(&ctx->exif);
     av_buffer_unref(&ctx->iccp);
+    av_frame_free(&ctx->frame);
 
     return 0;
 }
 
 const FFCodec ff_libjxl_decoder = {
     .p.name           = "libjxl",
-    .p.long_name      = NULL_IF_CONFIG_SMALL("libjxl JPEG XL"),
+    CODEC_LONG_NAME("libjxl JPEG XL"),
     .p.type           = AVMEDIA_TYPE_VIDEO,
     .p.id             = AV_CODEC_ID_JPEGXL,
     .priv_data_size   = sizeof(LibJxlDecodeContext),
     .init             = libjxl_decode_init,
-    FF_CODEC_DECODE_CB(libjxl_decode_frame),
+    FF_CODEC_RECEIVE_FRAME_CB(libjxl_receive_frame),
     .close            = libjxl_decode_close,
     .p.capabilities   = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_OTHER_THREADS,
-    .caps_internal    = FF_CODEC_CAP_AUTO_THREADS | FF_CODEC_CAP_INIT_CLEANUP,
+    .caps_internal    = FF_CODEC_CAP_NOT_INIT_THREADSAFE |
+                        FF_CODEC_CAP_AUTO_THREADS | FF_CODEC_CAP_INIT_CLEANUP |
+                        FF_CODEC_CAP_ICC_PROFILES,
+    .p.wrapper_name   = "libjxl",
+};
+
+const FFCodec ff_libjxl_anim_decoder = {
+    .p.name           = "libjxl_anim",
+    CODEC_LONG_NAME("libjxl JPEG XL animated"),
+    .p.type           = AVMEDIA_TYPE_VIDEO,
+    .p.id             = AV_CODEC_ID_JPEGXL_ANIM,
+    .priv_data_size   = sizeof(LibJxlDecodeContext),
+    .init             = libjxl_decode_init,
+    FF_CODEC_RECEIVE_FRAME_CB(libjxl_receive_frame),
+    .close            = libjxl_decode_close,
+    .p.capabilities   = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_OTHER_THREADS,
+    .caps_internal    = FF_CODEC_CAP_NOT_INIT_THREADSAFE |
+                        FF_CODEC_CAP_AUTO_THREADS | FF_CODEC_CAP_INIT_CLEANUP |
+                        FF_CODEC_CAP_ICC_PROFILES,
     .p.wrapper_name   = "libjxl",
 };

@@ -4,21 +4,26 @@
 // C++
 #include <chrono>
 #include <cstdlib>
+#include <thread>
 
 // qt
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QEvent>
 #include <QGuiApplication>
 #include <QKeyEvent>
 
 // myth
-#include "libmyth/mythcontext.h"
 #include "libmythbase/compat.h"
 #include "libmythbase/exitcodes.h"
 #include "libmythbase/lcddevice.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdbcon.h"
 #include "libmythbase/mythdirs.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythbase/mythsystemlegacy.h"
-#include "libmythbase/remoteutil.h"
 #include "libmythtv/tv.h"
 
 // mythwelcome
@@ -343,7 +348,7 @@ void WelcomeDialog::updateScreen(void)
         {
             TunerStatus tuner = m_tunerList[m_screenTunerNo];
 
-            do
+            while (!tuner.isRecording)
             {
                 if (m_screenTunerNo < m_tunerList.size() - 1)
                     m_screenTunerNo++;
@@ -351,7 +356,6 @@ void WelcomeDialog::updateScreen(void)
                     m_screenTunerNo = 0;
               tuner = m_tunerList[m_screenTunerNo];
             }
-            while (!tuner.isRecording);
 
             status = tr("Tuner %1 is recording:").arg(tuner.id);
             status += "\n";
@@ -407,7 +411,9 @@ void WelcomeDialog::updateScreen(void)
 
     // update status message
     if (m_statusList.empty())
+    {
         status = tr("Please Wait...");
+    }
     else
     {
         if ((int)m_statusListNo >= m_statusList.count())
@@ -565,7 +571,9 @@ bool WelcomeDialog::checkConnectionToServer(void)
     bool bRes = false;
 
     if (gCoreContext->IsConnectedToMaster())
+    {
         bRes = true;
+    }
     else
     {
         if (gCoreContext->SafeConnectToMasterServer(false))
@@ -633,7 +641,7 @@ void WelcomeDialog::unlockShutdown(void)
 void WelcomeDialog::runEPGGrabber(void)
 {
     runMythFillDatabase();
-    sleep(1);
+    std::this_thread::sleep_for(1s);
     updateStatusMessage();
     updateScreen();
 }
@@ -719,7 +727,7 @@ void WelcomeDialog::shutdownNow(void)
     // run command to set wakeuptime in bios and shutdown the system
     command = QString();
 
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
     command = "sudo ";
 #endif
 
@@ -728,3 +736,4 @@ void WelcomeDialog::shutdownNow(void)
     myth_system(command, kMSDontBlockInputDevs);
 }
 
+#include "moc_welcomedialog.cpp"

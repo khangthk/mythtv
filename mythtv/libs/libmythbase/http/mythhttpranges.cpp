@@ -1,3 +1,6 @@
+// C++ headers
+#include <algorithm>
+
 // MythTV
 #include "mythlogging.h"
 #include "http/mythhttpranges.h"
@@ -64,7 +67,7 @@ void MythHTTPRanges::BuildMultipartHeaders(MythHTTPResponse* Response)
     }
     headers.emplace_back(MythHTTPData::Create(qPrintable(QString("\r\n--%1--")
                                                            .arg(s_multipartBoundary))));
-    std::reverse(headers.begin(), headers.end());
+    std::ranges::reverse(headers);
     int64_t headersize = 0;
     for (auto & header : headers)
         headersize += header->size();
@@ -252,11 +255,12 @@ MythHTTPStatus MythHTTPRanges::ParseRanges(const QString& Request, int64_t Total
             { return First.first < Second.first; };
 
         // we MUST sort first
-        std::sort(ranges.begin(), ranges.end(), lessthan);
+        std::ranges::sort(ranges, lessthan);
 
         if (VERBOSE_LEVEL_CHECK(VB_HTTP, LOG_INFO))
         {
             QStringList debug;
+            debug.reserve(ranges.size());
             for (const auto & range : ranges)
                 debug.append(QString("%1:%2").arg(range.first).arg(range.second));
             LOG(VB_HTTP, LOG_INFO, LOC + QString("Sorted ranges: %1").arg(debug.join(" ")));
@@ -279,8 +283,8 @@ MythHTTPStatus MythHTTPRanges::ParseRanges(const QString& Request, int64_t Total
                 }
             }
 
-            auto last = std::unique(ranges.begin(), ranges.end(), equals);
-            ranges.erase(last, ranges.end());
+            auto [first, last] = std::ranges::unique(ranges, equals);
+            ranges.erase(first, last);
         }
     }
 
@@ -291,6 +295,7 @@ MythHTTPStatus MythHTTPRanges::ParseRanges(const QString& Request, int64_t Total
     if (VERBOSE_LEVEL_CHECK(VB_HTTP, LOG_INFO))
     {
         QStringList debug;
+        debug.reserve(ranges.size());
         for (const auto & range : ranges)
             debug.append(QString("%1:%2").arg(range.first).arg(range.second));
         LOG(VB_HTTP, LOG_INFO, LOC + QString("Final ranges : %1").arg(debug.join(" ")));

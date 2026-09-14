@@ -17,7 +17,11 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
+#ifndef LIBMYTHTV_TEST_MPEGTABLES_H
+#define LIBMYTHTV_TEST_MPEGTABLES_H
 
+#include <QChar>     // Fix Qt6 GCC SFINAE warning
+#include <QBitArray> // Fix Qt6 GCC SFINAE warning
 #include <QTest>
 
 /* test data */
@@ -116,4 +120,9 @@ class TestMPEGTables: public QObject
     /** test atsc huffman1 decoding */
     static void atsc_huffman_test_data (void);
     static void atsc_huffman_test (void);
+
+    static void mss_test_data(void);
+    static void mss_test(void);
 };
+
+#endif // LIBMYTHTV_TEST_MPEGTABLES_H

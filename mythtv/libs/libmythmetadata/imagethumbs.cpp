@@ -3,7 +3,7 @@
 #include <QDir>
 #include <QStringList>
 
-#include "libmythbase/mythcorecontext.h"  // for MYTH_APPNAME_MYTHPREVIEWGEN
+#include "libmythbase/mythappname.h"
 #include "libmythbase/mythdirs.h"         // for GetAppBinDir
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythsystemlegacy.h"
@@ -100,15 +100,15 @@ void ThumbThread<DBFS>::AbortDevice(int devId, const QString &action)
 template <class DBFS>
 void ThumbThread<DBFS>::RemoveTasks(ThumbQueue &queue, int devId)
 {
-    QMutableMultiMapIterator<int, TaskPtr> it(queue);
-    while (it.hasNext())
+    for (auto it = queue.begin(); it != queue.end(); /* no inc */)
     {
-        it.next();
         TaskPtr task = it.value();
         // All thumbs in a task come from same device
         if (task && !task->m_images.isEmpty()
                 && task->m_images.at(0)->m_device == devId)
-            it.remove();
+            it = queue.erase(it);
+        else
+            ++it;
     }
 }
 
@@ -300,9 +300,7 @@ QString ThumbThread<DBFS>::CreateThumbnail(const ImagePtrK &im, int thumbPriorit
                 .arg(im->m_type).arg(imagePath);
     }
 
-    // Compensate for any Qt auto-orientation
-    int orientBy = Orientation(im->m_orientation)
-            .GetCurrent(im->m_type == kImageFile);
+    int orientBy = Orientation(im->m_orientation).GetCurrent();
 
     // Orientate now to optimise load/display time - no orientation
     // is required when displaying thumbnails

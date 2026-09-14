@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
 
 # python 3 doesn't have a unicode type
 try:
@@ -96,7 +95,6 @@ encodetoac3 = False
 import os
 import sys
 import string
-import codecs
 import getopt
 import traceback
 import signal
@@ -196,7 +194,7 @@ jobfile="mydata.xml"
 
 #progress log filename and file object
 progresslog = ""
-progressfile = codecs.open("/dev/null", 'w', 'utf-8')
+progressfile = open("/dev/null", 'w', encoding='utf-8')
 
 #default location of DVD drive
 dvddrivepath = "/dev/dvd"
@@ -362,7 +360,7 @@ def getTempPath():
 def getCPUCount():
     """return the number of CPUs"""
     # /proc/cpuinfo
-    cpustat = codecs.open("/proc/cpuinfo", 'r', 'utf-8')
+    cpustat = open("/proc/cpuinfo", 'r', encoding='utf-8')
     cpudata = cpustat.readlines()
     cpustat.close()
 
@@ -1811,7 +1809,7 @@ def generateProjectXCutlist(chanid, starttime, folder):
     cutlist = rec.markup.getcutlist()
 
     if len(cutlist):
-        with codecs.open(os.path.join(folder, "cutlist_x.txt"), 'w', 'utf-8') as cutlist_f:
+        with open(os.path.join(folder, "cutlist_x.txt"), 'w', encoding='utf-8') as cutlist_f:
             cutlist_f.write("CollectionPanel.CutMode=2\n")
             i = 0
             for cut in cutlist:
@@ -5191,7 +5189,7 @@ def main():
     if progresslog != "":
         if os.path.exists(progresslog):
             os.remove(progresslog)
-        progressfile = codecs.open(progresslog, 'w', 'utf-8')
+        progressfile = open(progresslog, 'w', encoding='utf-8')
         write( "mythburn.py (%s) starting up..." % VERSION)
 
     #Get mysql database parameters

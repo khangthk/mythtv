@@ -1,4 +1,9 @@
 // Qt
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QNetworkInterface> // for QNetworkInterface::allAddresses ()
 #include <QCoreApplication>
 #include <QWaitCondition>
@@ -9,16 +14,16 @@
 #include <QThread>
 #include <QMetaType>
 
-// setsockopt -- has to be after Qt includes for Q_OS_WIN definition
-#if defined(Q_OS_WIN)
+// setsockopt
+#ifdef Q_OS_WINDOWS
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <cstdio>
 #else
 #include <sys/socket.h>
 #endif
-#include <unistd.h> // for usleep (and socket code on Q_OS_WIN)
 #include <algorithm> // for max
+#include <thread>
 #include <vector> // for vector
 
 // MythTV
@@ -186,7 +191,7 @@ void MythSocket::ConnectHandler(void)
     m_tcpSocket->setSocketOption(QAbstractSocket::KeepAliveOption, QVariant(1));
 
     int reuse_addr_val = 1;
-#if defined(Q_OS_WIN)
+#ifdef Q_OS_WINDOWS
     int ret = setsockopt(m_tcpSocket->socketDescriptor(), SOL_SOCKET,
                          SO_REUSEADDR, (char*) &reuse_addr_val,
                          sizeof(reuse_addr_val));
@@ -201,7 +206,7 @@ void MythSocket::ConnectHandler(void)
     }
 
     int rcv_buf_val = kSocketReceiveBufferSize;
-#if defined(Q_OS_WIN)
+#ifdef Q_OS_WINDOWS
     ret = setsockopt(m_tcpSocket->socketDescriptor(), SOL_SOCKET,
                      SO_RCVBUF, (char*) &rcv_buf_val,
                      sizeof(rcv_buf_val));
@@ -655,7 +660,7 @@ void MythSocket::ConnectToHostReal(const QHostAddress& _addr, quint16 port, bool
     if (!usingLoopback)
     {
         QString host = addr.toString();
-        if (PortChecker::resolveLinkLocal(host, port))
+        if (PortChecker{}.resolveLinkLocal(host, port))
             addr.setAddress(host);
     }
 
@@ -778,7 +783,7 @@ void MythSocket::WriteStringListReal(const QStringList *list, bool *ret)
                 *ret = false;
                 return;
             }
-            usleep(1000);
+            std::this_thread::sleep_for(1ms);
         }
     }
 
@@ -978,24 +983,22 @@ void MythSocket::ReadReal(char *data, int size, std::chrono::milliseconds max_wa
 
 void MythSocket::ResetReal(void)
 {
+    uint avail {0};
     std::vector<char> trash;
 
     m_tcpSocket->waitForReadyRead(30);
-    do
+    while ((avail = m_tcpSocket->bytesAvailable()) > 0)
     {
-        uint avail = m_tcpSocket->bytesAvailable();
-        if (avail)
-        {
-            trash.resize(std::max((uint)trash.size(),avail));
-            m_tcpSocket->read(trash.data(), avail);
-        }
+        trash.resize(std::max((uint)trash.size(),avail));
+        m_tcpSocket->read(trash.data(), avail);
 
         LOG(VB_NETWORK, LOG_INFO, LOC() + "Reset() " +
             QString("%1 bytes available").arg(avail));
 
         m_tcpSocket->waitForReadyRead(30);
     }
-    while (m_tcpSocket->bytesAvailable() > 0);
 
     m_dataAvailable.fetchAndStoreOrdered(0);
 }
+
+#include "moc_mythsocket.cpp"

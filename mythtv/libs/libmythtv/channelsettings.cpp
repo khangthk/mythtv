@@ -8,13 +8,45 @@
 
 // MythTV headers
 #include "libmythbase/mythdirs.h"
-#include "libmythbase/programinfo.h" // for COMM_DETECT*, GetPreferredSkipTypeCombinations()
+#include "libmythbase/mythlogging.h"
 
 #include "cardutil.h"
 #include "channelsettings.h"
 #include "channelutil.h"
 #include "mpeg/mpegtables.h"
+#include "programtypes.h" // for COMM_DETECT*, GetPreferredSkipTypeCombinations()
 
+void ChannelID::Save()
+{
+    if (getValue().toInt() == 0) {
+        setValue(findHighest());
+
+        MSqlQuery query(MSqlQuery::InitCon());
+
+        QString querystr = QString("SELECT %1 FROM %2 WHERE %3='%4'")
+                         .arg(m_field, m_table, m_field, getValue());
+        query.prepare(querystr);
+
+        if (!query.exec() && !query.isActive())
+            MythDB::DBError("ChannelID::save", query);
+
+        if (query.size())
+            return;
+
+        querystr = QString("INSERT INTO %1 (%2) VALUES ('%3')")
+                         .arg(m_table, m_field, getValue());
+        query.prepare(querystr);
+
+        if (!query.exec() || !query.isActive())
+            MythDB::DBError("ChannelID::save", query);
+
+        if (query.numRowsAffected() != 1)
+        {
+            LOG(VB_GENERAL, LOG_ERR, QString("ChannelID, Error: ") +
+                    QString("Failed to insert into: %1").arg(m_table));
+        }
+    }
+}
 
 QString ChannelDBStorage::GetWhereClause(MSqlBindings &bindings) const
 {
@@ -76,6 +108,11 @@ class Name : public MythUITextEditSetting
     {
         setLabel(QCoreApplication::translate("(Common)", "Channel Name"));
     }
+
+    ~Name() override
+    {
+        delete GetStorage();
+    }
 };
 
 class Channum : public MythUITextEditSetting
@@ -87,6 +124,11 @@ class Channum : public MythUITextEditSetting
         setLabel(QCoreApplication::translate("(Common)", "Channel Number"));
         setHelpText(QCoreApplication::translate("(Common)",
         "This is the number by which the channel is known to MythTV."));
+    }
+
+    ~Channum() override
+    {
+        delete GetStorage();
     }
 };
 
@@ -102,6 +144,11 @@ class Source : public MythUIComboBoxSetting
         "It is NOT a good idea to change this value as it only changes "
         "the sourceid in table channel but not in dtv_multiplex. "
         "The sourceid in dtv_multiplex cannot and should not be changed."));
+    }
+
+    ~Source() override
+    {
+        delete GetStorage();
     }
 
     void Load(void) override // StandardSetting
@@ -157,6 +204,11 @@ class Callsign : public MythUITextEditSetting
     {
         setLabel(QCoreApplication::translate("(Common)", "Callsign"));
     }
+
+    ~Callsign() override
+    {
+        delete GetStorage();
+    }
 };
 
 ChannelTVFormat::ChannelTVFormat(const ChannelID &id) :
@@ -172,6 +224,11 @@ ChannelTVFormat::ChannelTVFormat(const ChannelID &id) :
     QStringList list = GetFormats();
     for (const QString& format : std::as_const(list))
         addSelection(format);
+}
+
+ChannelTVFormat::~ChannelTVFormat()
+{
+    delete GetStorage();
 }
 
 QStringList ChannelTVFormat::GetFormats(void)
@@ -211,6 +268,11 @@ class TimeOffset : public MythUISpinBoxSetting
             "import.  This can be used when the listings for a particular "
             "channel are in a different time zone."));
     }
+
+    ~TimeOffset() override
+    {
+        delete GetStorage();
+    }
 };
 
 class Priority : public MythUISpinBoxSetting
@@ -228,6 +290,11 @@ class Priority : public MythUISpinBoxSetting
             "if you want this to be a preferred channel, a negative one to "
             "depreciate this channel."));
     }
+
+    ~Priority() override
+    {
+        delete GetStorage();
+    }
 };
 
 class Icon : public MythUITextEditSetting
@@ -241,6 +308,11 @@ class Icon : public MythUITextEditSetting
         setHelpText(QCoreApplication::translate("(ChannelSettings)",
             "Image file to use as the icon for this channel on various MythTV "
             "displays."));
+    }
+
+    ~Icon() override
+    {
+        delete GetStorage();
     }
 };
 
@@ -258,6 +330,11 @@ class VideoFilters : public MythUITextEditSetting
             "with hardware encoding cards."));
 
     }
+
+    ~VideoFilters() override
+    {
+        delete GetStorage();
+    }
 };
 
 
@@ -273,6 +350,11 @@ class OutputFilters : public MythUITextEditSetting
         setHelpText(QCoreApplication::translate("(ChannelSettings)",
             "Filters to be used when recordings from this channel are viewed. "
             "Start with a plus to append to the global playback filters."));
+    }
+
+    ~OutputFilters() override
+    {
+        delete GetStorage();
     }
 };
 
@@ -290,6 +372,11 @@ class XmltvID : public MythUIComboBoxSetting
             "between a channel in your line-up and a channel in their "
             "database. Normally this is set automatically when "
             "'mythfilldatabase' is run."));
+    }
+
+    ~XmltvID() override
+    {
+        delete GetStorage();
     }
 
     void Load(void) override // StandardSetting
@@ -346,6 +433,11 @@ class ServiceID : public MythUISpinBoxSetting
         setHelpText(QCoreApplication::translate("(ChannelSettings)",
                 "Service ID (Program Number) of desired channel within the transport stream. "
                 "If there is only one channel, then setting this to anything will still find it."));
+    }
+
+    ~ServiceID() override
+    {
+        delete GetStorage();
     }
 
     void Load(void) override // StandardSetting
@@ -411,6 +503,11 @@ class CommMethod : public MythUIComboBoxSetting
         for (int pref : tmp)
             addSelection(SkipTypeToString(pref), QString::number(pref));
     }
+
+    ~CommMethod() override
+    {
+        delete GetStorage();
+    }
 };
 
 class Visible : public MythUIComboBoxSetting
@@ -438,6 +535,11 @@ class Visible : public MythUIComboBoxSetting
         addSelection(QCoreApplication::translate("(Common)", "Never Visible"),
                      QString::number(kChannelNeverVisible));
     }
+
+    ~Visible() override
+    {
+        delete GetStorage();
+    }
 };
 
 class OnAirGuide : public MythUICheckBoxSetting
@@ -452,6 +554,11 @@ class OnAirGuide : public MythUICheckBoxSetting
         setHelpText(QCoreApplication::translate("(ChannelSettings)",
             "If enabled, guide information for this channel will be updated "
             "using 'Over-the-Air' program listings."));
+    }
+
+    ~OnAirGuide() override
+    {
+        delete GetStorage();
     }
 };
 
@@ -469,6 +576,11 @@ class ChannelURL : public MythUITextEditSetting
             "URL for streaming of this channel. Used by the IPTV "
             "capture card and obtained with an \"M3U Import\" or "
             "with a \"HDHomeRun Channel Import\" loading of an XML file."));
+    }
+
+    ~ChannelURL() override
+    {
+        delete GetStorage();
     }
 };
 
@@ -490,6 +602,11 @@ class Freqid : public MythUITextEditSetting
             "frequency (in kHz) or a valid channel "
             "number that will be understood by your tuners."));
     }
+
+    ~Freqid() override
+    {
+        delete GetStorage();
+    }
 };
 
 class Finetune : public MythUISpinBoxSetting
@@ -508,6 +625,11 @@ class Finetune : public MythUISpinBoxSetting
 
         setValue("0");
     }
+
+    ~Finetune() override
+    {
+        delete GetStorage();
+    }
 };
 
 class Contrast : public MythUISpinBoxSetting
@@ -518,6 +640,11 @@ class Contrast : public MythUISpinBoxSetting
                              0, 65535, 655)
     {
         setLabel(QCoreApplication::translate("(Common)", "Contrast"));
+    }
+
+    ~Contrast() override
+    {
+        delete GetStorage();
     }
 };
 
@@ -530,6 +657,11 @@ class Brightness : public MythUISpinBoxSetting
     {
         setLabel(QCoreApplication::translate("(Common)", "Brightness"));
     }
+
+    ~Brightness() override
+    {
+        delete GetStorage();
+    }
 };
 
 class Colour : public MythUISpinBoxSetting
@@ -541,6 +673,11 @@ class Colour : public MythUISpinBoxSetting
     {
         setLabel(QCoreApplication::translate("(Common)", "Color"));
     }
+
+    ~Colour() override
+    {
+        delete GetStorage();
+    }
 };
 
 class Hue : public MythUISpinBoxSetting
@@ -551,6 +688,11 @@ class Hue : public MythUISpinBoxSetting
                              0, 65535, 655)
     {
         setLabel(QCoreApplication::translate("(Common)", "Hue"));
+    }
+
+    ~Hue() override
+    {
+        delete GetStorage();
     }
 };
 
@@ -646,7 +788,9 @@ void ChannelOptionsCommon::sourceChanged(const QString& sourceid)
     query.bindValue(":SOURCEID", sourceid);
 
     if (!query.exec() || !query.isActive())
+    {
         MythDB::DBError("sourceChanged -- supports eit", query);
+    }
     else
     {
         supports_eit = (query.size() == 0);
@@ -662,7 +806,9 @@ void ChannelOptionsCommon::sourceChanged(const QString& sourceid)
         query.bindValue(":SOURCEID", sourceid);
 
         if (!query.exec() || !query.isActive())
+        {
             MythDB::DBError("sourceChanged -- eit only", query);
+        }
         else
         {
             uses_eit_only = (query.size() != 0);
@@ -817,4 +963,4 @@ void ChannelOptionsRawTS::Save(void)
     ChannelUtil::SaveCachedPids(chanid, pid_cache, true /* delete_all */);
 }
 
-/* vim: set expandtab tabstop=4 shiftwidth=4: */
+#include "moc_channelsettings.cpp"

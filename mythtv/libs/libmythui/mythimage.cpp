@@ -103,21 +103,37 @@ QImage MythImage::ApplyExifOrientation(QImage &image, int orientation)
     case 1: // normal
         return image;
     case 2: // mirror horizontal
+#if QT_VERSION < QT_VERSION_CHECK(6,9,0)
         return image.mirrored(true, false);
+#else
+        return image.flipped(Qt::Horizontal);
+#endif
     case 3: // rotate 180
         transform.rotate(180);
         return image.transformed(transform);
     case 4: // mirror vertical
+#if QT_VERSION < QT_VERSION_CHECK(6,9,0)
         return image.mirrored(false, true);
+#else
+        return image.flipped(Qt::Vertical);
+#endif
     case 5: // mirror horizontal and rotate 270 CCW
         transform.rotate(270);
+#if QT_VERSION < QT_VERSION_CHECK(6,9,0)
         return image.mirrored(true, false).transformed(transform);
+#else
+        return image.flipped(Qt::Horizontal).transformed(transform);
+#endif
     case 6: // rotate 90 CW
         transform.rotate(90);
         return image.transformed(transform);
     case 7: // mirror horizontal and rotate 90 CW
         transform.rotate(90);
+#if QT_VERSION < QT_VERSION_CHECK(6,9,0)
         return image.mirrored(true, false).transformed(transform);
+#else
+        return image.flipped(Qt::Horizontal).transformed(transform);
+#endif
     case 8: // rotate 270 CW
         transform.rotate(270);
         return image.transformed(transform);
@@ -172,7 +188,11 @@ void MythImage::Reflect(ReflectAxis axis, int shear, int scale, int length,
     FillDirection fillDirection = FillDirection::TopToBottom;
     if (axis == ReflectAxis::Vertical)
     {
+#if QT_VERSION < QT_VERSION_CHECK(6,9,0)
         mirrorImage = mirrored(false,true);
+#else
+        mirrorImage = flipped(Qt::Vertical);
+#endif
         if (length < 100)
         {
             int height = (int)((float)mirrorImage.height() * (float)length/100);
@@ -182,7 +202,11 @@ void MythImage::Reflect(ReflectAxis axis, int shear, int scale, int length,
     }
     else if (axis == ReflectAxis::Horizontal)
     {
+#if QT_VERSION < QT_VERSION_CHECK(6,9,0)
         mirrorImage = mirrored(true,false);
+#else
+        mirrorImage = flipped(Qt::Horizontal);
+#endif
         if (length < 100)
         {
             int width = (int)((float)mirrorImage.width() * (float)length/100);
@@ -199,13 +223,13 @@ void MythImage::Reflect(ReflectAxis axis, int shear, int scale, int length,
     QTransform shearTransform;
     if (axis == ReflectAxis::Vertical)
     {
-        shearTransform.scale(1,(float)scale/100);
-        shearTransform.shear((float)shear/100,0);
+        shearTransform.scale(1,static_cast<qreal>(scale)/100);
+        shearTransform.shear(static_cast<qreal>(shear)/100,0);
     }
     else if (axis == ReflectAxis::Horizontal)
     {
-        shearTransform.scale((float)scale/100,1);
-        shearTransform.shear(0,(float)shear/100);
+        shearTransform.scale(static_cast<qreal>(scale)/100,1);
+        shearTransform.shear(0,static_cast<qreal>(shear)/100);
     }
 
     mirrorImage = mirrorImage.transformed(shearTransform, Qt::SmoothTransformation);

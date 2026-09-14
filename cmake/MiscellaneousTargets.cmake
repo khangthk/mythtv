@@ -14,6 +14,11 @@ if(NOT CMAKE_CROSSCOMPILING)
     ALWAYS TRUE
     EXCLUDE_FROM_MAIN TRUE)
   ExternalProject_Add_StepTargets(MythTV tests)
+
+  add_custom_target(
+    tests
+    COMMAND cmake --build . -t MythTV-tests
+    USES_TERMINAL)
 endif()
 
 ExternalProject_Add_Step(
@@ -37,6 +42,7 @@ configure_file(cmake/files/tags_tools.cmake.in tags_tools.cmake @ONLY)
 function(add_misc_runtime_target NAME)
   add_custom_target(${NAME})
   add_custom_command(
+    POST_BUILD
     TARGET ${NAME}
     COMMAND ${CMAKE_COMMAND} -P tags_tools.cmake ${NAME}
     VERBATIM USES_TERMINAL)

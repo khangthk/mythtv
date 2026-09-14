@@ -241,44 +241,62 @@ SatIPStreamHandler::~SatIPStreamHandler()
 
 bool SatIPStreamHandler::UpdateFilters(void)
 {
-#ifdef DEBUG_PID_FILTERS
-    LOG(VB_RECORD, LOG_DEBUG, LOC + "UpdateFilters()");
-#endif // DEBUG_PID_FILTERS
     QMutexLocker locker(&m_pidLock);
 
-    QStringList pids;
-
-    if (m_pidInfo.contains(0x2000))
+#ifdef DEBUG_PID_FILTERS
     {
-        pids.append("all");
-    }
-    else
-    {
+        QStringList pids;
         for (auto it = m_pidInfo.cbegin(); it != m_pidInfo.cend(); ++it)
             pids.append(QString("%1").arg(it.key()));
+        QString msg = QString("PIDS: '%1'").arg(pids.join(","));
+        LOG(VB_RECORD, LOG_INFO, LOC + msg);
     }
-#ifdef DEBUG_PID_FILTERS
-    QString msg = QString("PIDS: '%1'").arg(pids.join(","));
-    LOG(VB_RECORD, LOG_DEBUG, LOC + msg);
 #endif // DEBUG_PID_FILTERS
 
     bool rval = true;
-    if (m_rtsp && m_oldpids != pids)
+    if (m_rtsp)
     {
-        QString pids_str = QString("pids=%1").arg(!pids.empty() ? pids.join(",") : "none");
-        LOG(VB_RECORD, LOG_INFO, LOC + "Play(pids_str) " + pids_str);
-
-        // Telestar Digibit R1 Sat>IP box cannot handle a lot of pids
-        if (pids.size() > 32)
+        QStringList pids;
+        if (m_pidInfo.contains(0x2000))
         {
-            LOG(VB_RECORD, LOG_INFO, LOC +
-                QString("Receive full TS, number of PIDs:%1 is more than 32").arg(pids.size()));
-            LOG(VB_RECORD, LOG_DEBUG, LOC + pids_str);
-            pids_str = QString("pids=all");
+            pids.append("all");
+        }
+        else
+        {
+            // Create a list without the low priority PIDs.
+            // This filters out the PMT PIDs of the channels
+            // on this multiplex that we do not want to receive.
+            for (auto it = m_pidInfo.cbegin(); it != m_pidInfo.cend(); ++it)
+            {
+                auto pid_priority = GetPIDPriority(it.key());
+                if (pid_priority == kPIDPriorityNormal ||
+                    pid_priority == kPIDPriorityHigh)
+                {
+                    pids.append(QString("%1").arg(it.key()));
+                }
+            }
         }
 
-        rval = m_rtsp->Play(pids_str);
-        m_oldpids = pids;
+        if (m_oldpids != pids)
+        {
+            LOG(VB_RECORD, LOG_INFO, LOC +
+                QString("Number of PIDs used:%1  All PIDs:%2").arg(pids.size()).arg(m_pidInfo.size()));
+
+            QString pids_str = QString("pids=%1").arg(!pids.empty() ? pids.join(",") : "none");
+            LOG(VB_RECORD, LOG_INFO, LOC + "Play(pids_str) " + pids_str);
+
+            // Telestar Digibit R1 Sat>IP box cannot handle a lot of pids
+            if (pids.size() > 32)
+            {
+                LOG(VB_RECORD, LOG_INFO, LOC +
+                    QString("Receive full TS, number of PIDs:%1 is more than 32").arg(pids.size()));
+                LOG(VB_RECORD, LOG_DEBUG, LOC + pids_str);
+                pids_str = QString("pids=all");
+            }
+
+            rval = m_rtsp->Play(pids_str);
+            m_oldpids = pids;
+        }
     }
 
     return rval;
@@ -342,7 +360,7 @@ void SatIPStreamHandler::run(void)
         QMutexLocker locker(&m_tunelock);
         m_rtsp->Teardown();
         m_setupinvoked = false;
-        m_oldtuningurl = "";
+        m_oldtuningurl = QUrl();
     }
 
     LOG(VB_RECORD, LOG_INFO, LOC + "RunTS(): end");
@@ -393,7 +411,7 @@ bool SatIPStreamHandler::Tune(const DTVMultiplex &tuning)
     }
     else
     {
-        LOG(VB_RECORD, LOG_ERR, LOC + QString("Unhandled m_tunerType %1 %2").arg(m_tunerType).arg(m_tunerType.toString()));
+        LOG(VB_RECORD, LOG_ERR, LOC + QString("Unhandled m_tunerType %1 %2").arg(m_tunerType.toInt()).arg(m_tunerType.toString()));
         return false;
     }
 
@@ -486,7 +504,7 @@ void SatIPStreamHandler::Close(void)
 {
     delete m_rtsp;
     m_rtsp = nullptr;
-    m_baseurl = nullptr;
+    m_baseurl = QUrl();
 }
 
 bool SatIPStreamHandler::HasLock()
@@ -748,3 +766,5 @@ uint SatIPStreamHandler::SetUDPReceiveBufferSize(QUdpSocket *socket, uint rcvbuf
     }
     return SatIPStreamHandler::GetUDPReceiveBufferSize(socket);
 }
+
+#include "moc_satipstreamhandler.cpp"

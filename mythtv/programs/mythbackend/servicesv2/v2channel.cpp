@@ -35,11 +35,11 @@
 // MythTV
 #include "libmythbase/http/mythhttpmetaservice.h"
 #include "libmythbase/compat.h"
+#include "libmythbase/mythdb.h"
 #include "libmythbase/mythdbcon.h"
 #include "libmythbase/mythdirs.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythbase/mythversion.h"
-#include "libmythbase/mythcorecontext.h"
-#include "libmythbase/programtypes.h"
 #include "libmythbase/mythdownloadmanager.h"
 #include "libmythtv/channelutil.h"
 #include "libmythtv/channelscan/scanwizardconfig.h"
@@ -51,6 +51,7 @@
 #include "libmythbase/mythdate.h"
 #include "libmythtv/frequencies.h"
 #include "libmythbase/mythsystemlegacy.h"
+#include "libmythtv/programtypes.h"
 #include "libmythtv/restoredata.h"
 #include "libmythtv/scheduledrecording.h"
 
@@ -160,7 +161,9 @@ V2ChannelInfoList* V2Channel::GetChannelInfoList( uint nSourceID,
         nTotalPages = (int)std::ceil((float)nTotalAvailable / nCount);
 
     if (nTotalPages == 1)
+    {
         nCurPage = 1;
+    }
     else
     {
         nCurPage = (int)std::ceil((float)nStartIndex / nCount) + 1;
@@ -250,7 +253,9 @@ bool V2Channel::UpdateDBChannel( uint          MplexID,
     if (HAS_PARAMv2("UseEIT"))
         channel.m_useOnAirGuide = UseEIT;
     if (HAS_PARAMv2("ExtendedVisible"))
+    {
         channel.m_visible = channelVisibleTypeFromString(ExtendedVisible);
+    }
     else if (HAS_PARAMv2("Visible"))
     {
         if (channel.m_visible == kChannelVisible ||
@@ -813,7 +818,9 @@ V2VideoMultiplexList* V2Channel::GetVideoMultiplexList( uint nSourceID,
         totalPages = (int)std::ceil((float)muxCount / nCount);
 
     if (totalPages == 1)
+    {
         curPage = 1;
+    }
     else
     {
         curPage = (int)std::ceil((float)nStartIndex / nCount) + 1;
@@ -1257,3 +1264,5 @@ bool V2Channel::CopyIconToBackend(const QString& Url, const QString& ChanId)
 
     return fRet;
 }
+
+#include "moc_v2channel.cpp"

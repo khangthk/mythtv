@@ -8,8 +8,9 @@
 
 // MythTV headers
 #include "libmythbase/mythcorecontext.h"
-#include "libmythbase/programinfo.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythtv/mythcommflagplayer.h"
+#include "libmythtv/programinfo.h"
 
 PrePostRollFlagger::PrePostRollFlagger(SkipType commDetectMethod,
                             bool showProgress, bool fullSpeed,
@@ -57,7 +58,7 @@ bool PrePostRollFlagger::go()
 
 
     // Don't bother flagging short ~realtime recordings
-    if ((wereRecording) && (!m_stillRecording) && (secsSince < requiredHeadStart))
+    if (wereRecording && (!m_stillRecording) && (secsSince < requiredHeadStart))
         return false;
 
     m_aggressiveDetection =
@@ -106,7 +107,7 @@ bool PrePostRollFlagger::go()
         framesToProcess += stopFrame;
     if(m_postRoll)
         //guess two minutes before
-        framesToProcess += m_myTotalFrames - m_postRoll + m_fps * 120;
+        framesToProcess += m_myTotalFrames - m_postRoll + (m_fps * 120);
 
 
     long long framesProcessed = 0;
@@ -289,7 +290,7 @@ long long PrePostRollFlagger::findBreakInrange(long long startFrame,
             ((m_showProgress || m_stillRecording) &&
              ((currentFrameNumber % 100) == 0)))
         {
-            float elapsed = flagTime.elapsed() / 1000.0;
+            float elapsed = flagTime.elapsed() / 1000.0F;
 
             float flagFPS = 0.0F;
             if (elapsed != 0.0F)
@@ -335,7 +336,7 @@ long long PrePostRollFlagger::findBreakInrange(long long startFrame,
             if (percentage % 10 == 0 && prevpercent != percentage)
             {
                 prevpercent = percentage;
-                LOG(VB_GENERAL, LOG_INFO, QString("%1%% Completed @ %2 fps.")
+                LOG(VB_GENERAL, LOG_INFO, QString("%1% Completed @ %2 fps.")
                     .arg(percentage) .arg(flagFPS));
             }
         }

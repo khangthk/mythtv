@@ -18,7 +18,9 @@
 #include <linux/videodev2.h>
 
 // MythTV headers
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdb.h"
+#include "libmythbase/mythlogging.h"
 
 #include "cardutil.h"
 #include "channelutil.h"
@@ -410,7 +412,7 @@ bool V4LChannel::Tune(uint64_t frequency)
 
     struct v4l2_frequency vf {};
     vf.tuner = 0; // use first tuner
-    vf.frequency = (isTunerCapLow) ?
+    vf.frequency = isTunerCapLow ?
         ((int)(frequency / 62.5)) : (frequency / 62500);
 
     vf.type = V4L2_TUNER_ANALOG_TV;
@@ -622,7 +624,7 @@ bool V4LChannel::InitPictureAttribute(const QString &db_col_name)
     float dfl       = (qctrl.default_value - qctrl.minimum) / new_range;
     int   norm_dfl  = (0x10000 + (int)(dfl * old_range) - 32768) & 0xFFFF;
 
-    if (m_pictAttrDefault.find(db_col_name) == m_pictAttrDefault.end())
+    if (!m_pictAttrDefault.contains(db_col_name))
     {
         if (m_deviceName == "pcHDTV HD3000 HDTV")
         {
@@ -680,7 +682,7 @@ int V4LChannel::GetPictureAttribute(PictureAttribute attr) const
         db_col_name, m_inputId);
     int dfield = 0;
 
-    if (m_pictAttrDefault.find(db_col_name) != m_pictAttrDefault.end())
+    if (m_pictAttrDefault.contains(db_col_name))
         dfield = m_pictAttrDefault[db_col_name];
 
     int val = (cfield + sfield + dfield) & 0xFFFF;
@@ -715,7 +717,7 @@ static int get_v4l2_attribute_value(int videofd, int v4l2_attrib)
         return -1;
     }
 
-    float mult = 65535.0 / (qctrl.maximum - qctrl.minimum);
+    float mult = 65535.0F / (qctrl.maximum - qctrl.minimum);
     return std::clamp((int)(mult * (ctrl.value - qctrl.minimum)), 0, 65525);
 }
 
@@ -732,7 +734,7 @@ static int set_v4l2_attribute_value(int videofd, int v4l2_attrib, int newvalue)
         return -1;
     }
 
-    float mult = (qctrl.maximum - qctrl.minimum) / 65535.0;
+    float mult = (qctrl.maximum - qctrl.minimum) / 65535.0F;
     ctrl.value = (int)((mult * newvalue) + qctrl.minimum);
     ctrl.value = std::min(ctrl.value, qctrl.maximum);
     ctrl.value = std::max(ctrl.value, qctrl.minimum);
@@ -767,7 +769,7 @@ int V4LChannel::ChangePictureAttribute(
         return -1;
 
     int old_value = GetPictureAttribute(attr);
-    int new_value = old_value + ((up) ? 655 : -655);
+    int new_value = old_value + (up ? 655 : -655);
 
     // make sure we are within bounds (wrap around for hue)
     if (V4L2_CID_HUE == v4l2_attrib)

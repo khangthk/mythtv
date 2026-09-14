@@ -3,7 +3,7 @@
 
 // C++
 #include <algorithm>
-#include <unistd.h> // for sleep()
+#include <thread>
 
 // QT
 #include <QApplication>
@@ -11,11 +11,11 @@
 #include <QUrl>
 
 // mythtv
-#include "libmyth/mythcontext.h"
 #include "libmythbase/compat.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
-#include "libmythbase/programinfo.h"
-#include "libmythbase/remoteutil.h"
+#include "libmythbase/storagegroup.h"
+#include "libmythtv/programinfo.h"
 #include "libmythtv/recordingrule.h"
 
 // libmythmetadata
@@ -184,7 +184,7 @@ void MetadataFactory::Lookup(VideoMetadata *metadata, bool automatic,
     lookup->SetSeason(metadata->GetSeason());
     lookup->SetEpisode(metadata->GetEpisode());
     lookup->SetInetref(metadata->GetInetRef());
-    lookup->SetFilename(generate_file_url("Videos", metadata->GetHost(),
+    lookup->SetFilename(StorageGroup::generate_file_url("Videos", metadata->GetHost(),
                                       metadata->GetFilename()));
 
     if (m_lookupthread->isRunning())
@@ -249,7 +249,7 @@ MetadataLookupList MetadataFactory::SynchronousLookup(MetadataLookup *lookup)
 
     while (m_returnList.isEmpty() && m_sync)
     {
-        sleep(1);
+        std::this_thread::sleep_for(1s);
         QCoreApplication::processEvents();
     }
 
@@ -439,15 +439,17 @@ void MetadataFactory::OnVideoResult(MetadataLookup *lookup)
     QList<PersonInfo> actors = lookup->GetPeople(kPersonActor);
     QList<PersonInfo> gueststars = lookup->GetPeople(kPersonGuestStar);
 
+    actors.reserve(actors.size() + gueststars.size());
     for (const auto& actor : std::as_const(gueststars))
         actors.append(actor);
 
-    VideoMetadata::cast_list cast;
     QStringList cl;
-
+    cl.reserve(actors.size());
     for (const auto& actor : std::as_const(actors))
         cl.append(actor.name);
 
+    VideoMetadata::cast_list cast;
+    cast.reserve(cl.size());
     for (const auto& name : std::as_const(cl))
     {
         QString cn = name.trimmed();
@@ -462,7 +464,7 @@ void MetadataFactory::OnVideoResult(MetadataLookup *lookup)
     // Genres
     VideoMetadata::genre_list video_genres;
     QStringList genres = lookup->GetCategories();
-
+    video_genres.reserve(genres.size());
     for (const auto& str : std::as_const(genres))
     {
         QString genre_name = str.trimmed();
@@ -477,7 +479,7 @@ void MetadataFactory::OnVideoResult(MetadataLookup *lookup)
     // Countries
     VideoMetadata::country_list video_countries;
     QStringList countries = lookup->GetCountries();
-
+    video_countries.reserve(countries.size());
     for (const auto& str : std::as_const(countries))
     {
         QString country_name = str.trimmed();
@@ -656,12 +658,18 @@ LookupType GuessLookupType(ProgramInfo *pginfo)
     if ((!pginfo->GetSubtitle().isEmpty() || pginfo->GetEpisode() > 0) &&
        (catType == ProgramInfo::kCategorySeries ||
         catType == ProgramInfo::kCategoryTVShow))
-        ret = kProbableTelevision; // NOLINT(bugprone-branch-clone)
+    { // NOLINT(bugprone-branch-clone)
+        ret = kProbableTelevision;
+    }
     else if (catType == ProgramInfo::kCategoryMovie)
+    {
         ret = kProbableMovie;
+    }
     else if (pginfo->GetSeason() > 0 || pginfo->GetEpisode() > 0 ||
         !pginfo->GetSubtitle().isEmpty())
+    {
         ret = kProbableTelevision;
+    }
     else
     {
         // Before committing to something being a movie, we

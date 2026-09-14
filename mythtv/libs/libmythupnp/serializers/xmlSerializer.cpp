@@ -13,6 +13,7 @@
 #include "xmlSerializer.h"
 #include "libmythbase/mythdate.h"
 
+#include <algorithm>
 #include <utility>
 
 #include <QMetaClassInfo>
@@ -240,12 +241,8 @@ void XmlSerializer::RenderList( const QString &sName, const QVariantList &list )
 {
 //    QString sItemName;
 
-    QListIterator< QVariant > it( list );
-
-    while (it.hasNext())
+    for (const auto& vValue : list)
     {
-        QVariant vValue = it.next();
-
 //        if (sItemName.isEmpty())
 //            sItemName = GetItemName( QMetaType::typeName( vValue.userType() ) );
 
@@ -261,12 +258,10 @@ void XmlSerializer::RenderList( const QString &sName, const QVariantList &list )
 
 void XmlSerializer::RenderStringList( const QString &/*sName*/, const QStringList &list )
 {
-    QListIterator< QString > it( list );
-
-    while (it.hasNext())
+    for (const QString& str : list)
     {
         m_pXmlWriter->writeStartElement( "String" );
-        m_pXmlWriter->writeCharacters ( it.next() );
+        m_pXmlWriter->writeCharacters ( str );
         m_pXmlWriter->writeEndElement();
     }
 }
@@ -278,14 +273,10 @@ void XmlSerializer::RenderStringList( const QString &/*sName*/, const QStringLis
 void XmlSerializer::RenderMap( const QString &sName, const QVariantMap &map )
 {
 
-    QMapIterator< QString, QVariant > it( map );
-
     QString sItemName = GetItemName( sName );
 
-    while (it.hasNext()) 
+    for (auto it = map.cbegin(); it != map.cend(); ++it)
     {
-        it.next();
-
         m_pXmlWriter->writeStartElement( sItemName );
 
         m_pXmlWriter->writeStartElement( "Key" );
@@ -336,7 +327,7 @@ QString XmlSerializer::GetContentName( const QString        &sName,
     int nClassIdx = -1;
 
     if ( pMetaObject )
-        nClassIdx = pMetaObject->indexOfClassInfo( sName.toLatin1() );
+        nClassIdx = pMetaObject->indexOfClassInfo( sName.toLatin1().constData() );
 
     if (nClassIdx >=0 )
     {
@@ -374,7 +365,7 @@ QString XmlSerializer::FindOptionValue( const QStringList &sOptions, const QStri
     QString sKey = sName + "=";
 
     auto hasKey = [&sKey](const QString& o) { return o.startsWith( sKey ); };
-    auto it = std::find_if(sOptions.cbegin(), sOptions.cend(), hasKey);
+    auto it = std::ranges::find_if(std::as_const(sOptions), hasKey);
     if (it != sOptions.cend())
         return (*it).mid( sKey.length() );
 

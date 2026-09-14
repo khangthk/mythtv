@@ -7,11 +7,13 @@
 #include <vector>
 
 // Qt headers
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QWaitCondition>
 #include <QString>
 #include <QMutex>
 #include <QMap>
 #include <QRecursiveMutex>
+#include <QSet>
 
 // MythTV headers
 #include "libmythbase/mthread.h"
@@ -69,6 +71,10 @@ class StreamHandler : protected MThread, public DeviceReaderCB
     /// Called with _listener_lock locked just before removing old output file.
     virtual void RemoveNamedOutputFile(const QString &filename);
 
+    // DeviceReaderCB
+    void ReaderPaused(int fd) override { (void) fd; } // DeviceReaderCB
+    void PriorityEvent(int fd) override { (void) fd; } // DeviceReaderCB
+
   protected:
     explicit StreamHandler(QString device, int inputid)
         : MThread("StreamHandler"), m_device(std::move(device)), m_inputId(inputid) {}
@@ -91,10 +97,6 @@ class StreamHandler : protected MThread, public DeviceReaderCB
     virtual void CycleFiltersByPriority() {}
 
     PIDPriority GetPIDPriority(uint pid) const;
-
-    // DeviceReaderCB
-    void ReaderPaused(int fd) override { (void) fd; } // DeviceReaderCB
-    void PriorityEvent(int fd) override { (void) fd; } // DeviceReaderCB
 
     virtual PIDInfo *CreatePIDInfo(uint pid, uint stream_type, int pes_type)
         { return new PIDInfo(pid, stream_type, pes_type); }

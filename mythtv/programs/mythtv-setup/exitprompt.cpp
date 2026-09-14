@@ -4,8 +4,8 @@
 // MythTV stuff
 #include "libmythbase/exitcodes.h"
 #include "libmythbase/mythcorecontext.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythbase/mythsystemlegacy.h"
-#include "libmythbase/remoteutil.h"
 #include "libmythui/mythdialogbox.h"
 #include "libmythui/mythmainwindow.h"
 #include "libmythui/mythscreenstack.h"
@@ -74,8 +74,9 @@ void ExitPrompter::handleExit()
 #if QT_VERSION < QT_VERSION_CHECK(6,0,0)
         int limit = std::min(4, allproblems.size());
 #else
-        int limit = std::min(4LL, allproblems.size());
+        int limit = std::min(static_cast<qsizetype>(4), allproblems.size());
 #endif
+        problems.reserve(limit + 1);
         for (int i = 0; i < limit; ++i)
         {
             problems.push_back(allproblems[i]);
@@ -120,7 +121,7 @@ void ExitPrompter::customEvent(QEvent *event)
 {
     if (event->type() == DialogCompletionEvent::kEventType)
     {
-        auto *dce = (DialogCompletionEvent*)(event);
+        auto *dce = (DialogCompletionEvent*)event;
 
         QString resultid= dce->GetId();
         int buttonnum = dce->GetResult();
@@ -166,3 +167,5 @@ void ExitPrompter::quit()
 
     qApp->exit(GENERIC_EXIT_OK);
 }
+
+#include "moc_exitprompt.cpp"

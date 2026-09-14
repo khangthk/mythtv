@@ -52,6 +52,7 @@ MBASE_PUBLIC void logStart(const QString& logfile, bool progress = false,
                            int quiet = 0,
                            int facility = 0, LogLevel_t level = LOG_INFO,
                            bool propagate = false,
+                           bool loglong = false,
                            bool testHarness = false);
 MBASE_PUBLIC void logStop(void);
 MBASE_PUBLIC void logPropagateCalc(void);
@@ -72,6 +73,20 @@ MBASE_PUBLIC QString logStrerror(int errnum);
 /// next line in the verbose output.
 #define ENO (QString("\n\t\t\teno: ") + logStrerror(errno))
 #define ENO_STR ENO.toLocal8Bit().constData()
+
+inline QString pointerToQString(const void *p)
+{
+    return QStringLiteral("0x%1").arg(reinterpret_cast<quintptr>(p),
+                    sizeof(void*) * 2, 16, QChar('0'));
+}
+
+/**
+This is equivalent to QVariant(bool).toString()
+*/
+inline QString boolToQString(bool val)
+{
+    return val ? QStringLiteral("true") : QStringLiteral("false");
+}
 
 #endif
 

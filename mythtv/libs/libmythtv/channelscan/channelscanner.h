@@ -31,9 +31,16 @@
 #define CHANNEL_SCANNER_H
 
 // Qt headers
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QCoreApplication>
 
 // MythTV headers
+#include "libmythbase/mythconfig.h"
+
+#include "libmythtv/cardutil.h"
 #include "libmythtv/dtvconfparser.h"
 #include "libmythtv/mythtvexp.h"
 
@@ -41,15 +48,15 @@
 #include "scanmonitor.h"
 #include "channelscantypes.h"
 
-#ifdef USING_VBOX
+#if CONFIG_VBOX
 #include "vboxchannelfetcher.h"
 #endif
 
-#if !defined( USING_MINGW ) && !defined( _MSC_VER )
+#ifndef Q_OS_WINDOWS
 #include "externrecscanner.h"
 #endif
 
-#ifdef USING_HDHOMERUN
+#if CONFIG_HDHOMERUN
 #include "hdhrchannelfetcher.h"
 #endif
 
@@ -97,7 +104,7 @@ class MTV_PUBLIC ChannelScanner
               const QString &tbl_end   = QString());
 
     virtual DTVConfParser::return_t ImportDVBUtils(
-        uint sourceid, int cardtype, const QString &file);
+        uint sourceid, CardUtil::INPUT_TYPES cardtype, const QString &file);
 
     virtual bool ImportM3U(uint cardid, const QString &inputname,
                            uint sourceid, bool is_mpts);
@@ -136,14 +143,14 @@ class MTV_PUBLIC ChannelScanner
     fbox_chan_map_t          m_iptvChannels;
 
     // vbox support
-#ifdef USING_VBOX
+#if CONFIG_VBOX
     VBoxChannelFetcher      *m_vboxScanner         {nullptr};
 #endif
-#if !defined( USING_MINGW ) && !defined( _MSC_VER )
+#ifndef Q_OS_WINDOWS
     ExternRecChannelScanner *m_externRecScanner    {nullptr};
 #endif
     // HDHomeRun channel list import
-#ifdef USING_HDHOMERUN
+#if CONFIG_HDHOMERUN
     HDHRChannelFetcher      *m_hdhrScanner         {nullptr};
 #endif
 

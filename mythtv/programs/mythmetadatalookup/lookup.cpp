@@ -7,10 +7,10 @@
 // MythTV
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
-#include "libmythbase/programinfo.h"
-#include "libmythbase/remoteutil.h"
 #include "libmythtv/jobqueue.h"
 #include "libmythtv/metadataimagehelper.h"
+#include "libmythtv/programinfo.h"
+#include "libmythtv/programinforemoteutil.h"
 #include "libmythtv/recordingrule.h"
 
 // MythMetadataLookup
@@ -267,7 +267,7 @@ void LookerUpper::customEvent(QEvent *levent)
                     if ((exactTitleMeta == nullptr) ||
                         (hasArtwork &&
                          ((!foundMatchWithArt) ||
-                          ((list[p]->GetPopularity() > exactTitlePopularity)) ||
+                          (list[p]->GetPopularity() > exactTitlePopularity) ||
                           ((exactTitlePopularity == 0.0F) && (list[p]->GetReleaseDate() > exactTitleDate)))))
                     {
                         // remember the most popular or most recently released exact match

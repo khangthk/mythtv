@@ -23,12 +23,14 @@
 #include <iterator>                     // for reverse_iterator
 
 // QT
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QDateTime>
 #include <QString>
 
 //MythTV
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdb.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythbase/stringutil.h"
 #include "libmythtv/recordinginfo.h"
 #include "libmythtv/recordingrule.h"
@@ -217,15 +219,9 @@ bool PrevRecordedList::LoadTitles(void)
         m_titleData.push_back(program);
     }
     if (m_reverseSort)
-    {
-        std::stable_sort(m_titleData.begin(), m_titleData.end(),
-            comp_sorttitle_lt_rev);
-    }
+        std::ranges::stable_sort(m_titleData, comp_sorttitle_lt_rev);
     else
-    {
-        std::stable_sort(m_titleData.begin(), m_titleData.end(),
-            comp_sorttitle_lt);
-    }
+        std::ranges::stable_sort(m_titleData, comp_sorttitle_lt);
     return true;
 }
 
@@ -276,15 +272,9 @@ bool PrevRecordedList::LoadDates(void)
         m_titleData.push_back(program);
     }
     if (m_reverseSort)
-    {
-        std::stable_sort(m_titleData.begin(), m_titleData.end(),
-            comp_sortdate_lt_rev);
-    }
+        std::ranges::stable_sort(m_titleData, comp_sortdate_lt_rev);
     else
-    {
-        std::stable_sort(m_titleData.begin(), m_titleData.end(),
-            comp_sortdate_lt);
-    }
+        std::ranges::stable_sort(m_titleData, comp_sortdate_lt);
     return true;
 }
 
@@ -444,7 +434,9 @@ void PrevRecordedList::LoadShowsByDate(void)
         sortorder = "DESC";
     QString sql;
     if (dateParts[0] == "0000")
+    {
         sql = "AND TIMESTAMPDIFF(DAY, starttime, NOW()) < 14 ";
+    }
     else
     {
         sql =
@@ -483,20 +475,19 @@ bool PrevRecordedList::keyPressEvent(QKeyEvent *e)
         const QString& action = actions[i];
         handled = true;
 
-        if (action == "CUSTOMEDIT")
+        if (action == "CUSTOMEDIT") {
              EditCustom();
-        else if (action == "EDIT")
+        } else if (action == "EDIT") {
              EditScheduled();
-        else if (action == "DELETE")
+        } else if (action == "DELETE") {
              ShowDeleteOldEpisodeMenu();
-        else if (action == "DETAILS" || action == "INFO")
+        } else if (action == "DETAILS" || action == "INFO") {
              ShowDetails();
-        else if (action == "GUIDE")
+        } else if (action == "GUIDE") {
              ShowGuide();
-        else if (action == "UPCOMING")
+        } else if (action == "UPCOMING") {
             ShowUpcoming();
-        else if (action == "1")
-        {
+        } else if (action == "1") {
             if (m_titleGroup)
             {
                 m_titleGroup = false;
@@ -507,9 +498,7 @@ bool PrevRecordedList::keyPressEvent(QKeyEvent *e)
                 m_reverseSort = !m_reverseSort;
             }
             needUpdate = true;
-        }
-        else if (action == "2")
-        {
+        } else if (action == "2") {
             if (!m_titleGroup)
             {
                 m_titleGroup = true;
@@ -520,9 +509,7 @@ bool PrevRecordedList::keyPressEvent(QKeyEvent *e)
                 m_reverseSort = !m_reverseSort;
             }
             needUpdate = true;
-        }
-        else
-        {
+        } else {
             handled = false;
         }
     }
@@ -608,7 +595,7 @@ void PrevRecordedList::customEvent(QEvent *event)
 
     if (event->type() == DialogCompletionEvent::kEventType)
     {
-        auto *dce = (DialogCompletionEvent*)(event);
+        auto *dce = (DialogCompletionEvent*)event;
 
         QString resultid   = dce->GetId();
 //      QString resulttext = dce->GetResultText();
@@ -651,7 +638,7 @@ void PrevRecordedList::customEvent(QEvent *event)
     }
     else if (event->type() == ScreenLoadCompletionEvent::kEventType)
     {
-        auto *slce = (ScreenLoadCompletionEvent*)(event);
+        auto *slce = (ScreenLoadCompletionEvent*)event;
         QString id = slce->GetId();
 
         if (id == objectName())
@@ -821,3 +808,5 @@ void PrevRecordedList::DeleteOldSeries(bool ok)
         }
     }
 }
+
+#include "moc_prevreclist.cpp"

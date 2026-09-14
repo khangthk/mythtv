@@ -12,9 +12,9 @@
 
 #include "libmythbase/mthread.h"
 #include "libmythbase/mythdate.h"
-#include "libmythbase/programinfo.h"
 
 #include "mythtvexp.h"
+#include "programinfo.h"
 
 class PreviewGenerator;
 class QByteArray;
@@ -63,10 +63,14 @@ class MTV_PUBLIC PreviewGenerator : public QObject, public MThread
 
     QString GetToken(void) const { return m_token; }
 
-    void run(void) override; // MThread
     bool Run(void);
 
     void AttachSignals(QObject *obj);
+
+    bool event(QEvent *e) override; // QObject
+
+  protected:
+    void run(void) override; // MThread
 
   public slots:
     void deleteLater();
@@ -81,14 +85,14 @@ class MTV_PUBLIC PreviewGenerator : public QObject, public MThread
 
     bool RunReal(void);
 
-    static char *GetScreenGrab(const ProgramInfo &pginfo,
-                               const QString     &filename,
-                               std::chrono::seconds seektime,
-                               long long          seekframe,
-                               int               &bufferlen,
-                               int               &video_width,
-                               int               &video_height,
-                               float             &video_aspect);
+    static uint8_t *GetScreenGrab(const ProgramInfo &pginfo,
+                                  const QString     &filename,
+                                  std::chrono::seconds seektime,
+                                  long long          seekframe,
+                                  int               &bufferlen,
+                                  int               &video_width,
+                                  int               &video_height,
+                                  float             &video_aspect);
 
     static bool SavePreview(const QString &filename,
                             const unsigned char *data,
@@ -100,7 +104,6 @@ class MTV_PUBLIC PreviewGenerator : public QObject, public MThread
     static QString CreateAccessibleFilename(
         const QString &pathname, const QString &outFileName);
 
-    bool event(QEvent *e) override; // QObject
     bool SaveOutFile(const QByteArray &data, const QDateTime &dt);
 
   protected:

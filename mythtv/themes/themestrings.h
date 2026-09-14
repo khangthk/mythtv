@@ -3,7 +3,6 @@
 
 void strings_null() {
     ThemeUI::tr(" Retro Originally by Gerhard Aldorf MythUI version based on MythCenter by Jeroen Brosens Conversion of Retro to MythUI by Chris Candreva A generally blue theme. Icon style is realistic based on clasic, 'Retro' styles. ");
-    ThemeUI::tr("# to Keep:");
     ThemeUI::tr("% - |year%% - |length%");
     ThemeUI::tr("%(|REMAININGTIME|)%%(|BEHINDTIME|)%");
     ThemeUI::tr("%(|USERRATING)%");
@@ -70,7 +69,6 @@ void strings_null() {
     ThemeUI::tr("%LONGREPEAT%");
     ThemeUI::tr("%LONGREPEAT%     Size: %FILESIZE_STR%");
     ThemeUI::tr("%LONGREPEAT%%(|STARS|) %%DESCRIPTION%");
-    ThemeUI::tr("%LONGREPEAT%%STARS%%DESCRIPTION%");
     ThemeUI::tr("%LONGREPEAT%%STARS| %%DESCRIPTION%");
     ThemeUI::tr("%LONGREPEAT%%YEARSTARS% %DESCRIPTION%");
     ThemeUI::tr("%LONGREPEAT%%YEARSTARS%%DESCRIPTION%");
@@ -80,7 +78,6 @@ void strings_null() {
     ThemeUI::tr("%ORIGIN%");
     ThemeUI::tr("%ORIGINALAIRDATE% %REPEAT%");
     ThemeUI::tr("%PLAYEDTIME% of %TOTALTIME% %(|REMAININGTIME| remaining)%");
-    ThemeUI::tr("%PLAYEDTIME% of %TOTALTIME% %(|REMAININGTIME| remaining)%%(|BEHINDTIME| behind)%");
     ThemeUI::tr("%PLAYEDTIME% of %TOTALTIME%\n%(|REMAININGTIME| remaining)%%(|BEHINDTIME| behind)%");
     ThemeUI::tr("%PLAYEDTIME| of% %TOTALTIME% %(|REMAININGTIME| remaining)%%(|BEHINDTIME| behind)%");
     ThemeUI::tr("%PLAYGROUP% play group");
@@ -92,6 +89,7 @@ void strings_null() {
     ThemeUI::tr("%Rec. Group: |recgroup%");
     ThemeUI::tr("%Recording Profile: |recordingprofile%");
     ThemeUI::tr("%S##E##%");
+    ThemeUI::tr("%SEASONEPISODE%   %STARTDATE%   %STARTTIME%% - |ENDTIME%");
     ThemeUI::tr("%SHORTSTARTDATE%   %STARTTIME%");
     ThemeUI::tr("%SHORTTIMEDATE%");
     ThemeUI::tr("%SOURCENAME|\n%%CHANID| %");
@@ -112,11 +110,8 @@ void strings_null() {
     ThemeUI::tr("%STATION% - %CHANNEL%");
     ThemeUI::tr("%STORAGEGROUP% storage group");
     ThemeUI::tr("%SUBTITLE%%[font]myverysmallsub[/font]  [Part |PARTNUMBER|]%");
-    ThemeUI::tr("%SUBTITLE| %%STARS| %%DESCRIPTION%");
     ThemeUI::tr("%SUBTITLE|\"|\" %%DESCRIPTION%");
     ThemeUI::tr("%SUBTITLE|\"|\" %%STARS%%DESCRIPTION%");
-    ThemeUI::tr("%SUBTITLE|\"|\"%");
-    ThemeUI::tr("%SUBTITLE|\"|\"%%REPEAT%%STARS%%DESCRIPTION%");
     ThemeUI::tr("%SUBTITLE|\"|\"%%STARS%%DESCRIPTION%");
     ThemeUI::tr("%Season - |SEASON| %% Episode - |EPISODE| %");
     ThemeUI::tr("%Storage Group: |storagegroup%");
@@ -215,7 +210,7 @@ void strings_null() {
     ThemeUI::tr("%rectypestatus% on card number %card%");
     ThemeUI::tr("%rectypestatus%% on card number |card%");
     ThemeUI::tr("%resolution% %(|aspect|)%");
-    ThemeUI::tr("%s00e00%   %STARTDATE%   %STARTTIME%% - |ENDTIME%");
+    ThemeUI::tr("%seasonepisode%   %STARTDATE%   %STARTTIME%% - |ENDTIME%");
     ThemeUI::tr("%shortstarttimedate% | %titlesubtitle%");
     ThemeUI::tr("%shortstarttimedate% | %titlesubtitle% | %channel%");
     ThemeUI::tr("%startdate%% - |00x00%\n%title%");
@@ -252,7 +247,6 @@ void strings_null() {
     ThemeUI::tr("%|RATING| %%|(STARS|) %%DESCRIPTION%%\n\nPart |PARTNUMBER| of %%PARTTOTAL%");
     ThemeUI::tr("%|RATING| %%|(STARS|) %%DESCRIPTION%%\n\nPart |PARTNUMBER| of %%PARTTOTAL%%\n\nCast: |CAST%%\n\nDirector: |DIRECTOR%");
     ThemeUI::tr("%|[SYNDICATEDEPISODE|]%");
-    ThemeUI::tr("%|\"SUBTITLE|\"%");
     ThemeUI::tr("%|\"SUBTITLE|\"% %LONGREPEAT%%STARS| %%DESCRIPTION%");
     ThemeUI::tr("%|\"SUBTITLE|\"% %STARS% %DESCRIPTION%");
     ThemeUI::tr("%|\"SUBTITLE|\"% %|(STARS|) %%DESCRIPTION%");
@@ -268,20 +262,16 @@ void strings_null() {
     ThemeUI::tr("(%1) +");
     ThemeUI::tr("(%STARTTIME% - %ENDTIME%)  %LENMINS%");
     ThemeUI::tr("(%STARTTIME% - %ENDTIME%) %LONGREPEAT% %YEARSTARS%%CHANNEL%\n%DESCRIPTION%");
-    ThemeUI::tr("(%STARTTIME% - %ENDTIME%) %LONGREPEAT%%YEARSTARS%%DESCRIPTION%");
     ThemeUI::tr("(%card%)");
     ThemeUI::tr("(%channum%) %name% - %sourcename%", 0, 1);
     ThemeUI::tr("(%statusbefore%) -> (%statusafter%)");
     ThemeUI::tr("(%statusbefore%) -> (%statusafter%):  %shorttimedate% on %channel%");
     ThemeUI::tr("(1) All  (2) Important");
     ThemeUI::tr("(1) All (2) Important");
-    ThemeUI::tr("(1) Channel    (2) Priority");
     ThemeUI::tr("(1) Channel (2) Priority");
     ThemeUI::tr("(1) Time (2) Title");
-    ThemeUI::tr("(1) Title    (2) Priority    (4) Type");
     ThemeUI::tr("(1) Title (2) Priority (4) Type");
     ThemeUI::tr("(1)Time (2)Title");
-    ThemeUI::tr("(4) Program Guide   **(6) Program Finder **");
     ThemeUI::tr("(Last: %1)");
     ThemeUI::tr("+%n", 0, 1);
     ThemeUI::tr("-");
@@ -345,7 +335,6 @@ void strings_null() {
     ThemeUI::tr("A UI and OSD theme with focus on fanart, banners and cover display.");
     ThemeUI::tr("A \"Media Center\" menu theme. This menu theme is basically meant to bring the common \"media player/DVR\" functionality to the forefront, organize the plugins, and to make some of myth's more daunting options a little more subtle. Places the common media items on the top level (Recordings, Videos, TV, DVD, Music), places all informational plugins in \"Plugins.\" Puts all setup and scheduling in \"Advanced.\" The top two menu levels will seem new, the ones beneath Advanced->Setup are as in the default menu.");
     ThemeUI::tr("A blue theme.  Originally designed before the MythUI rewrite, MythCenter has been updated to take advantage of the new UI library while still maintaining the look and feel that long-time MythTV users are used to.");
-    ThemeUI::tr("A bookmark is set");
     ThemeUI::tr("A long menu which breaks down the options by their category. TV, Music, Video etc");
     ThemeUI::tr("A redesign of the MythMediaStream theme, inspired by the MediaStream Redux skin created by JezzX: This theme has been made to look like the original XBMC skin were posible and/or applicable. Looks best with the matching menu called 'MythMediaStream' as this menu lay-out and items are tailored for this particular theme.");
     ThemeUI::tr("A simple theme of black, white and shades of gray.");
@@ -380,8 +369,6 @@ void strings_null() {
     ThemeUI::tr("Advanced planning");
     ThemeUI::tr("Advanced program finder");
     ThemeUI::tr("Age:");
-    ThemeUI::tr("Air Date:");
-    ThemeUI::tr("Airdate:");
     ThemeUI::tr("Aired");
     ThemeUI::tr("Aired:");
     ThemeUI::tr("Album:");
@@ -394,7 +381,6 @@ void strings_null() {
     ThemeUI::tr("Alternate Player:");
     ThemeUI::tr("Alternative player:");
     ThemeUI::tr("An earth toned theme, Terra was the first theme to use MythTV's new MythUI library and is designed to showcase some of the capabilities of the new user interface.");
-    ThemeUI::tr("An editing cutlist is present");
     ThemeUI::tr("Animation, transparency and fanart for mythtv 0.25");
     ThemeUI::tr("Appearance");
     ThemeUI::tr("Appearance Wizard");
@@ -518,7 +504,6 @@ void strings_null() {
     ThemeUI::tr("Browse your video games library");
     ThemeUI::tr("Browse your video library");
     ThemeUI::tr("Browse:");
-    ThemeUI::tr("Browseable");
     ThemeUI::tr("Browseable:");
     ThemeUI::tr("Browseable: %1");
     ThemeUI::tr("Browseble:");
@@ -640,8 +625,6 @@ void strings_null() {
     ThemeUI::tr("Command:");
     ThemeUI::tr("Commercial Flag new recordings");
     ThemeUI::tr("Commercial Flag recordings:");
-    ThemeUI::tr("Commercials are being flagged");
-    ThemeUI::tr("Commercials are flagged");
     ThemeUI::tr("Compensate for TVs with overscan");
     ThemeUI::tr("Conduct Power");
     ThemeUI::tr("Conduct Power search");
@@ -792,6 +775,7 @@ void strings_null() {
     ThemeUI::tr("Directory:");
     ThemeUI::tr("Disk space:  %1");
     ThemeUI::tr("Disks");
+    ThemeUI::tr("Display :");
     ThemeUI::tr("Display unknown file types");
     ThemeUI::tr("Display unknown file types:");
     ThemeUI::tr("Done");
@@ -801,8 +785,6 @@ void strings_null() {
     ThemeUI::tr("Downloadable");
     ThemeUI::tr("Dup Method:");
     ThemeUI::tr("Dup Scope:");
-    ThemeUI::tr("Dupe Method:");
-    ThemeUI::tr("Dupe Scope:");
     ThemeUI::tr("Duplicate Method:");
     ThemeUI::tr("Duplicate Scope:");
     ThemeUI::tr("Duplication Methode:");
@@ -989,7 +971,8 @@ void strings_null() {
     ThemeUI::tr("Go up a level");
     ThemeUI::tr("Grabber");
     ThemeUI::tr("Grabber Setup and display preferences");
-    ThemeUI::tr("Graphite is a theme emphasizing MythUI interface improvements such as alpha, animation, unique layouts, and user-supplied backdrop content.  It is extremely memory-hungry.");
+    ThemeUI::tr("Group By:");
+    ThemeUI::tr("Group by: %1");
     ThemeUI::tr("Group selector");
     ThemeUI::tr("Group your favorite");
     ThemeUI::tr("Group your favorite channels together");
@@ -1024,7 +1007,6 @@ void strings_null() {
     ThemeUI::tr("INETREF:");
     ThemeUI::tr("INFO");
     ThemeUI::tr("Icon Download");
-    ThemeUI::tr("Icon Download Status...");
     ThemeUI::tr("Icon Downloader");
     ThemeUI::tr("Icon Import");
     ThemeUI::tr("Icon Importer");
@@ -1104,7 +1086,6 @@ void strings_null() {
     ThemeUI::tr("Length:");
     ThemeUI::tr("Let's set up your DVR! On the next few screens, we will configure your system to play back audio and video, optimize your color and contrast, and make sure we are taking advantage of all of your hardware.  Press next to begin!");
     ThemeUI::tr("Level");
-    ThemeUI::tr("Limit Handling:");
     ThemeUI::tr("List Options");
     ThemeUI::tr("List Overview");
     ThemeUI::tr("List item:");
@@ -1263,8 +1244,6 @@ void strings_null() {
     ThemeUI::tr("Next recording");
     ThemeUI::tr("Next recording(s)");
     ThemeUI::tr("Next recordings");
-    ThemeUI::tr("No Programs");
-    ThemeUI::tr("No Recordings Present...");
     ThemeUI::tr("No Recordings Scheduled...");
     ThemeUI::tr("No Recordings available, or screen loading...");
     ThemeUI::tr("No additional info available");
@@ -1373,7 +1352,6 @@ void strings_null() {
     ThemeUI::tr("Pick and prioritize shows to record");
     ThemeUI::tr("Pick programs to be recorded");
     ThemeUI::tr("Pick shows to record");
-    ThemeUI::tr("Pick the letter in which the show starts with, then press SELECT or the right arrow");
     ThemeUI::tr("Pick the menu layout, font, size, and locale");
     ThemeUI::tr("Pictures");
     ThemeUI::tr("Play");
@@ -1478,7 +1456,6 @@ void strings_null() {
     ThemeUI::tr("Program List");
     ThemeUI::tr("Program Listings");
     ThemeUI::tr("Program Priority : %progpriority%");
-    ThemeUI::tr("Program Recording Priorities");
     ThemeUI::tr("Program Search");
     ThemeUI::tr("Program Searches");
     ThemeUI::tr("Program Title");
@@ -1508,8 +1485,6 @@ void strings_null() {
     ThemeUI::tr("Read the news online");
     ThemeUI::tr("Readability is a theme for MythTV 0.25 and above that focusses on showing UI elements in a way that is easily readable on a TV when viewed from a distance. It is based on the Mythbuntu theme, but also borrows from a number of XBMC theme (Aeon and Confluence) for inspiration.");
     ThemeUI::tr("Rec");
-    ThemeUI::tr("Rec Group:");
-    ThemeUI::tr("Rec Profile:");
     ThemeUI::tr("Rec. Group:");
     ThemeUI::tr("Rec. Profile:");
     ThemeUI::tr("Recipe");
@@ -1518,7 +1493,6 @@ void strings_null() {
     ThemeUI::tr("Record");
     ThemeUI::tr("Record Group:");
     ThemeUI::tr("Record Profile:");
-    ThemeUI::tr("Record Type:");
     ThemeUI::tr("Recorded");
     ThemeUI::tr("Recording");
     ThemeUI::tr("Recording Group");
@@ -1538,19 +1512,6 @@ void strings_null() {
     ThemeUI::tr("Recording details");
     ThemeUI::tr("Recording group:");
     ThemeUI::tr("Recording groups");
-    ThemeUI::tr("Recording has Subtitles Available");
-    ThemeUI::tr("Recording has been transcoded");
-    ThemeUI::tr("Recording has been watched");
-    ThemeUI::tr("Recording is Closed Captioned");
-    ThemeUI::tr("Recording is Subtitled");
-    ThemeUI::tr("Recording is in Dolby Surround Sound");
-    ThemeUI::tr("Recording is in High Definition");
-    ThemeUI::tr("Recording is in Mono");
-    ThemeUI::tr("Recording is in Stereo");
-    ThemeUI::tr("Recording is in Surround Sound");
-    ThemeUI::tr("Recording is in WideScreen");
-    ThemeUI::tr("Recording is in use");
-    ThemeUI::tr("Recording is preserved");
     ThemeUI::tr("Recording...");
     ThemeUI::tr("Recordings");
     ThemeUI::tr("Reduce priority by %n", 0, 1);
@@ -1690,7 +1651,6 @@ void strings_null() {
     ThemeUI::tr("Search...");
     ThemeUI::tr("Searches");
     ThemeUI::tr("Searchlist item:");
-    ThemeUI::tr("Seas/Ep:");
     ThemeUI::tr("Season");
     ThemeUI::tr("Season and Episode");
     ThemeUI::tr("Season and Episode:");
@@ -1710,8 +1670,6 @@ void strings_null() {
     ThemeUI::tr("Seek Back");
     ThemeUI::tr("Seek Forward");
     ThemeUI::tr("Seek: %1");
-    ThemeUI::tr("Select 'Program Guide' or 'Program Finder'");
-    ThemeUI::tr("Select 'Schedule a Recording' from the Main Menu");
     ThemeUI::tr("Select Date:");
     ThemeUI::tr("Select Event:");
     ThemeUI::tr("Select Icons");
@@ -1725,12 +1683,7 @@ void strings_null() {
     ThemeUI::tr("Select Time:");
     ThemeUI::tr("Select a clause from the list.");
     ThemeUI::tr("Select a clause from the list:");
-    ThemeUI::tr("Select a letter...");
-    ThemeUI::tr("Select a program...");
-    ThemeUI::tr("Select a recording to permanently erase.");
-    ThemeUI::tr("Select a recording to watch.");
     ThemeUI::tr("Select a recording to watch:");
-    ThemeUI::tr("Select an Icon");
     ThemeUI::tr("Select an option below.");
     ThemeUI::tr("Select any jobs you want run on the recording.");
     ThemeUI::tr("Select artwork, and find recording information online.");
@@ -1747,7 +1700,6 @@ void strings_null() {
     ThemeUI::tr("Select the recording rule");
     ThemeUI::tr("Select the recording rule:");
     ThemeUI::tr("Select the server you wish to connect to");
-    ThemeUI::tr("Select the title of the program you wish to find. When finished return with the left arrow key. Press SELECT to schedule a recording.");
     ThemeUI::tr("Select your language.");
     ThemeUI::tr("Select your preferred language");
     ThemeUI::tr("Select your theme");
@@ -1804,7 +1756,6 @@ void strings_null() {
     ThemeUI::tr("Show Categories");
     ThemeUI::tr("Show Live TV");
     ThemeUI::tr("Show LiveTV");
-    ThemeUI::tr("Show Name:");
     ThemeUI::tr("Show Program Categories");
     ThemeUI::tr("Show Program Titles");
     ThemeUI::tr("Show Recording Groups");
@@ -1825,7 +1776,6 @@ void strings_null() {
     ThemeUI::tr("Skin");
     ThemeUI::tr("Skins");
     ThemeUI::tr("Skip");
-    ThemeUI::tr("Sorry, No Recordings Available");
     ThemeUI::tr("Sort By:");
     ThemeUI::tr("Sort Mode:");
     ThemeUI::tr("Sort by");
@@ -1950,14 +1900,12 @@ void strings_null() {
     ThemeUI::tr("Test Standard Definition");
     ThemeUI::tr("Text Filter :");
     ThemeUI::tr("Text Filter:");
-    ThemeUI::tr("The program is able to auto-expire");
     ThemeUI::tr("The recording schedule was not changed");
     ThemeUI::tr("The recording schedule was not changed.");
     ThemeUI::tr("The recording schedule would not be affected.");
     ThemeUI::tr("Theme Chooser");
     ThemeUI::tr("Theme and settings for OSD");
     ThemeUI::tr("There are no Recordings Scheduled...");
-    ThemeUI::tr("There are no available programs under this search. Please select another search.");
     ThemeUI::tr("There are no recordings currently taking place");
     ThemeUI::tr("There are no recordings currently taking place.");
     ThemeUI::tr("There are no scheduled recordings");
@@ -1988,7 +1936,6 @@ void strings_null() {
     ThemeUI::tr("To give greater or lesser priority to a channel in your lineup, select it from the list. To increase the channel's priority, press the right arrow. To decrease its priority, press the left arrow.");
     ThemeUI::tr("To manually schedule a recording, enter a title (optional).  Then set the channel, date, start time, and duration of your recording.  Note that this recording will not have any listings data or other information provided by an EPG.");
     ThemeUI::tr("To manually schedule a recording, enter a title (optional). Then set the channel, date, start time, and duration of your recording. Note that this recording will not have any listings data or other information provided by an EPG.");
-    ThemeUI::tr("To schedule a recording, exit this screen and");
     ThemeUI::tr("Tools");
     ThemeUI::tr("Tools for your music library");
     ThemeUI::tr("Track: %time%");
@@ -2208,7 +2155,6 @@ void strings_null() {
     ThemeUI::tr("You Haven't Scheduled Any Programs To Be Recorded...");
     ThemeUI::tr("You Haven't Scheduled Any Programs To Be Recorded.\nTo schedule a recording, exit this screen and select 'Program Guide' or 'Program Finder'");
     ThemeUI::tr("You Haven't Scheduled Any Programs To Be Recorded\n To schedule a recording, exit this screen and Select 'Program Guide' or 'Program Finder'");
-    ThemeUI::tr("You Haven't Scheduled Any Programs To Be Recorded\n To schedule a recording, exit this screen and Select 'Program Guide' or 'Program Finder' ");
     ThemeUI::tr("You Haven't Scheduled Any Programs To Be Recorded\n To schedule a recording, exit this screen and select 'Program Guide' or 'Program Finder'");
     ThemeUI::tr("You Haven't Scheduled Any Programs To Be Recorded\n To schedule a recording, exit this screen and select 'Program Guide' or 'Program Finder' ");
     ThemeUI::tr("You Haven't Scheduled Any Programs To Be Recorded\n\nTo schedule a recording, exit this screen and\nSelect 'Program Guide' or 'Program Finder'");
@@ -2225,20 +2171,16 @@ void strings_null() {
     ThemeUI::tr("ZoneMinder");
     ThemeUI::tr("ZoneMinder Settings");
     ThemeUI::tr("Zoneminder");
-    ThemeUI::tr("[");
     ThemeUI::tr("[%statusbefore% >> %statusafter%]");
     ThemeUI::tr("[O]k");
     ThemeUI::tr("[P]robe");
-    ThemeUI::tr("[font]myverysmalllabel[/font]%(|s00e00|) %%|RATING| %%|(STARS|) %[font]mydesc[/font]%DESCRIPTION%");
+    ThemeUI::tr("[font]myverysmalllabel[/font]%(|SEASONEPISODE|) %%|RATING| %%|(STARS|) %[font]mydesc[/font]%DESCRIPTION%");
+    ThemeUI::tr("[font]myverysmalllabel[/font]%(|SEASONEPISODE|) %%|RATING| %%|(STARS|) %[font]myverysmall[/font]%DESCRIPTION%%\n\n[font]myverysmallsub[/font]Part |PARTNUMBER| of %%PARTTOTAL%%\n[font]myverysmallsub[/font]|CAST| %%[font]myverysmallsub[/font]  \n[font]myverysmalllabel[/font]Director: |DIRECTOR| %");
     ThemeUI::tr("[font]myverysmalllabel[/font]%(|s00e00|) %%|RATING| %%|(STARS|) %[font]mydesc[/font]%DESCRIPTION%%\n[font]myverysmallsub[/font]|CAST| %");
-    ThemeUI::tr("[font]myverysmalllabel[/font]%(|s00e00|) %%|RATING| %%|(STARS|) %[font]myverysmall[/font]%DESCRIPTION%%\n\n[font]myverysmallsub[/font]Part |PARTNUMBER| of %%PARTTOTAL%%\n[font]myverysmallsub[/font]|CAST| %%[font]myverysmallsub[/font]  \n[font]myverysmalllabel[/font]Director: |DIRECTOR| %");
     ThemeUI::tr("[font]myverysmalllabel[/font]%|RATING| %%|(STARS|) %[font]mydesc[/font]%DESCRIPTION%%\n[font]myverysmallsub[/font]|CAST| %");
-    ThemeUI::tr("]");
-    ThemeUI::tr("] =");
     ThemeUI::tr("a nice transparent theme to use your own background if you want. just copy your favorite picture (be sure that its resolution is 1920x1200) to /usr/share/mythtv/themes/TransBlue/background.jpg");
     ThemeUI::tr("album");
     ThemeUI::tr("artist");
-    ThemeUI::tr("blootube-ng is a theme based on the original blootube-wide by Justin Hornsby (justin.hornsby@gmail.com) which uses very large graphics associated with every menu entry. All changes where made to bring this theme forward to MythTV 0.24.");
     ThemeUI::tr("browse your Pictures library");
     ThemeUI::tr("callsign: %callsign%");
     ThemeUI::tr("dddd,  MMMM dd,  yyyy  |  hh:mm AP");

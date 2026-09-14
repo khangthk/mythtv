@@ -19,7 +19,9 @@
 */
 
 // C++ headers
+#include <algorithm>
 #include <chrono>
+#include <thread>
 
 // QT headers
 #include <QFile>
@@ -29,10 +31,8 @@
 #include <QTimer>
 
 // MythTV headers
-#include <mythconfig.h>
-#include <libmyth/audio/audiooutput.h>
-#include <libmyth/audio/audiooutpututil.h>
-#include <libmyth/mythcontext.h>
+#include <libmythtv/audio/audiooutput.h>
+#include <libmythtv/audio/audiooutputsettings.h>
 #include <libmythbase/mythlogging.h>
 #include <libmythmetadata/metaio.h>
 #include <libmythmetadata/metaioavfcomment.h>
@@ -47,6 +47,7 @@
 #include "avfdecoder.h"
 #include "decoderhandler.h"
 #include "musicplayer.h"
+#include "remoteavformatcontext.h"
 
 extern "C" {
     #include <libavformat/avio.h>
@@ -235,7 +236,7 @@ avfDecoder::avfDecoder(const QString &file, DecoderFactory *d, AudioOutput *o) :
     setURL(file);
 
     bool debug = VERBOSE_LEVEL_CHECK(VB_LIBAV, LOG_ANY);
-    av_log_set_level((debug) ? AV_LOG_DEBUG : AV_LOG_ERROR);
+    av_log_set_level(debug ? AV_LOG_DEBUG : AV_LOG_ERROR);
     av_log_set_callback(myth_av_log);
 }
 
@@ -512,10 +513,7 @@ void avfDecoder::run()
                 // never go below 1s buffered
                 if (buffered < 1s)
                     break;
-                // wait
-                long count = buffered.count();
-                const struct timespec ns {0, (count - 1000) * 1000000};
-                nanosleep(&ns, nullptr);
+                std::this_thread::sleep_for(buffered - 1s);
             }
         }
     }
@@ -595,7 +593,7 @@ void avfDecoder::checkMetatdata(void)
 bool avfDecoderFactory::supports(const QString &source) const
 {
     QStringList list = extension().split("|", Qt::SkipEmptyParts);
-    return std::any_of(list.cbegin(), list.cend(),
+    return std::ranges::any_of(std::as_const(list),
                        [source](const auto& str)
                            { return str == source.right(str.length()).toLower(); } );
 }
@@ -628,3 +626,5 @@ Decoder *avfDecoderFactory::create(const QString &file, AudioOutput *output, boo
 
     return s_decoder;
 }
+
+#include "moc_avfdecoder.cpp"

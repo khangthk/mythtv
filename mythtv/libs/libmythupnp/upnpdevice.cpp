@@ -9,6 +9,7 @@
 // Licensed under the GPL v2 or later, see LICENSE for details
 //
 //////////////////////////////////////////////////////////////////////////////
+#include "upnpdevice.h"
 
 #include <unistd.h> // for gethostname
 
@@ -19,14 +20,10 @@
 
 // MythDB
 #include "libmythbase/configuration.h"
-#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythdownloadmanager.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythversion.h"  // for MYTH_BINARY_VERSION
-
-#include "upnp.h"
-#include "upnpdevice.h"
 
 int DeviceLocation::g_nAllocated   = 0;       // Debugging only
 
@@ -54,6 +51,7 @@ bool UPnpDeviceDesc::Load( const QString &sFileName )
     if ( !file.open( QIODevice::ReadOnly ) )
         return false;
 
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     QString sErrMsg;
     int     nErrLine = 0;
     int     nErrCol  = 0;
@@ -73,6 +71,23 @@ bool UPnpDeviceDesc::Load( const QString &sFileName )
             QString("UPnpDeviceDesc::Load - Error Msg: %1" ) .arg(sErrMsg));
         return false;
     }
+#else
+    auto parseResult = doc.setContent( &file );
+
+    file.close();
+
+    if (!parseResult)
+    {
+        LOG(VB_GENERAL, LOG_ERR,
+            QString("UPnpDeviceDesc::Load - Error parsing: %1 "
+                    "at line: %2  column: %3")
+                .arg(sFileName) .arg(parseResult.errorLine)
+                                .arg(parseResult.errorColumn));
+        LOG(VB_GENERAL, LOG_ERR,
+            QString("UPnpDeviceDesc::Load - Error Msg: %1" ) .arg(parseResult.errorMessage));
+        return false;
+    }
+#endif
 
     // --------------------------------------------------------------
     // XML Document Loaded... now parse it into the UPnpDevice Hierarchy
@@ -117,42 +132,41 @@ void UPnpDeviceDesc::InternalLoad( QDomNode oNode, UPnpDevice *pCurDevice )
             continue;
 
         // TODO: make this table driven (using offset within structure)
-        if ( e.tagName() == "deviceType" )
+        if ( e.tagName() == "deviceType" ) {
             SetStrValue( e, pCurDevice->m_sDeviceType);
-        else if ( e.tagName() == "friendlyName" )
+        } else if ( e.tagName() == "friendlyName" ) {
             SetStrValue( e, pCurDevice->m_sFriendlyName );
-        else if ( e.tagName() == "manufacturer" )
+        } else if ( e.tagName() == "manufacturer" ) {
             SetStrValue( e, pCurDevice->m_sManufacturer );
-        else if ( e.tagName() == "manufacturerURL" )
+        } else if ( e.tagName() == "manufacturerURL" ) {
             SetStrValue( e, pCurDevice->m_sManufacturerURL );
-        else if ( e.tagName() == "modelDescription" )
+        } else if ( e.tagName() == "modelDescription" ) {
             SetStrValue( e, pCurDevice->m_sModelDescription);
-        else if ( e.tagName() == "modelName" )
+        } else if ( e.tagName() == "modelName" ) {
             SetStrValue( e, pCurDevice->m_sModelName );
-        else if ( e.tagName() == "modelNumber" )
+        } else if ( e.tagName() == "modelNumber" ) {
             SetStrValue( e, pCurDevice->m_sModelNumber );
-        else if ( e.tagName() == "modelURL" )
+        } else if ( e.tagName() == "modelURL" ) {
             SetStrValue( e, pCurDevice->m_sModelURL );
-        else if ( e.tagName() == "serialNumber" )
+        } else if ( e.tagName() == "serialNumber" ) {
             SetStrValue( e, pCurDevice->m_sSerialNumber );
-        else if ( e.tagName() == "UPC" )
+        } else if ( e.tagName() == "UPC" ) {
             SetStrValue( e, pCurDevice->m_sUPC );
-        else if ( e.tagName() == "presentationURL" )
+        } else if ( e.tagName() == "presentationURL" ) {
             SetStrValue( e, pCurDevice->m_sPresentationURL );
-        else if ( e.tagName() == "UDN" )
+        } else if ( e.tagName() == "UDN" ) {
             SetStrValue( e, pCurDevice->m_sUDN );
-        else if ( e.tagName() == "iconList" )
+        } else if ( e.tagName() == "iconList" ) {
             ProcessIconList( oNode, pCurDevice );
-        else if ( e.tagName() == "serviceList" )
+        } else if ( e.tagName() == "serviceList" ) {
             ProcessServiceList( oNode, pCurDevice );
-        else if ( e.tagName() == "deviceList" )
+        } else if ( e.tagName() == "deviceList" ) {
             ProcessDeviceList ( oNode, pCurDevice );
-        else if ( e.tagName() == "mythtv:X_secure" )
+        } else if ( e.tagName() == "mythtv:X_secure" ) {
             SetBoolValue( e, pCurDevice->m_securityPin );
-        else if ( e.tagName() == "mythtv:X_protocol" )
+        } else if ( e.tagName() == "mythtv:X_protocol" ) {
             SetStrValue( e, pCurDevice->m_protocolVersion );
-        else
-        {
+        } else {
             // Not one of the expected element names... add to extra list.
             QString sValue = "";
             SetStrValue( e, sValue );
@@ -304,11 +318,15 @@ void UPnpDeviceDesc::SetBoolValue( const QDomNode &n, bool &nValue )
 QString  UPnpDeviceDesc::GetValidXML( const QString &sBaseAddress, int nPort )
 {
     QString     sXML;
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
     QTextStream os( &sXML, QIODevice::WriteOnly );
+#else
+    QTextStream os(&sXML, QIODeviceBase::WriteOnly);
+#endif
 
     GetValidXML( sBaseAddress, nPort, os );
     os << Qt::flush;
-    return( sXML );
+    return sXML;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -510,7 +528,7 @@ QString UPnpDeviceDesc::FormatValue(const NameValue& node)
     }
     sStr = QString("<%1%2>%3</%1>\n").arg(node.m_sName, sAttributes, node.m_sValue);
 
-    return( sStr );
+    return sStr;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -525,7 +543,7 @@ QString UPnpDeviceDesc::FormatValue( const QString &sName,
     if (sValue.length() > 0)
         sStr = QString("<%1>%2</%1>\n") .arg(sName, sValue);
 
-    return( sStr );
+    return sStr;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -628,15 +646,21 @@ UPnpDeviceDesc *UPnpDeviceDesc::Retrieve( QString &sURL )
 
     if (ok && sXml.startsWith( QString("<?xml") ))
     {
-        QString sErrorMsg;
-
         QDomDocument xml( "upnp" );
 
-        if ( xml.setContent( sXml, false, &sErrorMsg ))
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
+        QString sErrorMsg;
+        bool success = xml.setContent( sXml, false, &sErrorMsg );
+#else
+        auto parseResult = xml.setContent( sXml );
+        bool success { parseResult };
+        QString sErrorMsg { parseResult.errorMessage };
+#endif
+        if ( success )
         {
             pDevice = new UPnpDeviceDesc();
             pDevice->Load( xml );
-            pDevice->m_hostUrl   = sURL;
+            pDevice->m_hostUrl   = QUrl(sURL);
             pDevice->m_sHostName = pDevice->m_hostUrl.host();
         }
         else

@@ -1,9 +1,14 @@
 // -*- Mode: c++ -*-
 
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
+
 // POSIX headers
 #include <fcntl.h>
 #include <unistd.h>
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
 #include <sys/select.h>
 #include <sys/ioctl.h>
 #endif
@@ -13,6 +18,8 @@
 #include <QFile>
 
 // MythTV headers
+#include "libmythbase/mythlogging.h"
+
 #include "asichannel.h"
 #include "asistreamhandler.h"
 #include "cardutil.h"

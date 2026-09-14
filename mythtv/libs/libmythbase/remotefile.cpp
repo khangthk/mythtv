@@ -1,5 +1,9 @@
 #include <iostream>
 
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QFile>
 #include <QFileInfo>
 #include <QRegularExpression>
@@ -8,8 +12,6 @@
 // POSIX C headers
 #include <unistd.h>
 #include <fcntl.h>
-
-#include "mythconfig.h"
 
 #ifndef O_LARGEFILE
 static constexpr int8_t O_LARGEFILE { 0 };
@@ -23,6 +25,7 @@ static constexpr int8_t O_LARGEFILE { 0 };
 #include "mythtimer.h"
 #include "mythdate.h"
 #include "mythmiscutil.h"
+#include "mythlogging.h"
 #include "threadedfilewriter.h"
 #include "storagegroup.h"
 
@@ -136,7 +139,7 @@ MythSocket *RemoteFile::openSocket(bool control)
     QString sgroup = qurl.userName();
 
     auto *lsock = new MythSocket();
-    QString stype = (control) ? "control socket" : "file data socket";
+    QString stype = control ? "control socket" : "file data socket";
 
     QString loc = QString("RemoteFile::openSocket(%1): ").arg(stype);
 
@@ -182,6 +185,7 @@ MythSocket *RemoteFile::openSocket(bool control)
     }
     else
     {
+        strlist.reserve(3 + m_possibleAuxFiles.size());
         strlist.push_back(QString("ANN FileTransfer %1 %2 %3 %4")
                           .arg(hostname).arg(static_cast<int>(m_writeMode))
                           .arg(static_cast<int>(m_useReadAhead)).arg(m_timeoutMs.count()));
@@ -205,7 +209,7 @@ MythSocket *RemoteFile::openSocket(bool control)
         {
             auto it = strlist.begin(); ++it;
             m_recorderNum = (*it).toInt(); ++it;
-            m_fileSize = (*(it)).toLongLong(); ++it;
+            m_fileSize = (*it).toLongLong(); ++it;
             for (; it != strlist.end(); ++it)
                 m_auxFiles << *it;
         }
@@ -531,7 +535,7 @@ bool RemoteFile::Exists(const QString &url, struct stat *fileinfo)
             fileinfo->st_gid       = strlist[7].toLongLong();
             fileinfo->st_rdev      = strlist[8].toLongLong();
             fileinfo->st_size      = strlist[9].toLongLong();
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
             fileinfo->st_blksize   = strlist[10].toLongLong();
             fileinfo->st_blocks    = strlist[11].toLongLong();
 #endif
@@ -787,14 +791,14 @@ long long RemoteFile::SeekInternal(long long pos, int whence, long long curpos)
         }
         else if (whence == SEEK_CUR)
         {
-            offset = ((curpos > 0) ? curpos : ::lseek64(m_localFile, 0, SEEK_CUR)) + pos;
+            offset = ((curpos > 0) ? curpos : lseek(m_localFile, 0, SEEK_CUR)) + pos;
         }
         else
         {
             return -1;
         }
 
-        off64_t localpos = ::lseek64(m_localFile, pos, whence);
+        off_t localpos = lseek(m_localFile, pos, whence);
         if (localpos != pos)
         {
             LOG(VB_FILE, LOG_ERR,
@@ -1344,6 +1348,7 @@ QStringList RemoteFile::FindFileList(const QString& filename, const QString& hos
             }
 
             QStringList filteredFiles = files.filter(QRegularExpression(fi.fileName()));
+            strList.reserve(filteredFiles.size());
             for (const QString& file : std::as_const(filteredFiles))
             {
                 strList << MythCoreContext::GenMythURL(gCoreContext->GetHostName(),
@@ -1452,6 +1457,41 @@ bool RemoteFile::Resume(bool repos)
     }
     m_readPosition = m_lastPosition = 0;
     return true;
+}
+
+static QString downloadRemoteFile(const QString &cmd, const QString &url,
+                                  const QString &storageGroup,
+                                  const QString &filename)
+{
+    QStringList strlist(cmd);
+    strlist << url;
+    strlist << storageGroup;
+    strlist << filename;
+
+    bool ok = gCoreContext->SendReceiveStringList(strlist);
+
+    if (!ok || strlist.size() < 2 || strlist[0] != "OK")
+    {
+        LOG(VB_GENERAL, LOG_ERR,
+            "downloadRemoteFile(): " + cmd + " returned ERROR!");
+        return {};
+    }
+
+    return strlist[1];
+}
+
+QString RemoteDownloadFile(const QString &url,
+                           const QString &storageGroup,
+                           const QString &filename)
+{
+    return downloadRemoteFile("DOWNLOAD_FILE", url, storageGroup, filename);
+}
+
+QString RemoteDownloadFileNow(const QString &url,
+                              const QString &storageGroup,
+                              const QString &filename)
+{
+    return downloadRemoteFile("DOWNLOAD_FILE_NOW", url, storageGroup, filename);
 }
 
 /* vim: set expandtab tabstop=4 shiftwidth=4: */

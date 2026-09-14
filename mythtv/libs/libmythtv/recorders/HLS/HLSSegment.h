@@ -1,8 +1,16 @@
 #ifndef HLS_SEGMENT_H
 #define HLS_SEGMENT_H
 
+#include "libmythbase/mythconfig.h"
+
 #include <cstdint>
 
+#if CONFIG_LIBCRYPTO
+#include <openssl/aes.h>
+#endif // CONFIG_LIBCRYPTO
+
+#include <QChar> // Fix Qt6 GCC SFINAE warning
+#include <QByteArray>
 #include <QString>
 #include <QUrl>
 
@@ -13,12 +21,10 @@ class HLSRecSegment
   public:
     friend class HLSReader;
 
-    HLSRecSegment(void);
+    HLSRecSegment(int input);
     HLSRecSegment(const HLSRecSegment& rhs);
-    HLSRecSegment(int seq, std::chrono::seconds duration, QString title,
-		  QUrl uri);
-    HLSRecSegment(int seq, std::chrono::seconds duration, QString title,
-                  QUrl uri, const QString& current_key_path);
+    HLSRecSegment(int input, int sequence, std::chrono::milliseconds duration,
+                  QString title, QUrl uri);
     ~HLSRecSegment();
 
     HLSRecSegment& operator=(const HLSRecSegment& rhs);
@@ -28,30 +34,35 @@ class HLSRecSegment
     int64_t Sequence(void) const { return m_sequence; }
     QString Title(void)    const { return m_title; }
     QUrl    Url(void)      const { return m_url; }
-    std::chrono::seconds Duration(void) const { return m_duration; }
+    std::chrono::milliseconds Duration(void) const { return m_duration; }
 
     QString toString(void) const;
 
-#ifdef USING_LIBCRYPTO
-    bool DownloadKey(void);
-    bool DecodeData(const uint8_t *IV, QByteArray& data);
-    bool HasKeyPath(void) const { return !m_psz_key_path.isEmpty(); }
-    QString KeyPath(void) const { return m_psz_key_path; }
-    void SetKeyPath(const QString& path) { m_psz_key_path = path; }
-#endif
+#if CONFIG_LIBCRYPTO
+  public:
+    bool SetAESIV(QString line);
+    bool IVLoaded(void) const { return m_ivLoaded; }
+
+    QByteArray AESIV(void) { return m_aesIV; }
+    bool HasKeyPath(void) const { return !m_keypath.isEmpty(); }
+    QString KeyPath(void) const { return m_keypath; }
+    void SetKeyPath(const QString& x) { m_keypath = x; }
+#endif // CONFIG_LIBCRYPTO
 
   protected:
-    int64_t     m_sequence {0};  // unique sequence number
-    std::chrono::seconds m_duration {0s};  // segment duration
-    uint64_t    m_bitrate  {0};  // bitrate of segment's content (bits per second)
-    QString     m_title;         // human-readable informative title of
-			         // the media segment
-
+    int         m_inputId  {0};                 // input card ID
+    int64_t     m_sequence {0};                 // unique sequence number
+    std::chrono::milliseconds m_duration {0ms}; // segment duration
+    uint64_t    m_bitrate  {0};                 // bitrate of segment's content (bits per second)
+    QString     m_title;                        // human-readable informative title of the media segment
     QUrl        m_url;
 
-#ifdef USING_LIBCRYPTO
-    QString     m_psz_key_path;  // URL key path
-#endif
+#if CONFIG_LIBCRYPTO
+  private:
+    QString     m_keypath;                      // URL path of the encrypted key
+    bool        m_ivLoaded  {false};
+    QByteArray  m_aesIV     {AES_BLOCK_SIZE,0}; // IV used when decypher the block
+#endif // CONFIG_LIBCRYPTO
 
 };
 

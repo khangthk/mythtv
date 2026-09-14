@@ -23,7 +23,7 @@
 #include <QWidget>
 
 // MythTV headers
-#include <libmyth/visual.h>
+#include <libmythtv/audio/visualization.h>
 
 // MythMusic
 #include "visualize.h"
@@ -31,7 +31,7 @@
 class MythUIVideo;
 
 // base class to handle things like frame rate...
-class MainVisual :  public QObject, public MythTV::Visual
+class MainVisual :  public QObject, public Visualization
 {
     Q_OBJECT
 
@@ -50,8 +50,6 @@ class MainVisual :  public QObject, public MythTV::Visual
              int source_channel, int bits_per_sample) override; // Visual
     void prepare(void) override; // Visual
 
-    void customEvent(QEvent *event) override; // QObject
-
     void setFrameRate(int newfps);
     int frameRate(void) const { return m_fps; }
 
@@ -61,6 +59,9 @@ class MainVisual :  public QObject, public MythTV::Visual
 
   public slots:
     void timeout();
+
+  protected:
+    void customEvent(QEvent *event) override; // QObject
 
   private:
     MythUIVideo *m_visualizerVideo {nullptr};

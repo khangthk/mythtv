@@ -2,6 +2,7 @@
 #define MYTHMEDIABUFFER_H
 
 // Qt
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QReadWriteLock>
 #include <QWaitCondition>
 #include <QString>
@@ -9,7 +10,6 @@
 #include <QMap>
 
 // MythTV
-#include "libmythbase/mythconfig.h"
 #include "libmythtv/mythtvexp.h"
 #include "libmythbase/mthread.h"
 #include "libmythbase/mythchrono.h"

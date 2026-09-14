@@ -3,6 +3,7 @@
 
 // MythTV
 #include <libmythbase/mythcorecontext.h>
+#include <libmythbase/mythlogging.h>
 
 // MythMusic
 #include "importsettings.h"
@@ -123,3 +124,5 @@ void ImportSettings::slotSave(void)
 
     Close();
 }
+
+#include "moc_importsettings.cpp"

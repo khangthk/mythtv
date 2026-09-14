@@ -1,6 +1,12 @@
 // -*- Mode: c++ -*-
 // Copyright (c) 2003-2004, Daniel Thor Kristjansson
 
+#include <QChar>
+#include <QMap>
+#include <QString>
+#include <QTime>
+#include <algorithm>
+
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/stringutil.h"
 
@@ -332,7 +338,7 @@ ProgramAssociationTable* ProgramAssociationTable::CreateBlank([[maybe_unused]] b
 {
     TSPacket *tspacket = TSPacket::CreatePayloadOnlyPacket();
     auto *dst = tspacket->data() + sizeof(TSHeader) + 1; /* start of field pointer */
-    std::copy(DEFAULT_PAT_HEADER.cbegin(), DEFAULT_PAT_HEADER.cend(), dst);
+    std::ranges::copy(DEFAULT_PAT_HEADER, dst);
     PSIPTable psip = PSIPTable::View(*tspacket);
     psip.SetLength(TSPacket::kPayloadSize
                    - 1 /* for start of field pointer */
@@ -383,7 +389,7 @@ ProgramMapTable* ProgramMapTable::CreateBlank(bool smallPacket)
     ProgramMapTable *pmt = nullptr;
     TSPacket *tspacket = TSPacket::CreatePayloadOnlyPacket();
     auto *dst = tspacket->data() + sizeof(TSHeader) + 1; /* start of field pointer */
-    std::copy(DEFAULT_PMT_HEADER.cbegin(), DEFAULT_PMT_HEADER.cend(), dst);
+    std::ranges::copy(DEFAULT_PMT_HEADER, dst);
 
     if (smallPacket)
     {
@@ -758,6 +764,29 @@ uint ProgramMapTable::FindUnusedPID(uint desired_pid) const
         pid += 1;
 
     return pid & 0x1fff;
+}
+
+void PSIPTable::InitPESPacket(TSPacket& tspacket)
+{
+    if (tspacket.PayloadStart())
+    {
+        m_psiOffset = tspacket.AFCOffset() + tspacket.StartOfFieldPointer();
+    }
+    else
+    {
+        LOG(VB_GENERAL, LOG_ERR, "Started PESPacket, but !payloadStart()");
+        m_psiOffset = tspacket.AFCOffset();
+    }
+    m_pesData = tspacket.data() + m_psiOffset + 1;
+
+    m_badPacket = true;
+    // first check if Length() will return something useful and
+    // then check if the packet ends in the first TSPacket
+    if ((m_pesData - tspacket.data()) <= (188-3) &&
+        (m_pesData + Length() - tspacket.data()) <= (188-3))
+    {
+        m_badPacket = !VerifyCRC();
+    }
 }
 
 QString PSIPTable::toString(void) const
@@ -1322,7 +1351,7 @@ bool SpliceInformationTable::Parse(void)
         if (splice_count)
         {
             bool duration = (m_ptrs0.back()[5] & 0x2) != 0;
-            m_epilog = m_ptrs1.back() + ((duration) ? 9 : 4);
+            m_epilog = m_ptrs1.back() + (duration ? 9 : 4);
         }
         else
         {
@@ -1354,7 +1383,7 @@ bool SpliceInformationTable::Parse(void)
                 for (uint i = 0; i < component_count; i++)
                 {
                     m_ptrs0.push_back(cur);
-                    cur += (splice_immediate) ?
+                    cur += splice_immediate ?
                         1 : 1 + SpliceTimeView(cur).size();
                 }
             }

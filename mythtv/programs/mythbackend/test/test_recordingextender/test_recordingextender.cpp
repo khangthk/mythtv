@@ -18,6 +18,9 @@
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 #include <iostream>
+#include <QtGlobal>
+#include <QChar> // Fix Qt6 GCC SFINAE warning
+#include <QBitArray> // Fix Qt6 GCC SFINAE warning
 #include <QDateTime>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -31,7 +34,7 @@
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdb.h"
 #include "libmythtv/dbcheck.h"
-#include "scheduler.h"
+#include "dummyscheduler.h"
 #include "test_recordingextender.h"
 
 static constexpr char const * const TESTNAME = "test_recordingextender";
@@ -63,6 +66,12 @@ static void convertToSqlite (DBUpdates& updates)
 
 static bool enableSqliteRegex (void)
 {
+    // Skip these sqlite tests for macOS as macports has a dated sqlite-pcre
+    // impementation and homebrew no longer has one available.
+#ifdef Q_OS_DARWIN
+  return false;
+#endif
+
 #if CONFIG_SQLITE3
     MSqlQueryInfo info = MSqlQuery::InitCon();
 
@@ -93,7 +102,7 @@ static bool enableSqliteRegex (void)
 
     char *errtext {nullptr};
     // The location on Debian/Ubuntu.
-#if defined(__FreeBSD__)
+#ifdef Q_OS_FREEBSD
     static constexpr char const * const pcre = "/usr/local/libexec/sqlite-ext/pcre.so";
 #else
     static constexpr char const * const pcre = "/usr/lib/sqlite3/pcre.so";
@@ -125,7 +134,8 @@ QUrl TestRecExtEspnDataSource::makeInfoUrl(const SportInfo& info, const QDateTim
     QString path = "file://" + QStringLiteral(TEST_SOURCE_DIR) +
         QString("/data/espn_%1_%2_%3xx.json")
         .arg(info.sport, info.league, dt2.toString("yyyyMM"));
-    return {path};
+    QUrl url {path};
+    return url;
 }
 
 QUrl TestRecExtEspnDataSource::makeGameUrl(const ActiveGame& game, const QString& str)
@@ -134,7 +144,8 @@ QUrl TestRecExtEspnDataSource::makeGameUrl(const ActiveGame& game, const QString
     QString path = "file://" + QStringLiteral(TEST_SOURCE_DIR) +
         QString("/data/espn_%1_%2_game_%3.json")
         .arg(info.sport, info.league, str);
-    return {path};
+    QUrl url {path};
+    return url;
 }
 
 RecExtDataPage* TestRecExtMlbDataSource::newPage(const QJsonDocument& doc)
@@ -143,6 +154,11 @@ RecExtDataPage* TestRecExtMlbDataSource::newPage(const QJsonDocument& doc)
 }
 
 //////////////////////////////////////////////////
+
+TestRecordingExtender::TestRecordingExtender()
+{
+    m_scheduler = new TestScheduler;
+}
 
 // Before all test cases
 void TestRecordingExtender::initTestCase()
@@ -446,7 +462,10 @@ void TestRecordingExtender::test_nameCleanup(void)
     QFETCH(QString, expectedTeam);
 
     QString dummy;
-    SportInfo info {title, autoExtendTypeFromInt(autoExtendType), sport, dummy};
+    SportInfo info {.showTitle=title,
+                    .dataProvider=autoExtendTypeFromInt(autoExtendType),
+                    .sport=sport,
+                    .league=dummy};
     nameCleanup(info, team, dummy);
     QCOMPARE(team, expectedTeam);
 }
@@ -568,11 +587,14 @@ void TestRecordingExtender::test_parseJson(void)
     m_nowForTest = QDateTime::fromString("2021-09-22T23:59:00Z", Qt::ISODate);
     auto source = std::make_unique<TestRecExtMlbDataSource>(this);
 
-    SportInfo info {"MLB Baseball", AutoExtendType::MLB, "", ""};
+    SportInfo info {.showTitle="MLB Baseball",
+                    .dataProvider=AutoExtendType::MLB,
+                    .sport="",
+                    .league=""};
     ActiveGame game(0, "MLB Baseball", info);
-    QString path = "file://" + QStringLiteral(TEST_SOURCE_DIR) +
-        "/data/mlb_baseball_20210921_1720.json";
-    game.setInfoUrl(path);
+    QUrl url { "file://" + QStringLiteral(TEST_SOURCE_DIR) +
+               "/data/mlb_baseball_20210921_1720.json" };
+    game.setInfoUrl(url);
     game.setTeams("Washington Nationals", "Miami Marlins");
 
     // Test loading info page
@@ -693,11 +715,14 @@ void TestRecordingExtender::test_parseEspn(void)
     m_nowForTest = QDateTime::fromString(nowForTest, Qt::ISODate);
     auto source = std::make_unique<TestRecExtEspnDataSource>(this);
 
-    SportInfo info {"MLB Baseball", AutoExtendType::ESPN, sport, league};
+    SportInfo info {.showTitle="MLB Baseball",
+                    .dataProvider=AutoExtendType::ESPN,
+                    .sport=sport,
+                    .league=league};
     ActiveGame game(0, "MLB Baseball", info);
-    QString path = "file://" + QStringLiteral(TEST_SOURCE_DIR) +
-        "/data/" + infoFile;
-    game.setInfoUrl(path);
+    QUrl url { "file://" + QStringLiteral(TEST_SOURCE_DIR) +
+               "/data/" + infoFile };
+    game.setInfoUrl(url);
 
     // Previous case tested parsing of team names.
     QString team1;
@@ -790,11 +815,14 @@ void TestRecordingExtender::test_parseMlb(void)
     m_nowForTest = QDateTime::fromString(nowForTest, Qt::ISODate);
     auto source = std::make_unique<TestRecExtMlbDataSource>(this);
 
-    SportInfo info {"MLB Baseball", AutoExtendType::MLB, "sport", "league"};
+    SportInfo info {.showTitle="MLB Baseball",
+                    .dataProvider=AutoExtendType::MLB,
+                    .sport="sport",
+                    .league="league"};
     ActiveGame game(0, "MLB Baseball", info);
-    QString path = "file://" + QStringLiteral(TEST_SOURCE_DIR) +
-        "/data/" + infoFile;
-    game.setInfoUrl(path);
+    QUrl url1 { "file://" + QStringLiteral(TEST_SOURCE_DIR) +
+                "/data/" + infoFile };
+    game.setInfoUrl(url1);
 
     // Previous case tested parsing of team names.
     QString team1;
@@ -821,8 +849,8 @@ void TestRecordingExtender::test_parseMlb(void)
     QVERIFY(game.getGameUrl().url().endsWith(expectedGameURL));
 
     // Test loading games status page
-    path = "file://" + QStringLiteral(TEST_SOURCE_DIR) + "/data/" + gameFile;
-    game.setGameUrl(path);
+    QUrl url2 { "file://" + QStringLiteral(TEST_SOURCE_DIR) + "/data/" + gameFile };
+    game.setGameUrl(url2);
     page = source->loadPage(game, game.getGameUrl());
     QCOMPARE(page != nullptr, true);
 
@@ -922,3 +950,5 @@ void TestRecordingExtender::test_processNewRecordings(void)
 }
 
 QTEST_GUILESS_MAIN(TestRecordingExtender)
+
+#include "moc_test_recordingextender.cpp"

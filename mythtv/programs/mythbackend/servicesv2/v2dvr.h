@@ -1,4 +1,4 @@
-//////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////
 // Program Name: dvr.h
 // Created     : Mar. 7, 2011
 //
@@ -35,6 +35,8 @@
 #include "v2recRuleFilterList.h"
 #include "v2titleInfoList.h"
 #include "v2recRuleList.h"
+#include "v2playGroup.h"
+#include "v2powerPriority.h"
 
 #define DVR_SERVICE QString("/Dvr/")
 #define DVR_HANDLE  QString("Dvr")
@@ -43,6 +45,8 @@ class V2Dvr : public MythHTTPService
 {
     Q_OBJECT
     Q_CLASSINFO("Version",      "7.1")
+    Q_CLASSINFO("RemoveOldRecorded",  "methods=POST;name=bool")
+    Q_CLASSINFO("UpdateOldRecorded",  "methods=POST;name=bool")
     Q_CLASSINFO("AddRecordedCredits",  "methods=POST;name=bool")
     Q_CLASSINFO("AddRecordedProgram",  "methods=POST;name=int")
     Q_CLASSINFO("RemoveRecorded",      "methods=POST;name=bool")
@@ -76,6 +80,13 @@ class V2Dvr : public MythHTTPService
     Q_CLASSINFO("DupInToDescription",   "methods=GET,POST,HEAD;name=String")
     Q_CLASSINFO("ManageJobQueue",       "methods=POST;name=int")
     Q_CLASSINFO("UpdateRecordedMetadata", "methods=POST")
+    Q_CLASSINFO("AddPlayGroup",         "methods=POST")
+    Q_CLASSINFO("UpdatePlayGroup",      "methods=POST")
+    Q_CLASSINFO("RemovePlayGroup",      "methods=POST")
+    Q_CLASSINFO("RemovePowerPriority",  "methods=POST")
+    Q_CLASSINFO("AddPowerPriority",     "methods=POST")
+    Q_CLASSINFO("UpdatePowerPriority",  "methods=POST")
+    Q_CLASSINFO("CheckPowerQuery",      "methods=GET,POST,HEAD")
 
   public:
     V2Dvr();
@@ -109,9 +120,20 @@ class V2Dvr : public MythHTTPService
                                             const QDateTime &StartTime,
                                             const QDateTime &EndTime,
                                             const QString   &Title,
+                                            const QString   &TitleRegEx,
+                                            const QString   &SubtitleRegEx,
                                             const QString   &SeriesId,
                                             int              RecordId,
                                             const QString   &Sort);
+
+    bool       RemoveOldRecorded         ( int              ChanId,
+                                            const QDateTime &StartTime,
+                                            bool            Reschedule );
+
+    bool       UpdateOldRecorded         ( int              ChanId,
+                                            const QDateTime &StartTime,
+                                            bool            Duplicate,
+                                            bool            Reschedule );
 
     static V2Program* GetRecorded         ( int              RecordedId,
                                             int              ChanId,
@@ -142,7 +164,8 @@ class V2Dvr : public MythHTTPService
 
     static bool       ReactivateRecording ( int              RecordedId,
                                             int              ChanId,
-                                            const QDateTime &StartTime );
+                                            const QDateTime &StartTime,
+                                            int              RecordId );
 
     static bool       RescheduleRecordings( void );
 
@@ -182,12 +205,14 @@ class V2Dvr : public MythHTTPService
     static V2CutList* GetRecordedCutList  ( int              RecordedId,
                                             int              ChanId,
                                             const QDateTime &StartTime,
-                                            const QString   &OffsetType );
+                                            const QString   &OffsetType,
+                                            bool IncludeFps );
 
     static V2CutList* GetRecordedCommBreak( int              RecordedId,
                                             int              ChanId,
                                             const QDateTime &StartTime,
-                                            const QString   &OffsetType );
+                                            const QString   &OffsetType,
+                                            bool IncludeFps );
 
     static V2CutList* GetRecordedSeek     ( int              RecordedId,
                                             const QString   &OffsetType );
@@ -207,19 +232,38 @@ class V2Dvr : public MythHTTPService
                                             bool             ShowAll,
                                             int              RecordId,
                                             const QString &  RecStatus,
-                                            const QString   &Sort);
+                                            const QString   &Sort,
+                                            const QString &  RecGroup);
 
     static V2EncoderList*    GetEncoderList      ( );
 
     static V2InputList*      GetInputList        ( );
 
-    static QStringList       GetRecGroupList     ( );
+    static QStringList       GetRecGroupList     ( const QString   &UsedBy );
 
     static QStringList       GetProgramCategories   ( bool OnlyRecorded );
 
     static QStringList       GetRecStorageGroupList ( );
 
     static QStringList       GetPlayGroupList    ( );
+
+    static V2PlayGroup*      GetPlayGroup    ( const QString & Name );
+
+    static bool              RemovePlayGroup    ( const QString & Name );
+
+    static bool              AddPlayGroup    ( const QString & Name,
+                                               const QString & TitleMatch,
+                                               int             SkipAhead,
+                                               int             SkipBack,
+                                               int             TimeStretch,
+                                               int             Jump );
+
+    bool                     UpdatePlayGroup ( const QString & Name,
+                                               const QString & TitleMatch,
+                                               int             SkipAhead,
+                                               int             SkipBack,
+                                               int             TimeStretch,
+                                               int             Jump );
 
     static V2RecRuleFilterList* GetRecRuleFilterList ( );
 
@@ -389,6 +433,20 @@ class V2Dvr : public MythHTTPService
                                                const QString   &Title,
                                                bool             Watched,
                                                const QString   &RecGroup );
+
+    static V2PowerPriorityList* GetPowerPriorityList (const QString &PriorityName );
+
+    static bool       RemovePowerPriority ( const QString & PriorityName );
+
+    static bool       AddPowerPriority    ( const QString & PriorityName,
+                                            int             RecPriority,
+                                            const QString & SelectClause );
+
+    bool              UpdatePowerPriority ( const QString & PriorityName,
+                                            int             RecPriority,
+                                            const QString & SelectClause );
+
+    static QString    CheckPowerQuery( const QString & SelectClause );
 
   private:
     Q_DISABLE_COPY(V2Dvr)

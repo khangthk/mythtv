@@ -11,17 +11,15 @@
 
 // MythTV headers
 #include "libmyth/mythcontext.h"
-#include "libmythbase/cleanupguard.h"
 #include "libmythbase/exitcodes.h"
-#include "libmythbase/mythconfig.h"
+#include "libmythbase/mythappname.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythmiscutil.h"
 #include "libmythbase/mythtranslation.h"
 #include "libmythbase/mythversion.h"
-#include "libmythbase/remoteutil.h"
-#include "libmythbase/signalhandling.h"
 #include "libmythtv/dbcheck.h"
 #include "libmythtv/mythsystemevent.h"
 #include "libmythtv/scheduledrecording.h"
@@ -30,16 +28,6 @@
 // filldata headers
 #include "filldata.h"
 #include "mythfilldatabase_commandlineparser.h"
-
-namespace
-{
-    void cleanup()
-    {
-        delete gContext;
-        gContext = nullptr;
-        SignalHandler::Done();
-    }
-}
 
 int main(int argc, char *argv[])
 {
@@ -79,10 +67,6 @@ int main(int argc, char *argv[])
     if (retval != GENERIC_EXIT_OK)
         return retval;
 
-    if (cmdline.toBool("ddgraball"))
-        LOG(VB_GENERAL, LOG_WARNING,
-            "Invalid option, see: mythfilldatabase --help dd-grab-all");
-
     if (cmdline.toBool("manual"))
     {
         std::cout << "###\n";
@@ -115,8 +99,8 @@ int main(int argc, char *argv[])
         if (!cmdline.toBool("sourceid") ||
             !cmdline.toBool("xmlfile"))
         {
-            std::cerr << "The --file option must be used in combination" << std::endl
-                      << "with both --sourceid and --xmlfile." << std::endl;
+            std::cerr << "The --file option must be used in combination\n"
+                      << "with both --sourceid and --xmlfile.\n";
             return GENERIC_EXIT_INVALID_CMDLINE;
         }
 
@@ -140,8 +124,8 @@ int main(int argc, char *argv[])
     {
         if (!cmdline.toBool("sourceid"))
         {
-            std::cerr << "The --cardtype option must be used in combination" << std::endl
-                      << "with a --sourceid option." << std::endl;
+            std::cerr << "The --cardtype option must be used in combination\n"
+                      << "with a --sourceid option.\n";
             return GENERIC_EXIT_INVALID_CMDLINE;
         }
 
@@ -165,36 +149,35 @@ int main(int argc, char *argv[])
 
             bool enable = !item.contains("not");
 
-            if (item.contains("today"))
+            if (item.contains("today")) {
                 fill_data.SetRefresh(0, enable);
-            else if (item.contains("tomorrow"))
+            } else if (item.contains("tomorrow")) {
                 fill_data.SetRefresh(1, enable);
-            else if (item.contains("second"))
+            } else if (item.contains("second")) {
                 fill_data.SetRefresh(2, enable);
-            else if (item.contains("all"))
+            } else if (item.contains("all")) {
                 fill_data.SetRefresh(FillData::kRefreshAll, enable);
-            else if (item.contains("-"))
-            {
+            } else if (item.contains("-")) {
                 bool ok = false;
                 QStringList r = item.split("-");
 
                 uint lower = r[0].toUInt(&ok);
                 if (!ok)
                 {
-                    std::cerr << warn.toLocal8Bit().constData() << std::endl;
+                    std::cerr << warn.toLocal8Bit().constData() << '\n';
                     return 0;
                 }
 
                 uint upper = r[1].toUInt(&ok);
                 if (!ok)
                 {
-                    std::cerr << warn.toLocal8Bit().constData() << std::endl;
+                    std::cerr << warn.toLocal8Bit().constData() << '\n';
                     return 0;
                 }
 
                 if (lower > upper)
                 {
-                    std::cerr << warn.toLocal8Bit().constData() << std::endl;
+                    std::cerr << warn.toLocal8Bit().constData() << '\n';
                     return 0;
                 }
 
@@ -207,7 +190,7 @@ int main(int argc, char *argv[])
                 uint day = item.toUInt(&ok);
                 if (!ok)
                 {
-                    std::cerr << warn.toLocal8Bit().constData() << std::endl;
+                    std::cerr << warn.toLocal8Bit().constData() << '\n';
                     return 0;
                 }
 
@@ -225,14 +208,8 @@ int main(int argc, char *argv[])
 
     mark_repeats = cmdline.toBool("markrepeats");
 
-    CleanupGuard callCleanup(cleanup);
-
-#ifndef _WIN32
-    SignalHandler::Init();
-#endif
-
-    gContext = new MythContext(MYTH_BINARY_VERSION);
-    if (!gContext->Init(false))
+    MythContext context {MYTH_BINARY_VERSION};
+    if (!context.Init(false))
     {
         LOG(VB_GENERAL, LOG_ERR, "Failed to init MythContext, exiting.");
         return GENERIC_EXIT_NO_MYTHCONTEXT;

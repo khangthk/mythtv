@@ -12,6 +12,10 @@
 #include <memory>
 
 // Qt includes
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QApplication>
 #include <QDir>
 #include <QEvent>
@@ -23,9 +27,8 @@
 #include <utility>
 
 // MythTV includes
-#include <libmyth/mythcontext.h>
-#include <libmyth/mythmediamonitor.h>
 #include <libmythbase/lcddevice.h>
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythdate.h>
 #include <libmythbase/mythdb.h>
 #include <libmythbase/mythdirs.h>
@@ -34,6 +37,7 @@
 #include <libmythbase/remotefile.h>
 #include <libmythbase/storagegroup.h>
 #include <libmythmetadata/musicutils.h>
+#include <libmythui/mediamonitor.h>
 #include <libmythui/mythdialogbox.h>
 #include <libmythui/mythprogressdialog.h>
 #include <libmythui/mythscreenstack.h>
@@ -166,10 +170,10 @@ CDRipperThread::CDRipperThread(RipStatus *parent,  QString device,
     m_cdDevice(std::move(device)), m_quality(quality),
     m_tracks(tracks)
 {
-#ifdef WIN32 // libcdio needs the drive letter with no path
+#ifdef Q_OS_WINDOWS // libcdio needs the drive letter with no path
     if (m_cdDevice.endsWith('\\'))
         m_cdDevice.chop(1);
-#endif // WIN32
+#endif // Q_OS_WINDOWS
 
     QString lastHost = gCoreContext->GetSetting("MythMusicLastRipHost", gCoreContext->GetMasterHostName());
     QStringList dirs = StorageGroup::getGroupDirs("Music", lastHost);
@@ -207,6 +211,8 @@ void CDRipperThread::run(void)
     m_totalSectorsDone = 0;
     for (int trackno = 0; trackno < m_tracks->size(); trackno++)
     {
+        if (!m_tracks->at(trackno)->active)
+            continue;
         m_totalSectors += getSectorCount(m_cdDevice, trackno + 1);
     }
 
@@ -292,46 +298,46 @@ void CDRipperThread::run(void)
                 new RipStatusEvent(RipStatusEvent::kTrackPercentEvent, 0));
 
             // do we need to start a new file?
-            if (m_tracks->at(trackno)->active)
+            if (!m_tracks->at(trackno)->active)
+                continue;
+
+            titleTrack = track;
+            titleTrack->setLength(m_tracks->at(trackno)->length);
+
+            if (m_quality < 3)
             {
-                titleTrack = track;
-                titleTrack->setLength(m_tracks->at(trackno)->length);
-
-                if (m_quality < 3)
+                if (encodertype == "mp3")
                 {
-                    if (encodertype == "mp3")
-                    {
-                        outfile = QString("track%1.mp3").arg(trackno);
-                        encoder = std::make_unique<LameEncoder>(saveDir + outfile, m_quality,
-                                                      titleTrack, mp3usevbr);
-                    }
-                    else // ogg
-                    {
-                        outfile = QString("track%1.ogg").arg(trackno);
-                        encoder = std::make_unique<VorbisEncoder>(saveDir + outfile, m_quality,
-                                                        titleTrack);
-                    }
+                    outfile = QString("track%1.mp3").arg(trackno);
+                    encoder = std::make_unique<LameEncoder>(saveDir + outfile, m_quality,
+                                                  titleTrack, mp3usevbr);
                 }
-                else
+                else // ogg
                 {
-                    outfile = QString("track%1.flac").arg(trackno);
-                    encoder = std::make_unique<FlacEncoder>(saveDir + outfile, m_quality,
-                                                  titleTrack);
+                    outfile = QString("track%1.ogg").arg(trackno);
+                    encoder = std::make_unique<VorbisEncoder>(saveDir + outfile, m_quality,
+                                                    titleTrack);
                 }
+            }
+            else
+            {
+                outfile = QString("track%1.flac").arg(trackno);
+                encoder = std::make_unique<FlacEncoder>(saveDir + outfile, m_quality,
+                                              titleTrack);
+            }
 
-                if (!encoder->isValid())
-                {
-                    QApplication::postEvent(
-                        m_parent,
-                        new RipStatusEvent(
-                            RipStatusEvent::kEncoderErrorEvent,
-                            "Encoder failed to open file for writing"));
-                    LOG(VB_GENERAL, LOG_ERR, "MythMusic: Encoder failed"
-                                             " to open file for writing");
+            if (!encoder->isValid())
+            {
+                QApplication::postEvent(
+                    m_parent,
+                    new RipStatusEvent(
+                        RipStatusEvent::kEncoderErrorEvent,
+                        "Encoder failed to open file for writing"));
+                LOG(VB_GENERAL, LOG_ERR, "MythMusic: Encoder failed"
+                                         " to open file for writing");
 
-                    RunEpilog();
-                    return;
-                }
+                RunEpilog();
+                return;
             }
 
             if (!encoder)
@@ -353,28 +359,25 @@ void CDRipperThread::run(void)
                 return;
             }
 
-            if (m_tracks->at(trackno)->active)
-            {
-                QString ext = QFileInfo(outfile).suffix();
-                QString destFile = filenameFromMetadata(titleTrack) + '.' + ext;
-                QUrl url(m_musicStorageDir);
+            QString ext = QFileInfo(outfile).suffix();
+            QString destFile = filenameFromMetadata(titleTrack) + '.' + ext;
+            QUrl url(m_musicStorageDir);
 
-                // save the metadata to the DB
-                titleTrack->setFilename(destFile);
-                titleTrack->setHostname(url.host());
-                titleTrack->setFileSize((quint64)QFileInfo(outfile).size());
-                titleTrack->dumpToDatabase();
+            // save the metadata to the DB
+            titleTrack->setFilename(destFile);
+            titleTrack->setHostname(url.host());
+            titleTrack->setFileSize((quint64)QFileInfo(outfile).size());
+            titleTrack->dumpToDatabase();
 
-                // this will delete the encoder which will write the metadata in it's dtor
-                encoder.reset();
+            // this will delete the encoder which will write the metadata in it's dtor
+            encoder.reset();
 
-                // copy track to the BE
-                destFile = MythCoreContext::GenMythURL(url.host(), 0, destFile, "Music");
+            // copy track to the BE
+            destFile = MythCoreContext::GenMythURL(url.host(), 0, destFile, "Music");
 
-                QApplication::postEvent(m_parent, new RipStatusEvent(RipStatusEvent::kCopyStartEvent, 0));
-                RemoteFile::CopyFile(saveDir + outfile, destFile, true);
-                QApplication::postEvent(m_parent, new RipStatusEvent(RipStatusEvent::kCopyEndEvent, 0));
-            }
+            QApplication::postEvent(m_parent, new RipStatusEvent(RipStatusEvent::kCopyStartEvent, 0));
+            RemoteFile::CopyFile(saveDir + outfile, destFile, true);
+            QApplication::postEvent(m_parent, new RipStatusEvent(RipStatusEvent::kCopyEndEvent, 0));
         }
     }
 
@@ -520,7 +523,7 @@ Ripper::Ripper(MythScreenStack *parent, QString device) :
     m_tracks(new QVector<RipTrack*>),
     m_cdDevice(std::move(device))
 {
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
     // if the MediaMonitor is running stop it
     MediaMonitor *mon = MediaMonitor::GetMediaMonitor();
     if (mon && mon->IsActive())
@@ -528,7 +531,7 @@ Ripper::Ripper(MythScreenStack *parent, QString device) :
         m_mediaMonitorActive = true;
         mon->StopMonitoring();
     }
-#endif // _WIN32
+#endif // Q_OS_WINDOWS
 
     // make sure the directory where we temporarily save the rips is present
     QDir dir;
@@ -553,7 +556,7 @@ Ripper::~Ripper(void)
 
     delete m_decoder;
 
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
     // if the MediaMonitor was active when we started then restart it
     if (m_mediaMonitorActive)
     {
@@ -561,7 +564,7 @@ Ripper::~Ripper(void)
         if (mon)
             mon->StartMonitoring();
     }
-#endif // _WIN32
+#endif // Q_OS_WINDOWS
 
     if (m_somethingwasripped)
         emit ripFinished();
@@ -666,7 +669,9 @@ void Ripper::ShowMenu()
     auto *menu = new MythDialogBox("", popupStack, "ripmusicmenu");
 
     if (menu->Create())
+    {
         popupStack->AddScreen(menu);
+    }
     else
     {
         delete menu;
@@ -694,7 +699,9 @@ void Ripper::chooseBackend(void) const
                   "FROM storagegroup "
                   "WHERE groupname = 'Music'";
     if (!query.exec(sql) || !query.isActive())
+    {
         MythDB::DBError("Ripper::chooseBackend get host list", query);
+    }
     else
     {
         while(query.next())
@@ -763,7 +770,8 @@ void Ripper::ScanFinished()
         m_genreName.clear();
         m_year.clear();
 
-        for (int trackno = 0; trackno < m_decoder->getNumTracks(); trackno++)
+        int max_tracks = m_decoder->getNumTracks();
+        for (int trackno = 0; trackno < max_tracks; trackno++)
         {
             auto *ripTrack = new RipTrack;
 
@@ -911,7 +919,7 @@ bool Ripper::deleteExistingTrack(RipTrack *track)
 
         // delete file
         // FIXME: RemoteFile::DeleteFile will only work with files on the master BE
-        if (!RemoteFile::DeleteFile(filename))
+        if (RemoteFile::Exists(filename) && !RemoteFile::DeleteFile(filename))
         {
             LOG(VB_GENERAL, LOG_NOTICE, QString("Ripper::deleteExistingTrack() "
                                                 "Could not delete %1")
@@ -1394,7 +1402,9 @@ void Ripper::ShowConflictMenu(RipTrack* track)
     auto *menu = new MythDialogBox(msg, popupStack, "conflictmenu", true);
 
     if (menu->Create())
+    {
         popupStack->AddScreen(menu);
+    }
     else
     {
         delete menu;
@@ -1631,3 +1641,5 @@ void RipStatus::startRip(void)
     m_ripperThread = new CDRipperThread(this, m_cdDevice, m_tracks, m_quality);
     m_ripperThread->start();
 }
+
+#include "moc_cdrip.cpp"

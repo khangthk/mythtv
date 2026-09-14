@@ -42,7 +42,7 @@ void AudioBuffer::appendData(unsigned char *buffer, int len, int frames,
         // buffer is too small to fit all
         // can't use av_realloc as it doesn't guarantee reallocated memory
         // to be 16 bytes aligned
-        m_realsize = ((m_size + len) / ABLOCK_SIZE + 1 ) * ABLOCK_SIZE;
+        m_realsize = (((m_size + len) / ABLOCK_SIZE) + 1 ) * ABLOCK_SIZE;
         auto *tmp = (uint8_t *)av_malloc(m_realsize);
         if (tmp == nullptr)
         {
@@ -81,13 +81,12 @@ AudioReencodeBuffer::~AudioReencodeBuffer()
  */
 void AudioReencodeBuffer::Reconfigure(const AudioSettings &settings)
 {
-    ClearError();
-
     m_passthru        = settings.m_usePassthru;
     m_channels        = settings.m_channels;
     m_bytes_per_frame = m_channels *
         AudioOutputSettings::SampleSize(settings.m_format);
     m_eff_audiorate   = settings.m_sampleRate;
+    m_isConfigured    = true;
 }
 
 /**

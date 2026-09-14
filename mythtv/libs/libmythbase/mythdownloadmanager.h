@@ -1,6 +1,11 @@
 #ifndef MYTHDOWNLOADMANAGER_H
 #define MYTHDOWNLOADMANAGER_H
 
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QDateTime>
 #include <QHash>
 #include <QMutex>
@@ -61,7 +66,6 @@ class MBASE_PUBLIC MythDownloadManager : public QObject, public MThread
    ~MythDownloadManager() override;
 
     // Methods for starting the queue manager thread
-    void run(void) override; // MThread
     void setRunThread(void) { m_runThread = true; }
     QThread *getQueueThread(void) { return m_queueThread; }
     bool isRunning(void) const { return m_isRunning; }
@@ -112,6 +116,9 @@ class MBASE_PUBLIC MythDownloadManager : public QObject, public MThread
     QString getHeader(const QUrl &url, const QString &header);
     static QString getHeader(const QNetworkCacheMetaData &cacheData, const QString &header);
 
+  protected:
+    void run(void) override; // MThread
+
   private slots:
     // QNetworkAccessManager signals
     void downloadFinished(QNetworkReply* reply);
@@ -143,7 +150,7 @@ class MBASE_PUBLIC MythDownloadManager : public QObject, public MThread
     void downloadRemoteFile(MythDownloadInfo *dlInfo);
     void downloadQNetworkRequest(MythDownloadInfo *dlInfo);
     bool downloadNow(MythDownloadInfo *dlInfo, bool deleteInfo = true);
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
     static bool downloadNowLinkLocal(MythDownloadInfo *dlInfo, bool deleteInfo);
 #endif
     void downloadCanceled(void);

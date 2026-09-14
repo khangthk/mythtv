@@ -7,11 +7,10 @@
 #include <utility>
 
 // mythtv
-#include "libmyth/mythcontext.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythevent.h"
 #include "libmythbase/mythlogging.h"
-#include "libmythbase/remoteutil.h"
 #include "libmythui/mythdialogbox.h"
 #include "libmythui/mythmainwindow.h"
 #include "libmythui/mythprogressdialog.h"
@@ -57,7 +56,7 @@ namespace
             LOG(VB_GENERAL, LOG_DEBUG,
                 QString("handleFile: %1 :: %2").arg(fq_file_name).arg(host));
 #endif
-            if (m_imageExt.find(extension.toLower()) == m_imageExt.end())
+            if (!m_imageExt.contains(extension.toLower()))
             {
                 m_videoFiles[fq_file_name].check = false;
                 m_videoFiles[fq_file_name].host = host;
@@ -108,7 +107,7 @@ void VideoScannerThread::SetDirs(QStringList dirs)
     {
         if (iter->startsWith("myth://"))
         {
-            QUrl sgurl = *iter;
+            QUrl sgurl { *iter };
             QString host = sgurl.host().toLower();
             QString path = sgurl.path();
 
@@ -165,6 +164,7 @@ void VideoScannerThread::run()
 
     QList<QByteArray> image_types = QImageReader::supportedImageFormats();
     QStringList imageExtensions;
+    imageExtensions.reserve(image_types.size());
     for (const auto & format : std::as_const(image_types))
         imageExtensions.push_back(QString(format));
 
@@ -182,7 +182,7 @@ void VideoScannerThread::run()
         {
             if (dir.startsWith("myth://"))
             {
-                QUrl sgurl = dir;
+                QUrl sgurl { dir };
                 QString host = sgurl.host().toLower();
 
                 m_liveSGHosts.removeAll(host);
@@ -206,7 +206,7 @@ void VideoScannerThread::run()
                                  m_delList));
 
         QStringList slist;
-
+        slist.reserve(m_addList.size() + m_movList.size() + m_delList.size());
         for (int id : std::as_const(m_addList))
             slist << QString("added::%1").arg(id);
         for (int id : std::as_const(m_movList))
@@ -482,4 +482,19 @@ void VideoScanner::finishedScan()
     emit finished(m_scanThread->getDataChanged());
 }
 
-////////////////////////////////////////////////////////////////////////
+/**
+ * \brief return list of backends currently connected to the master
+ */
+bool RemoteGetActiveBackends(QStringList *list)
+{
+    list->clear();
+    *list << "QUERY_ACTIVE_BACKENDS";
+
+    if (!gCoreContext->SendReceiveStringList(*list))
+        return false;
+
+    list->removeFirst();
+    return true;
+}
+
+#include "moc_videoscan.cpp"

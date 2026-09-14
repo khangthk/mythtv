@@ -1,12 +1,12 @@
 #include "playbackstate.h"
 
 // MythTV
-#include "libmyth/mythcontext.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythdbcon.h"
 #include "libmythbase/mythlogging.h"
-#include "libmythbase/programtypes.h"
 #include "libmythmetadata/videometadata.h"
+#include "libmythtv/programtypes.h"
 
 PlaybackState::PlaybackState()
 {

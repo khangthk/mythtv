@@ -20,11 +20,9 @@
 #include <QWaitCondition>
 
 // MythTV
-#include "libmyth/audio/volumebase.h"
 #include "libmythbase/mthread.h"
 #include "libmythbase/mythmiscutil.h"
 #include "libmythbase/mythtypes.h"
-#include "libmythbase/programtypes.h"
 #include "libmythtv/audioplayer.h"
 #include "libmythtv/captions/cc608reader.h"
 #include "libmythtv/captions/cc708reader.h"
@@ -39,6 +37,7 @@
 #include "libmythtv/mythvideoout.h"
 #include "libmythtv/osd.h"
 #include "libmythtv/playercontext.h"
+#include "libmythtv/programtypes.h"
 #include "libmythtv/tv.h"
 #include "libmythtv/videoouttypes.h"
 
@@ -101,7 +100,6 @@ class MTV_PUBLIC MythPlayer : public QObject
     void SeekingDone();
     void PauseChanged(bool Paused);
     void RequestResetCaptions();
-    void SignalTracksChanged(uint Type);
 
   public:
     explicit MythPlayer(PlayerContext* Context, PlayerFlags Flags = kNoFlags);
@@ -150,7 +148,6 @@ class MTV_PUBLIC MythPlayer : public QObject
 
     // Bool Gets
     bool    IsPaused(void) const              { return m_allPaused;      }
-    bool    GetRawAudioState(void) const;
     bool    GetLimitKeyRepeat(void) const     { return m_limitKeyRepeat; }
     EofState GetEof(void) const;
     bool    IsErrored(void) const;
@@ -204,6 +201,8 @@ class MTV_PUBLIC MythPlayer : public QObject
     // forced on even if the user doesn't have them turned on.)
     // These two functions are not thread-safe (UI thread use only).
     bool GetAllowForcedSubtitles(void) const { return m_allowForcedSubtitles; }
+
+    virtual void tracksChanged([[maybe_unused]] uint TrackType) {}
 
     // LiveTV public stuff
     void CheckTVChain();
@@ -270,7 +269,7 @@ class MTV_PUBLIC MythPlayer : public QObject
         return m_deleteMap.TranslatePositionRelToAbs(position);
     }
     float ComputeSecs(uint64_t position, bool use_cutlist) const {
-        return TranslatePositionFrameToMs(position, use_cutlist).count() / 1000.0;
+        return TranslatePositionFrameToMs(position, use_cutlist).count() / 1000.0F;
     }
     uint64_t FindFrame(float offset, bool use_cutlist) const;
 
@@ -427,6 +426,7 @@ class MTV_PUBLIC MythPlayer : public QObject
     std::chrono::seconds  m_totalDuration {0s};
     long long m_rewindTime                {0};
     std::chrono::milliseconds  m_latestVideoTimecode {-1ms};
+    std::chrono::milliseconds  m_latestAudioTimecode {-1ms};
     MythPlayerAVSync m_avSync;
 
     // -- end state stuff --

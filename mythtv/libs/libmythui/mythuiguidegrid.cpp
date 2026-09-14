@@ -36,7 +36,9 @@ MythUIGuideGrid::MythUIGuideGrid(MythUIType *parent, const QString &name)
 
 void MythUIGuideGrid::Finalize(void)
 {
-    m_rowCount = m_channelCount;
+    // Grid will probably never have more than 10,000 channels.  This
+    // number is to prevent a compiler warning, so change as needed.
+    m_rowCount = std::clamp(m_channelCount, 1, 10000);
 
     m_allData = new QList<UIGTCon *>[m_rowCount];
 
@@ -724,6 +726,7 @@ bool MythUIGuideGrid::parseDefaultCategoryColors(QMap<QString, QString> &catColo
 #endif
 
     QDomDocument doc;
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     QString errorMsg;
     int errorLine = 0;
     int errorColumn = 0;
@@ -737,6 +740,18 @@ bool MythUIGuideGrid::parseDefaultCategoryColors(QMap<QString, QString> &catColo
         f.close();
         return false;
     }
+#else
+    auto parseResult = doc.setContent(&f);
+    if (!parseResult)
+    {
+        LOG(VB_GENERAL, LOG_ERR, LOC +
+            QString("Parsing colors: %1 at line: %2 column: %3")
+            .arg(f.fileName()).arg(parseResult.errorLine).arg(parseResult.errorColumn) +
+            QString("\n\t\t\t%1").arg(parseResult.errorMessage));
+        f.close();
+        return false;
+    }
+#endif
 
     f.close();
 
@@ -826,3 +841,5 @@ void MythUIGuideGrid::SetMultiLine(bool multiline)
     else
         m_justification &= ~Qt::TextWordWrap;
 }
+
+#include "moc_mythuiguidegrid.cpp"

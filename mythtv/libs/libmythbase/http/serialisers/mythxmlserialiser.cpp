@@ -1,6 +1,11 @@
 // Qt
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QMetaProperty>
+#if QT_VERSION < QT_VERSION_CHECK(6,11,0)
 #include <QSequentialIterable>
+#else
+#include <QMetaSequence>
+#endif
 
 // MythTV
 #include "mythdate.h"
@@ -44,7 +49,7 @@ void MythXMLSerialiser::AddValue(const QString& Name, const QVariant& Value)
     if (object)
     {
         QVariant isNull = object->property("isNull");
-        if (isNull.value<bool>())
+        if (isNull.toBool())
             return;
         AddQObject(object);
         return;
@@ -133,7 +138,11 @@ void MythXMLSerialiser::AddProperty(const QString& Name, const QVariant& Value,
 
 void MythXMLSerialiser::AddStringList(const QVariant& Values)
 {
+#if QT_VERSION < QT_VERSION_CHECK(6,11,0)
     auto values = Values.value<QSequentialIterable>();
+#else
+    auto values = Values.value<QMetaSequence::Iterable>();
+#endif
     for (const auto & value : values)
     {
         m_writer.writeStartElement("String");
@@ -144,7 +153,11 @@ void MythXMLSerialiser::AddStringList(const QVariant& Values)
 
 void MythXMLSerialiser::AddList(const QString& Name, const QVariant& Values)
 {
+#if QT_VERSION < QT_VERSION_CHECK(6,11,0)
     auto values = Values.value<QSequentialIterable>();
+#else
+    auto values = Values.value<QMetaSequence::Iterable>();
+#endif
     for (const auto & value : values)
     {
         m_writer.writeStartElement(Name);
@@ -182,11 +195,11 @@ QString MythXMLSerialiser::GetItemName(const QString& Name)
 QString MythXMLSerialiser::GetContentName(const QString& Name, const QMetaObject* MetaObject)
 {
     // Try to read Name or TypeName from classinfo metadata.
-    if (int index = MetaObject ? MetaObject->indexOfClassInfo(Name.toLatin1()) : -1; index >= 0)
+    if (int index = MetaObject ? MetaObject->indexOfClassInfo(Name.toLatin1().constData()) : -1; index >= 0)
     {
         QStringList infos = QString(MetaObject->classInfo(index).value()).split(';', Qt::SkipEmptyParts);
         QString type; // fallback
-        foreach (const QString &info, infos)
+        for (const QString &info : std::as_const(infos))
         {
             if (info.startsWith(QStringLiteral("name=")))
                 if (auto name = info.mid(5).trimmed(); !name.isEmpty())

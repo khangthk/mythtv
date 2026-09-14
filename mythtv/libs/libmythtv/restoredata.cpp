@@ -42,8 +42,8 @@
 #include <iostream>
 
 // MythTV includes
-#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdb.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythui/mythdialogbox.h"
 #include "libmythui/mythuiimage.h"
 #include "libmythui/mythuitext.h"
@@ -450,3 +450,5 @@ bool RestoreData::doSave(void)
     LOG(VB_GENERAL, LOG_INFO, LOC + QString("Restored data for %1 channels").arg(m_ocd.size()));
     return true;
 }
+
+#include "moc_restoredata.cpp"

@@ -23,10 +23,10 @@
 
 #include "test_eitfixups.h"
 
-#include "libmythbase/programinfo.h"
 #include "libmythtv/channelutil.h"
 #include "libmythtv/eitfixup.h"
 #include "libmythtv/mpeg/dishdescriptors.h"
+#include "libmythtv/programinfo.h"
 
 
 // Make this non-zero to enable dumping event details to stdout
@@ -540,28 +540,38 @@ void TestEITFixups::testUKXFiles()
 void TestEITFixups::testDEPro7Sat1()
 {
     DBEventEIT *event = SimpleDBEventEIT (EITFixUp::kFixP7S1,
-                                         "Titel",
-                                         "Folgentitel, Mystery, USA 2011",
+                                         "The Big Bang Theory",
+                                         "Eine Nacht pro Woche Sitcom, USA 2015 Altersfreigabe: Ohne Altersbeschränkung (WH vom Montag, 18.11.2024, 15:35 Uhr)",
                                          "Beschreibung");
 
     PRINT_EVENT(*event);
     EITFixUp::Fix(*event);
     PRINT_EVENT(*event);
-    QCOMPARE(event->m_title,    QString("Titel"));
-    QCOMPARE(event->m_subtitle, QString("Folgentitel"));
-    QCOMPARE(event->m_airdate,  (unsigned short) 2011);
+    QCOMPARE(event->m_title, QString("The Big Bang Theory"));
+    QCOMPARE(event->m_subtitle, QString("Eine Nacht pro Woche"));
+    QCOMPARE(event->m_description, QString("Beschreibung (USA 2015)"));
+    QCOMPARE(event->m_category, QString("Sitcom"));
+    QCOMPARE(event->m_airdate, (unsigned short) 2015);
+    QCOMPARE(event->m_originalairdate, QDate(2015, 1, 1));
+    QCOMPARE(event->m_previouslyshown, true);
+    checkRating(*event, "DE", "0");
 
     delete event;
 
     DBEventEIT *event2 = SimpleDBEventEIT (EITFixUp::kFixP7S1,
-                                           "Titel",
-                                           "Kurznachrichten, D 2015",
+                                           "taff",
+                                           "taff Infotainment, D 2024",
                                            "Beschreibung");
     PRINT_EVENT(*event2);
     EITFixUp::Fix(*event2);
     PRINT_EVENT(*event2);
+    QCOMPARE(event2->m_title, QString("taff"));
     QCOMPARE(event2->m_subtitle, QString(""));
-    QCOMPARE(event2->m_airdate,  (unsigned short) 2015);
+    QCOMPARE(event2->m_description, QString("Beschreibung (D 2024)"));
+    QCOMPARE(event2->m_category, QString("Infotainment"));
+    QCOMPARE(event2->m_airdate, (unsigned short) 2024);
+    QCOMPARE(event2->m_originalairdate, QDate(2024, 1, 1));
+    QCOMPARE(event2->m_previouslyshown, false);
 
     delete event2;
 
@@ -572,65 +582,68 @@ void TestEITFixups::testDEPro7Sat1()
     PRINT_EVENT(*event3);
     EITFixUp::Fix(*event3);
     PRINT_EVENT(*event3);
+    QCOMPARE(event3->m_title, QString("Titel"));
     QCOMPARE(event3->m_subtitle, QString("Folgentitel"));
-    QCOMPARE(event3->m_airdate,  (unsigned short) 0);
+    QCOMPARE(event3->m_description, QString("Beschreibung"));
+    QCOMPARE(event3->m_airdate, (unsigned short) 0);
+    QCOMPARE(event3->m_previouslyshown, false);
 
     delete event3;
 
+
     DBEventEIT *event4 = SimpleDBEventEIT (EITFixUp::kFixP7S1,
-                                           "Titel",
-                                           "\"Lokal\", Ort, Doku-Soap, D 2015",
+                                           "The Taste",
+                                           "The Taste Kochshow, D 2024 Altersfreigabe: ab 6 Mit Gebärdensprache (Online-Stream)",
                                            "Beschreibung");
     PRINT_EVENT(*event4);
     EITFixUp::Fix(*event4);
     PRINT_EVENT(*event4);
-    QCOMPARE(event4->m_subtitle, QString("\"Lokal\", Ort"));
-    QCOMPARE(event4->m_airdate,  (unsigned short) 2015);
+    QCOMPARE(event4->m_title, QString("The Taste"));
+    QCOMPARE(event4->m_subtitle, QString(""));
+    QCOMPARE(event4->m_description, QString("Beschreibung (D 2024)"));
+    QCOMPARE(event4->m_category, QString("Kochshow"));
+    QCOMPARE(event4->m_airdate, (unsigned short) 2024);
+    QCOMPARE(event4->m_originalairdate, QDate(2024, 1, 1));
+    QCOMPARE(event4->m_previouslyshown, false);
+    checkRating(*event4, "DE", "6");
 
     delete event4;
 
     DBEventEIT *event5 = SimpleDBEventEIT (EITFixUp::kFixP7S1,
                                            "Titel",
-                                           "In Morpheus' Armen, Science-Fiction, CDN/USA 2006",
+                                           "Event Horizon - Am Rande des Universums Science-Fiction, USA/GB 1997 Altersfreigabe: ab 16",
                                            "Beschreibung");
     PRINT_EVENT(*event5);
     EITFixUp::Fix(*event5);
     PRINT_EVENT(*event5);
-    QCOMPARE(event5->m_subtitle, QString("In Morpheus' Armen"));
-    QCOMPARE(event5->m_airdate,  (unsigned short) 2006);
+    QCOMPARE(event5->m_title, QString("Titel"));
+    QCOMPARE(event5->m_subtitle, QString("Event Horizon - Am Rande des Universums"));
+    QCOMPARE(event5->m_description, QString("Beschreibung (USA/GB 1997)"));
+    QCOMPARE(event5->m_airdate, (unsigned short) 1997);
+    QCOMPARE(event5->m_originalairdate, QDate(1997, 1, 1));
+    QCOMPARE(event5->m_category, QString("Science-Fiction"));
+    QCOMPARE(event5->m_previouslyshown, false);
+    checkRating(*event5, "DE", "16");
 
     delete event5;
 
     DBEventEIT *event6 = SimpleDBEventEIT (EITFixUp::kFixP7S1,
                                            "Titel",
-                                           "Drei Kleintiere durchschneiden (1), Zeichentrick, J 2014",
+                                           "Doku-Reihe, USA 2016 Altersfreigabe: ab 12",
                                            "Beschreibung");
     PRINT_EVENT(*event6);
     EITFixUp::Fix(*event6);
     PRINT_EVENT(*event6);
-    QCOMPARE(event6->m_subtitle, QString("Drei Kleintiere durchschneiden (1)"));
-    QCOMPARE(event6->m_airdate,  (unsigned short) 2014);
+    QCOMPARE(event6->m_title, QString("Titel"));
+    QCOMPARE(event6->m_subtitle, QString(""));
+    QCOMPARE(event6->m_description, QString("Beschreibung (USA 2016)"));
+    QCOMPARE(event6->m_category, QString("Doku-Reihe"));
+    QCOMPARE(event6->m_airdate, (unsigned short) 2016);
+    QCOMPARE(event6->m_originalairdate, QDate(2016, 1, 1));
+    QCOMPARE(event6->m_previouslyshown, false);
+    checkRating(*event6, "DE", "12");
 
     delete event6;
-
-    /* #12151 */
-    DBEventEIT *event7 = SimpleDBEventEIT (EITFixUp::kFixP7S1,
-                                           "Criminal Minds",
-                                           "<episode title>, Crime-Serie, USA 2011",
-                                           "<plot summary>\n\n"
-                                           "Regie: Frau Regisseur\n"
-                                           "Drehbuch: Lieschen Mueller, Frau Meier\n\n"
-                                           "Darsteller:\n"
-                                           "Herr Schauspieler (in einer (kleinen) Rolle)\n"
-                                           "Frau Schauspielerin (in einer Rolle)");
-    PRINT_EVENT(*event7);
-    EITFixUp::Fix(*event7);
-    PRINT_EVENT(*event7);
-    QCOMPARE(event7->m_subtitle, QString("<episode title>"));
-    QCOMPARE(event7->m_airdate,  (unsigned short) 2011);
-    QCOMPARE(event7->m_description, QString("<plot summary>"));
-
-    delete event7;
 }
 
 void TestEITFixups::testHTMLFixup()
@@ -973,7 +986,7 @@ void TestEITFixups::testDvbEitAuthority()
 
     PRINT_EVENT(event);
     QCOMPARE(event.m_subtitle, QString(""));
-    QCOMPARE(event.m_videoProps & VID_HDTV, (int)VID_HDTV);
+    QCOMPARE(event.m_videoProps & VID_HDTV, (uint)VID_HDTV);
     QCOMPARE(event.m_seriesId, e_seriesID);
     QCOMPARE(event.m_programId, e_programID);
 }
@@ -1534,7 +1547,7 @@ void TestEITFixups::testBellExpress_data()
                               << "" << (int)DishThemeType::kThemeNone
                               << "Title" << "Subtitle" << "Description." << "Category" << -1
                               << (int)VID_UNKNOWN << (int)AUD_UNKNOWN << (int)SUB_UNKNOWN << false;
-    QTest::newRow("catbad")   << "Title (HD)" << "Subtitle\r\nCat(bad). Description."
+    QTest::newRow("catbad1")  << "Title (HD)" << "Subtitle\r\nCat(bad). Description."
                               << "" << (int)DishThemeType::kThemeNone
                               << "Title" << "Subtitle" << "Description." << "Unknown" << -1
                               << (int)VID_HDTV << (int)AUD_UNKNOWN << (int)SUB_UNKNOWN << false;
@@ -1542,7 +1555,7 @@ void TestEITFixups::testBellExpress_data()
                               << "" << (int)DishThemeType::kThemeNone
                               << "Title" << "Subtitle" << "Too long for category. Description." << "Unknown" << -1
                               << (int)VID_HDTV << (int)AUD_UNKNOWN << (int)SUB_UNKNOWN << false;
-    QTest::newRow("catbad")   << "Title" << "Subtitle\r\nCat(bad).Description. (HD)"
+    QTest::newRow("catbad2")  << "Title" << "Subtitle\r\nCat(bad).Description. (HD)"
                               << "" << (int)DishThemeType::kThemeNone
                               << "Title" << "Subtitle" << "Cat(bad).Description." << "Unknown" << -1
                               << (int)VID_HDTV << (int)AUD_UNKNOWN << (int)SUB_UNKNOWN << false;
@@ -1927,7 +1940,7 @@ void TestEITFixups::testComHem3_data()
     QTest::newRow("rerun-date2")     << "Title" << "Subtitle" << "Subtitle2. Description. Repris från 2/12."
                                      << "Title" << "Subtitle2" << "Description. Repris från 2/12."
                                      << QDate(2019,12,2);
-    QTest::newRow("rerun-date2")     << "Title" << "Subtitle" << "Subtitle2. Description. Repris från 2/12 - 2011."
+    QTest::newRow("rerun-date3")     << "Title" << "Subtitle" << "Subtitle2. Description. Repris från 2/12 - 2011."
                                      << "Title" << "Subtitle2" << "Description. Repris från 2/12 - 2011."
                                      << QDate(2019,12,2); // not implemented
 }
@@ -2259,7 +2272,7 @@ void TestEITFixups::testMCA_data()
     QTest::newRow("cc1")      << "Title" << "Subtitle" << "This is the description. English Subtitles"
                               << "Title" << "" << "This is the description."
                               << 0 << 0 << (int)AUD_UNKNOWN << (int)SUB_HARDHEAR;
-    QTest::newRow("cc1")      << "Title" << "Subtitle" << "This is the description, HI Subtitles"
+    QTest::newRow("cc2")      << "Title" << "Subtitle" << "This is the description, HI Subtitles"
                               << "Title" << "" << "This is the description"
                               << 0 << 0 << (int)AUD_UNKNOWN << (int)SUB_HARDHEAR;
     QTest::newRow("boquet")   << "Title" << "Subtitle" << "This is the description. Only available on qwerty bouquet."
@@ -2767,12 +2780,12 @@ void TestEITFixups::testNL_data()
                                 << "Documentaire" << ProgramInfo::kCategoryNone
                                 << (int)VID_UNKNOWN << (int)AUD_UNKNOWN << (int)SUB_UNKNOWN
                                 << QDate() << QStringList() << QStringList() << QStringList();
-    QTest::newRow("category1") << "Title" << "Amusement. Description." << "Documentary"
+    QTest::newRow("category4")  << "Title" << "Amusement. Description." << "Documentary"
                                 << "Title" << "" << "Description."
                                 << "Documentaire" << ProgramInfo::kCategoryNone
                                 << (int)VID_UNKNOWN << (int)AUD_UNKNOWN << (int)SUB_UNKNOWN
                                 << QDate() << QStringList() << QStringList() << QStringList();
-    QTest::newRow("category2") << "Title" << "Nieuws/actualiteiten. Description." << "Documentary"
+    QTest::newRow("category5") << "Title" << "Nieuws/actualiteiten. Description." << "Documentary"
                                 << "Title" << "" << "Description."
                                 << "Documentaire" << ProgramInfo::kCategoryNone
                                 << (int)VID_UNKNOWN << (int)AUD_UNKNOWN << (int)SUB_UNKNOWN
@@ -2961,7 +2974,7 @@ void TestEITFixups::testNRK_data()
     QTest::newRow("subtitle4") << "Title: Subtitle" << "Subtitle" << "Description."
                                << "Title" << "Subtitle" << "Description."
                                << false;
-    QTest::newRow("subtitle4") << "Title: Subtitle2" << "Subtitle" << "Description."
+    QTest::newRow("subtitle5") << "Title: Subtitle2" << "Subtitle" << "Description."
                                << "Title: Subtitle2" << "Subtitle" << "Description."
                                << false;
 }
@@ -3624,15 +3637,15 @@ void TestEITFixups::testGreekCategories_data()
     QTest::newRow("sports11")    << "Title" << "Description. βόλεϊ" << "Αθλητικά";
     QTest::newRow("documentary1") << "Title" << "Description. ντοκιμαντερ" << "Ντοκιμαντέρ";
     QTest::newRow("documentary2") << "Title" << "Description. ντοκυμαντέρ" << "Ντοκιμαντέρ";
-    QTest::newRow("religion")    << "Title" << "Description. θρησκεια" << "Θρησκεία";
-    QTest::newRow("religion")    << "Title" << "Description. θρησκευτικ" << "Θρησκεία";
-    QTest::newRow("religion")    << "Title" << "Description. ναο" << "Θρησκεία";
-    QTest::newRow("religion")    << "Title" << "Description. ναός" << "Θρησκεία";
-    QTest::newRow("religion")    << "Title" << "Description. θεια λειτουργια)" << "Θρησκεία";
-    QTest::newRow("religion")    << "Title" << "Description. θεία λειτουργία)" << "Θρησκεία";
-    QTest::newRow("culture")     << "Title" << "Description. τεχνη" << "Τέχνες/Πολιτισμός";
-    QTest::newRow("culture")     << "Title" << "Description. τέχνες" << "Τέχνες/Πολιτισμός";
-    QTest::newRow("culture")     << "Title" << "Description. πολιτισμ)" << "Τέχνες/Πολιτισμός";
+    QTest::newRow("religion1")   << "Title" << "Description. θρησκεια" << "Θρησκεία";
+    QTest::newRow("religion2")   << "Title" << "Description. θρησκευτικ" << "Θρησκεία";
+    QTest::newRow("religion3")   << "Title" << "Description. ναο" << "Θρησκεία";
+    QTest::newRow("religion4")   << "Title" << "Description. ναός" << "Θρησκεία";
+    QTest::newRow("religion5")   << "Title" << "Description. θεια λειτουργια)" << "Θρησκεία";
+    QTest::newRow("religion6")   << "Title" << "Description. θεία λειτουργία)" << "Θρησκεία";
+    QTest::newRow("culture1")    << "Title" << "Description. τεχνη" << "Τέχνες/Πολιτισμός";
+    QTest::newRow("culture2")    << "Title" << "Description. τέχνες" << "Τέχνες/Πολιτισμός";
+    QTest::newRow("culture3")    << "Title" << "Description. πολιτισμ)" << "Τέχνες/Πολιτισμός";
     QTest::newRow("special")     << "Title" << "Description. αφιερωμα)" << "Αφιέρωμα";
 
     // test title too
@@ -3688,3 +3701,5 @@ void TestEITFixups::testGreekCategories()
 
 
 QTEST_APPLESS_MAIN(TestEITFixups)
+
+#include "moc_test_eitfixups.cpp"

@@ -2,13 +2,17 @@
 #include <cstdlib>
 
 #include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtEnvironmentVariables>
+#include <QtSystemDetection>
+#endif
 #include <QDir>
 #include <QCoreApplication>
 
-#if defined(Q_OS_ANDROID)
+#ifdef Q_OS_ANDROID
+#include <filesystem>
 #include <QStandardPaths>
-#include <sys/statfs.h>
-#elif defined(Q_OS_WIN)
+#elif defined(Q_OS_WINDOWS)
 #include <QStandardPaths>
 #endif
 
@@ -23,7 +27,6 @@ static QString confdir;
 static QString themedir;
 static QString pluginsdir;
 static QString translationsdir;
-static QString filtersdir;
 static QString cachedir;
 static QString remotecachedir;
 static QString themebasecachedir;
@@ -31,8 +34,8 @@ static QString thumbnaildir;
 
 void InitializeMythDirs(void)
 {
-    installprefix = qgetenv( "MYTHTVDIR"   );
-    confdir       = qgetenv( "MYTHCONFDIR" );
+    installprefix = qEnvironmentVariable( "MYTHTVDIR"   );
+    confdir       = qEnvironmentVariable( "MYTHCONFDIR" );
 
     if (!confdir.isEmpty())
     {
@@ -40,18 +43,17 @@ void InitializeMythDirs(void)
         confdir.replace("$HOME", QDir::homePath());
     }
 
-#ifdef _WIN32
+#ifdef Q_OS_WINDOWS
 
     if (installprefix.isEmpty())
-        installprefix = QDir( qApp->applicationDirPath() )
-                            .absolutePath();
+        installprefix = QDir{QCoreApplication::applicationDirPath()}.absolutePath();
 
     appbindir = installprefix + "/";
     libdir    = appbindir;
 
     // Turn into Canonical Path for consistent compares
 
-    QDir sDir(qgetenv("ProgramData") + "/mythtv/");
+    QDir sDir(qEnvironmentVariable("ProgramData") + "/mythtv/");
     if (sDir.exists())
         sharedir = sDir.canonicalPath() + "/";
 
@@ -61,7 +63,7 @@ void InitializeMythDirs(void)
     }
     if (confdir.isEmpty())
     {
-        confdir  = qgetenv( "LOCALAPPDATA" ) + "/mythtv";
+        confdir  = qEnvironmentVariable( "LOCALAPPDATA" ) + "/mythtv";
         confdir = QDir(confdir).canonicalPath() + "/";
     }
 
@@ -127,8 +129,7 @@ void InitializeMythDirs(void)
 
 #elif defined(Q_OS_ANDROID)
     if (installprefix.isEmpty())
-        installprefix = QDir( qApp->applicationDirPath() )
-                            .absolutePath();
+        installprefix = QDir{QCoreApplication::applicationDirPath()}.absolutePath();
     QString extdir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/Mythtv";
     if (!QDir(extdir).exists())
         QDir(extdir).mkdir(".");
@@ -139,40 +140,59 @@ void InitializeMythDirs(void)
 #if 0
     // TODO allow choice of base fs or the SD card for data
     QStringList appLocs = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation);
-    uint64_t maxFreeSpace = 0;
-    for(auto s : appLocs)
+    uintmax_t maxFreeSpace = 0;
+    constexpr uintmax_t k_unknown_size {static_cast<std::uintmax_t>(-1)};
+    for(const auto & s : appLocs)
     {
-        struct statfs statFs;
-        memset(&statFs, 0, sizeof(statFs));
-        int ret = statfs(s.toLocal8Bit().data(), &statFs);
-        if (ret == 0 && statFs.f_bavail >= maxFreeSpace)
+        std::filesystem::space_info space_info = std::filesystem::space(s.toStdString());
+        if (!(
+              (space_info.capacity == 0
+               || space_info.free == 0
+               || space_info.available == 0
+               ) ||
+              (space_info.capacity == k_unknown_size
+               || space_info.free == k_unknown_size
+               || space_info.available == k_unknown_size
+               )
+              ) && space_info.available >= maxFreeSpace
+            )
         {
-            maxFreeSpace = statFs.f_bavail;
+            maxFreeSpace = space_info.available;
             confdir = s;
         }
         LOG(VB_GENERAL, LOG_NOTICE, QString(" appdatadir      = %1 (%2, %3, %4)")
             .arg(s)
-            .arg(statFs.f_bavail)
-            .arg(statFs.f_bfree)
-            .arg(statFs.f_bsize));
+            .arg(space_info.available)
+            .arg(space_info.free)
+            .arg(space_info.capacity)
+            );
     }
     QStringList cacheLocs = QStandardPaths::standardLocations(QStandardPaths::CacheLocation);
     maxFreeSpace = 0;
-    for(auto s : cacheLocs)
+    for(const auto & s : cacheLocs)
     {
-        struct statfs statFs;
-        memset(&statFs, 0, sizeof(statFs));
-        int ret = statfs(s.toLocal8Bit().data(), &statFs);
-        if (ret == 0 && statFs.f_bavail >= maxFreeSpace)
+        std::filesystem::space_info space_info = std::filesystem::space(s.toStdString());
+        if (!(
+              (space_info.capacity == 0
+               || space_info.free == 0
+               || space_info.available == 0
+               ) ||
+              (space_info.capacity == k_unknown_size
+               || space_info.free == k_unknown_size
+               || space_info.available == k_unknown_size
+               )
+              ) && space_info.available >= maxFreeSpace
+            )
         {
-            maxFreeSpace = statFs.f_bavail;
+            maxFreeSpace = space_info.available;
             //confdir = s;
         }
         LOG(VB_GENERAL, LOG_NOTICE, QString(" cachedir      = %1 (%2, %3, %4)")
-                                            .arg(s)
-                                            .arg(statFs.f_bavail)
-                                            .arg(statFs.f_bfree)
-                                            .arg(statFs.f_bsize));
+            .arg(s)
+            .arg(space_info.available)
+            .arg(space_info.free)
+            .arg(space_info.capacity)
+            );
     }
 #endif
 
@@ -180,20 +200,29 @@ void InitializeMythDirs(void)
     sharedir  = "assets:/mythtv/";
     libdir    = installprefix + "/";
 
-
 #else
 
     if (installprefix.isEmpty())
-        installprefix = QString(RUNPREFIX);
+    {
+        QDir installdir {QCoreApplication::applicationDirPath()};
+        installdir.cdUp();
+        installprefix = installdir.absolutePath();
+    }
 
-    QDir prefixDir = qApp->applicationDirPath();
+    #ifdef Q_OS_DARWIN
+        // Check to see if the installprefix directory exists, if it does not,
+        // this is likely an APP bundle and so needs to be pointed
+        // internally to the APP Bundle.
+        if (! QDir(installprefix).exists())
+            installprefix = QString("../Resources");
+    #endif
 
     if (QDir(installprefix).isRelative())
     {
         // If the PREFIX is relative, evaluate it relative to our
         // executable directory. This can be fragile on Unix, so
         // use relative PREFIX values with care.
-
+        QDir prefixDir {QCoreApplication::applicationDirPath()};
         LOG(VB_GENERAL, LOG_DEBUG, QString("Relative PREFIX! (%1), appDir=%2")
             .arg(installprefix, prefixDir.canonicalPath()));
 
@@ -214,21 +243,19 @@ void InitializeMythDirs(void)
 
     if (confdir.isEmpty())
         confdir = QDir::homePath() + "/.mythtv";
-    cachedir = confdir + "/cache";
-    remotecachedir = cachedir + "/remotecache";
-    themebasecachedir = cachedir + "/themecache";
-    thumbnaildir = cachedir + "/thumbnails";
 
-#if defined(Q_OS_ANDROID)
+    cachedir = confdir + "/cache";
+    remotecachedir    = cachedir + "/remotecache";
+    themebasecachedir = cachedir + "/themecache";
+    thumbnaildir      = cachedir + "/thumbnails";
+
     themedir        = sharedir + "themes/";
+    translationsdir = sharedir + "i18n/";
+
+#ifdef Q_OS_ANDROID
     pluginsdir      = libdir;
-    translationsdir = sharedir + "i18n/";
-    filtersdir      = libdir;
 #else
-    themedir        = sharedir + "themes/";
     pluginsdir      = libdir   + "plugins/";
-    translationsdir = sharedir + "i18n/";
-    filtersdir      = libdir   + "filters/";
 #endif
 
     LOG(VB_GENERAL, LOG_NOTICE, "Using runtime prefix = " + installprefix);
@@ -241,7 +268,6 @@ void InitializeMythDirs(void)
     LOG(VB_GENERAL, LOG_DEBUG, "themedir          = "+ themedir         );
     LOG(VB_GENERAL, LOG_DEBUG, "pluginsdir        = "+ pluginsdir       );
     LOG(VB_GENERAL, LOG_DEBUG, "translationsdir   = "+ translationsdir  );
-    LOG(VB_GENERAL, LOG_DEBUG, "filtersdir        = "+ filtersdir       );
     LOG(VB_GENERAL, LOG_DEBUG, "confdir           = "+ confdir          );
     LOG(VB_GENERAL, LOG_DEBUG, "cachedir          = "+ cachedir         );
     LOG(VB_GENERAL, LOG_DEBUG, "remotecachedir    = "+ remotecachedir   );
@@ -257,7 +283,6 @@ QString GetConfDir(void) { return confdir; }
 QString GetThemesParentDir(void) { return themedir; }
 QString GetPluginsDir(void) { return pluginsdir; }
 QString GetTranslationsDir(void) { return translationsdir; }
-QString GetFiltersDir(void) { return filtersdir; }
 
 /**
  * Returns the base directory for all cached files.  On linux this
@@ -293,29 +318,16 @@ QString GetThemeBaseCacheDir(void) { return themebasecachedir; }
 #ifdef Q_OS_DARWIN
 static const QString kPluginLibPrefix = "lib";
 static const QString kPluginLibSuffix = ".dylib";
-static const QString kFilterLibPrefix = "lib";
-static const QString kFilterLibSuffix = ".dylib";
-#elif defined(_WIN32)
+#elif defined(Q_OS_WINDOWS)
 static const QString kPluginLibPrefix = "lib";
 static const QString kPluginLibSuffix = ".dll";
-static const QString kFilterLibPrefix = "lib";
-static const QString kFilterLibSuffix = ".dll";
 #elif defined(Q_OS_ANDROID)
 static const QString kPluginLibPrefix = "libmythplugin";
 static const QString kPluginLibSuffix = ".so";
-static const QString kFilterLibPrefix = "libmythfilter";
-static const QString kFilterLibSuffix = ".so";
 #else
 static const QString kPluginLibPrefix = "lib";
 static const QString kPluginLibSuffix = ".so";
-static const QString kFilterLibPrefix = "lib";
-static const QString kFilterLibSuffix = ".so";
 #endif
-
-QString GetFiltersNameFilter(void)
-{
-    return kFilterLibPrefix + '*' + kFilterLibSuffix;
-}
 
 QString GetPluginsNameFilter(void)
 {

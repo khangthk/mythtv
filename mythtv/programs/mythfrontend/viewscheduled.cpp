@@ -7,11 +7,10 @@
 // MythTV
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
-#include "libmythbase/programtypes.h"      // for RecStatus, etc
-#include "libmythbase/recordingtypes.h"    // for toString
-#include "libmythbase/remoteutil.h"
+#include "libmythtv/programtypes.h"
 #include "libmythtv/recordinginfo.h"
 #include "libmythtv/recordingrule.h"
+#include "libmythtv/recordingtypes.h"
 #include "libmythtv/tv_actions.h"          // for ACTION_CHANNELSEARCH
 #include "libmythtv/tv_play.h"
 #include "libmythui/mythdialogbox.h"
@@ -374,7 +373,7 @@ void ViewScheduled::ChangeGroup(MythUIButtonListItem* item)
     if (!item || m_recList.empty())
         return;
 
-    auto group = item->GetData().value<QDate>();
+    auto group = item->GetData().toDate();
 
     m_currentGroup = group;
 
@@ -390,7 +389,9 @@ void ViewScheduled::UpdateUIListItem(MythUIButtonListItem* item,
     const RecStatus::Type recstatus = pginfo->GetRecordingStatus();
     if (recstatus == RecStatus::Recording      ||
         recstatus == RecStatus::Tuning)
+    {
         state = "running";
+    }
     else if (recstatus == RecStatus::Conflict  ||
              recstatus == RecStatus::Offline   ||
              recstatus == RecStatus::TunerBusy ||
@@ -398,7 +399,9 @@ void ViewScheduled::UpdateUIListItem(MythUIButtonListItem* item,
              recstatus == RecStatus::Failing   ||
              recstatus == RecStatus::Aborted   ||
              recstatus == RecStatus::Missed)
+    {
         state = "error";
+    }
     else if (recstatus == RecStatus::WillRecord ||
              recstatus == RecStatus::Pending)
     {
@@ -662,7 +665,7 @@ void ViewScheduled::customEvent(QEvent *event)
     }
     else if (event->type() == DialogCompletionEvent::kEventType)
     {
-        auto *dce = (DialogCompletionEvent*)(event);
+        auto *dce = (DialogCompletionEvent*)event;
 
         QString resultid   = dce->GetId();
         QString resulttext = dce->GetResultText();
@@ -746,3 +749,5 @@ ProgramInfo *ViewScheduled::GetCurrentProgram(void) const
     MythUIButtonListItem *item = m_schedulesList->GetItemCurrent();
     return item ? item->GetData().value<ProgramInfo*>() : nullptr;
 }
+
+#include "moc_viewscheduled.cpp"

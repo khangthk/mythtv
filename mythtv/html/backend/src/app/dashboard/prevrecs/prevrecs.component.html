@@ -1,0 +1,165 @@
+<div style="min-width: 960px;">
+    <div style="white-space: 'pre-line';">
+        <p-toast position="center"></p-toast>
+    </div>
+    <p-confirmDialog [style]="{width: '50vw'}"></p-confirmDialog>
+    <h2>{{ 'dashboard.prevrecs.heading' | translate }}</h2>
+    <div class="block card w-full">
+        <div style="height: 90vh">
+
+            <p-menu #menu [popup]="true" [model]="menuToShow" class="font-bold">
+            </p-menu>
+
+            <!-- Menu, Refresh button and number of rows. -->
+            <div class="flex items-center p-1 font-bold">
+                <button pButton pRipple icon="pi pi-bars" class="p-button-text .p-button-success"
+                    (click)="showContextMenu(null, $event)" pTooltip="{{ 'common.selected_menu' | translate }}"
+                    tooltipPosition="top"></button> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                <div class="flex items-center  pr-4" >
+                    <p-datePicker [(ngModel)]="dateValue" [dateFormat]="'M yy'" (onClose)="onFilter()"
+                        [selectOtherMonths]="true" [showIcon]="true" [showOnFocus]="true" [showButtonBar]="true"
+                        [todayButtonStyleClass]="'hidden'" [readonlyInput]="true" [placeholder]="displayDate"
+                        view="month" [minDate]="minDate" [maxDate]="maxDate">
+                    </p-datePicker>
+                    <!-- [placeholder]="'dashboard.prevrecs.month_placeholder' | translate" view="month" -->
+                </div>
+
+                <span class="p-input-icon-right">
+                    @if (searchValue) {
+                    <i class="pi pi-times" (click)="resetSearch()"></i>
+                    }
+                    <input type="text" pInputText id="searchValue" [(ngModel)]="searchValue" name="searchValue"
+                        class="text-xl" placeholder="{{ 'dashboard.guide.title_search' | translate }}"
+                        pTooltip="{{ 'dashboard.recordings.regex' | translate }}" tooltipPosition="top"
+                        (keydown)="keydown($event)" />
+                </span>
+                &nbsp;&nbsp;
+                <span class="p-input-icon-right">
+                    @if (subSearchValue) {
+                    <i class="pi pi-times" (click)="resetSubSearch()"></i>
+                    }
+                    <input type="text" pInputText id="subSearchValue" [(ngModel)]="subSearchValue" name="subSearchValue"
+                        class="text-xl" placeholder="{{ 'dashboard.guide.subtitle_search' | translate }}"
+                        pTooltip="{{ 'dashboard.recordings.regex' | translate }}" tooltipPosition="top"
+                        (keydown)="keydown($event)" />
+                </span>
+
+                <button pButton pRipple icon="pi pi-search" class="p-button-text w-8" (click)="onFilter()"
+                    pTooltip="{{ 'dashboard.guide.title_search' | translate }}" tooltipPosition="top"></button>
+                <!-- Refresh button and number of rows. -->
+                <!-- The progressspinner no longer works -->
+                @if (refreshing) {
+                <div>
+                    <i class="pi pi-spin pi-cog px-3 text-primary"></i>
+                </div>
+                } @else {
+                <button pButton pRipple icon="pi pi-refresh" class="p-button-text .p-button-success" (click)="refresh()"
+                    pTooltip="{{ 'common.refresh' | translate }}"></button>
+                &nbsp;&nbsp;&nbsp;{{ programs.length }} {{ 'common.rows' | translate }}
+                }
+                <!-- <div *ngIf="refreshing else refreshBn"><p-progressSpinner
+      [style]="{width: '2rem', height: '2rem'}"></p-progressSpinner></div> -->
+
+            </div>
+            <!-- styleClass="p-datatable-gridlines p-datatable-sm  p-datatable-striped" -->
+            @if (showTable) {
+            <p-table #table [value]="programs" scrollHeight="flex" [scrollable]="true" [totalRecords]="totalRecords"
+                [virtualScroll]="true" [lazy]="true" (onLazyLoad)="loadLazy($event)" [rowHover]="true"
+                [sortField]="sortField" [sortOrder]="sortOrder" selectionMode="multiple" [metaKeySelection]="true"
+                [(selection)]="selection" (onRowSelect)="onSelectChange()" (onRowUnselect)="onSelectChange()"
+                (onSort)="onSort($event)" [showGridlines]="true" [stripedRows]="true" size="small"
+                [virtualScrollItemSize]="43" >
+                <ng-template pTemplate="header">
+                    <tr>
+                        <!-- Column Headings -->
+                        <th style="width: 7%" class="p-1" pSortableColumn="StartTime">
+                            {{ 'dashboard.upcoming.date' | translate }}<p-sortIcon field="StartTime"></p-sortIcon>
+                        </th>
+                        <th style="width: 7%" class="justify-end p-1">
+                            {{ 'dashboard.upcoming.time' | translate }} </th>
+                        <th style="width: 7%" class="justify-end pl-1 pr-4 pt-1 pb-1" pSortableColumn="Duration">
+                            {{ 'dashboard.upcoming.length' | translate }}<p-sortIcon field="Duration"></p-sortIcon></th>
+                        <th style="width: 15%" class="p-1" pSortableColumn="Title">
+                            {{ 'dashboard.recordings.title' | translate }}<p-sortIcon field="Title"></p-sortIcon>
+                        </th>
+                        <th style="width: 17%" class="p-1" pSortableColumn="Subtitle">
+                            {{ 'dashboard.recordings.subtitle' | translate }}<p-sortIcon field="Subtitle"></p-sortIcon>
+                        </th>
+                        <th style="width: 6%" class="p-1" pSortableColumn="season,episode">
+                            {{ 'dashboard.recordings.seas_ep' | translate }}<p-sortIcon
+                                field="season,episode"></p-sortIcon></th>
+                        <th style="width: 9%" class="p-1" pSortableColumn="ChanNum">
+                            {{ 'dashboard.recordings.channel' | translate }}<p-sortIcon field="ChanNum"></p-sortIcon>
+                        </th>
+                        <th style="width: 12%" class="p-1" pSortableColumn="recstatus">
+                            {{ 'dashboard.upcoming.status' | translate }}<p-sortIcon field="recstatus"></p-sortIcon>
+                        </th>
+                        <th style="width: 5%; white-space: nowrap;" class="p-1">
+                            <button pButton pRipple icon="pi pi-ellipsis-v" class="p-button-text p-button-primary"
+                                [disabled]="true"></button>
+                        </th>
+                    </tr>
+                </ng-template>
+                <ng-template pTemplate="body" let-program let-rowIndex="rowIndex">
+                    <tr #row [pSelectableRow]="program" [pSelectableRowIndex]="rowIndex"
+                        (contextmenu)="onContextMenu(program,$event)">
+                        <td class="p-1 overflow-hidden">
+                            <div class="mycell">
+                                <div class="mytext" [innerHTML]="formatStartDate(program, rowIndex)"></div>
+                            </div>
+                        </td>
+                        <td class="justify-end p-1 overflow-hidden">
+                            <div class="mycell">
+                                <div class="mytext">{{formatStartTime(program)}} </div>
+                            </div>
+                        </td>
+                        <td class="justify-end pl-1 pr-4 pt-1 pb-1 overflow-hidden">
+                            <div class="mycell">
+                                <div class="mytext">{{ getDuration(program) | number:'1.0-0' }} min</div>
+                            </div>
+                        </td>
+                        <td class="p-1 overflow-hidden">
+                            <div class="mycell">
+                                <div class="mytext">{{program.Title}}</div>
+                            </div>
+                        </td>
+                        <td class="p-1 overflow-hidden" pTooltip="{{program.Description}}" tooltipPosition="top">
+                            <div class="mycell">
+                                <div class="mytext">{{program.SubTitle.slice(0,50)}}</div>
+                            </div>
+                        </td>
+                        <td class="p-1">
+                            @if (program.Season>0 || program.Episode>0) {
+                            <div>
+                                {{program.Season}}x{{program.Episode}}
+                            </div>
+                            }
+                        </td>
+                        <td class="p-1">
+                            <div class="mycell">
+                                <div class="mytext">{{program.Channel.ChanNum}} {{program.Channel.CallSign}}</div>
+                            </div>
+                        </td>
+                        <td class="p-1">
+                            <div class="mycell">
+                                @if (program.Recording) {
+                                <div class="mytext" [ngClass]="['WillRecord','Recording','Recorded', 'PreviousRecording'].indexOf(program.Recording.StatusName)>-1 ?
+                                'text-green-500' : 'text-pink-500'">
+                                    {{program.Recording.RecTypeStatus}}
+                                </div>
+                                }
+                            </div>
+                        </td>
+                        <td class="pt-1 pb-0" style="background: var(--surface-card); white-space: nowrap;">
+                            <button pButton pRipple icon="pi pi-ellipsis-v" class="p-button-text p-button-primary"
+                                (click)="showContextMenu(program,$event)"></button>
+                        </td>
+                    </tr>
+                </ng-template>
+            </p-table>
+            }
+            <app-schedule [inter]="inter"></app-schedule>
+        </div>
+
+    </div>
+</div>

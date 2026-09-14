@@ -1,10 +1,11 @@
 // MythTV
+#include "libmythbase/mythlogging.h"
 #include "mythrenderopengl.h"
 #include "mythegl.h"
 
 #define LOC QString("EGL: ")
 
-#ifdef USING_EGL
+#if CONFIG_EGL
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #endif
@@ -21,8 +22,10 @@
 #define EGL_PLATFORM_X11_EXT     0x31D5
 #endif
 
-MythEGL::MythEGL(MythRenderOpenGL* Context)
+MythEGL::MythEGL([[maybe_unused]] MythRenderOpenGL* Context)
+#if CONFIG_EGL
   : m_context(Context)
+#endif
 {
 }
 
@@ -31,12 +34,13 @@ bool MythEGL::IsEGL()
     return InitEGL();
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 bool MythEGL::InitEGL(void)
 {
     // N.B. Strictly speaking this reports both whether EGL is in use and whether
     // EGL_KHR_image functionality is present - which is currently the only thing
     // we are interested in.
-#ifdef USING_EGL
+#if CONFIG_EGL
     if (m_eglImageTargetTexture2DOES && m_eglCreateImageKHR && m_eglDestroyImageKHR && m_eglDisplay)
         return true;
 
@@ -60,9 +64,10 @@ bool MythEGL::InitEGL(void)
     return false;
 }
 
-bool MythEGL::HasEGLExtension([[maybe_unused]] QString Extension)
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+bool MythEGL::HasEGLExtension([[maybe_unused]] const QString& Extension)
 {
-#ifdef USING_EGL
+#if CONFIG_EGL
     OpenGLLocker locker(m_context);
     if (m_eglDisplay)
     {
@@ -80,7 +85,7 @@ void* MythEGL::GetEGLDisplay(void)
 
 QString MythEGL::GetEGLVendor(void)
 {
-#ifdef USING_EGL
+#if CONFIG_EGL
     auto CheckDisplay = [](EGLDisplay EglDisplay)
     {
         if (EglDisplay == EGL_NO_DISPLAY)
@@ -126,13 +131,13 @@ QString MythEGL::GetEGLVendor(void)
 
     return CheckDisplay(eglGetDisplay(EGL_DEFAULT_DISPLAY));
 #else
-    return QString();
+    return {};
 #endif
 }
 
 qint32 MythEGL::GetEGLError(void)
 {
-#ifdef USING_EGL
+#if CONFIG_EGL
     return static_cast<qint32>(eglGetError());
 #else
     return 0; // EGL_FALSE

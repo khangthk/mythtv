@@ -15,20 +15,7 @@
 
 // FFmpeg
 extern "C" {
-#define Cursor XCursor // Prevent conflicts with Qt6.
-#define pointer Xpointer // Prevent conflicts with Qt6.
-#if defined(_X11_XLIB_H_) && !defined(Bool)
-#define Bool int
-#endif
 #include "libavutil/hwcontext_vdpau.h"
-#include "vdpau/vdpau_x11.h"
-#undef None            // X11/X.h defines this. Causes compile failure in Qt6.
-#undef Cursor
-#undef pointer
-#undef Bool            // Interferes with cmake moc file compilation
-#undef True            // Interferes with cmake moc file compilation
-#undef False           // Interferes with cmake moc file compilation
-#undef Always          // X11/X.h defines this. Causes compile failure in Qt6.
 #include "libavcodec/avcodec.h"
 }
 
@@ -100,8 +87,6 @@ class MythVDPAUHelper : public QObject
     bool   InitProcs(void);
 
   private:
-    bool                              m_valid                            { false   };
-    bool                              m_createdDevice                    { false   };
     VdpDevice                         m_device                           { 0       };
     MythXDisplay                     *m_display                          { nullptr };
 
@@ -123,6 +108,9 @@ class MythVDPAUHelper : public QObject
     VdpOutputSurfaceDestroy          *m_vdpOutputSurfaceDestroy          { nullptr };
     VdpVideoSurfaceGetParameters     *m_vdpVideoSurfaceGetParameters     { nullptr };
     VdpPreemptionCallbackRegister    *m_vdpPreemptionCallbackRegister    { nullptr };
+
+    bool                              m_createdDevice                    { false   };
+    bool                              m_valid                            { false   };
 };
 
 #endif // MYTHVDPAUHELPER_H

@@ -1,4 +1,8 @@
 #include "HLSPlaylistWorker.h"
+
+#include "libmythbase/mythchrono.h"
+#include "libmythbase/mythlogging.h"
+
 #include "HLSReader.h"
 
 const int PLAYLIST_FAILURE = 20;  // number of consecutive failures after which
@@ -38,7 +42,7 @@ void HLSPlaylistWorker::run(void)
     RunProlog();
 
     auto *downloader = new MythSingleDownload;
-
+    m_wokenup = true;           // Otherwise always false and then we start with 1 second delay
     while (!m_cancel)
     {
         m_lock.lock();
@@ -129,9 +133,15 @@ void HLSPlaylistWorker::run(void)
         // When should the playlist be reloaded
         wakeup = m_parent->TargetDuration() > 0s ?
                  m_parent->TargetDuration() : 10s;
-        wakeup *= delay;
+
+        wakeup = std::chrono::milliseconds(static_cast<int>(delay * wakeup.count()));
+
         if (wakeup > 60s)
             wakeup = 60s;
+
+        LOG(VB_RECORD, LOG_DEBUG, LOC +
+            QString(" TargetDuration:%1s").arg(m_parent->TargetDuration().count()) +
+            QString(" wakeup:%1ms delay:%2").arg(wakeup.count()).arg(delay));
     }
 
     if (downloader)

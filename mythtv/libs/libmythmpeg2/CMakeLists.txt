@@ -4,6 +4,10 @@
 # See the file LICENSE_FSF for licensing information.
 #
 
+# Remove some of the compilation flags that were added to MythTV by
+# the -Wextra flag.
+string(APPEND CMAKE_C_FLAGS " -Wno-implicit-fallthrough")
+
 #
 # Declare the library
 #
@@ -42,8 +46,9 @@ set_property(TARGET mythmpeg2 PROPERTY C_VISIBILITY_PRESET)
 
 target_include_directories(
   mythmpeg2
-  PRIVATE ${CMAKE_CURRENT_BINARY_DIR} # For config.h
+  PUBLIC ${CMAKE_CURRENT_BINARY_DIR} # For config.h
   INTERFACE $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/mythtv>)
+target_compile_definitions(mythmpeg2 PUBLIC USING_CMAKE)
 
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
   target_link_libraries(mythmpeg2 PUBLIC Threads::Threads)

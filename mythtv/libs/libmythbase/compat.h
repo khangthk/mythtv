@@ -5,19 +5,9 @@
 #ifndef COMPAT_H
 #define COMPAT_H
 
-#ifdef __cplusplus
-#    include <QtGlobal>       // for Q_OS_XXX
-#endif
-
-#include <sys/param.h>  // Defines BSD on FreeBSD, Mac OS X
-
-#include "mythconfig.h"
-
-// Libdvdnav now uses off64_t lseek64(), which BSD/Darwin doesn't have.
-// Luckily, its lseek() is already 64bit compatible
-#ifdef BSD
-    typedef off_t off64_t; //NOLINT(modernize-use-using) included from dvdnav C code
-#   define lseek64(f,o,w) lseek(f,o,w)
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
 #endif
 
 #ifdef Q_OS_ANDROID
@@ -29,19 +19,13 @@
 #   endif
 #endif
 
-#if defined(USING_MINGW)
-#include <time.h>
-#endif
-
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
 #    include <sys/time.h>     // Mac OS X needs this before sys/resource
 #    include <sys/resource.h> // for setpriority
 #    include <sys/socket.h>
 #    include <sys/wait.h>     // For WIFEXITED on Mac OS X
-#else // _WIN32
-#    ifndef _MSC_VER
+#else // Q_OS_WINDOWS
 #        define close wsock_close
-#    endif
 
 #    ifndef NOMINMAX
 #        define NOMINMAX
@@ -61,12 +45,8 @@
 #    undef SetJob
 #    undef SendMessage
 
-#    ifndef _MSC_VER
 #        include <winsock2.h>
 #        include <ws2tcpip.h>
-#    else
-#        include <io.h>
-#    endif
 
 #    undef close
 
@@ -77,46 +57,7 @@
 //used in videodevice only - that code is not windows-compatible anyway
 #    define minor(X) 0
 
-    #if defined(__cplusplus)
             using uint = unsigned int;
-    #else
-            typedef unsigned int uint;
-   #endif
-
-
-#   if defined(__cplusplus)
-
-#   define setenv(x, y, z) ::SetEnvironmentVariableA(x, y)
-#   define unsetenv(x) 0
-
-
-    struct statfs {
-    //   long    f_type;     /* type of filesystem */
-       long    f_bsize;    /* optimal transfer block size */
-       long    f_blocks;   /* total data blocks in file system */
-    //   long    f_bfree;    /* free blocks in fs */
-       long    f_bavail;   /* free blocks avail to non-superuser */
-    //   long    f_files;    /* total file nodes in file system */
-    //   long    f_ffree;    /* free file nodes in fs */
-    //   long    f_fsid;     /* file system id */
-    //   long    f_namelen;  /* maximum length of filenames */
-    //   long    f_spare[6]; /* spare for later */
-    };
-    inline int statfs(const char* path, struct statfs* buffer)
-    {
-        DWORD spc = 0, bps = 0, fc = 0, c = 0;
-
-        if (buffer && GetDiskFreeSpaceA(path, &spc, &bps, &fc, &c))
-        {
-            buffer->f_bsize = bps;
-            buffer->f_blocks = spc * c;
-            buffer->f_bavail = spc * fc;
-            return 0;
-        }
-
-        return -1;
-    }
-#   endif
 
 #define lstat stat
 #define nice(x) ((int)!::SetPriorityClass(\
@@ -155,7 +96,6 @@
 #    define dlclose(x) !FreeLibrary((HMODULE)(x))
 #    define dlsym(x, y) GetProcAddress((HMODULE)(x), (y))
 
-#    ifdef __cplusplus
 #       include <cstdio>
         inline const char *dlerror(void)
         {
@@ -174,10 +114,6 @@
 
             return errStr;
         }
-#    else  // __cplusplus
-#        include <stdio.h>
-#        define dlerror()  "dlerror() is unimplemented."
-#   endif // __cplusplus
 
     // getuid/geteuid/setuid - not implemented
 #   define getuid() 0
@@ -197,145 +133,7 @@
 #    define WEXITSTATUS(w) (((w) >> 8) & 0xff)
 #    define WTERMSIG(w)    ((w) & 0x7f)
 
-
-#   ifdef LZO_COMPILE_TIME_ASSERT_HEADER
-#   undef LZO_COMPILE_TIME_ASSERT_HEADER
-#   endif
-
-#   define LZO_COMPILE_TIME_ASSERT_HEADER( a )
-
-#   ifdef LZO_COMPILE_TIME_ASSERT
-#   undef LZO_COMPILE_TIME_ASSERT
-#   endif
-
-#   define LZO_COMPILE_TIME_ASSERT( a )
-
-#endif // _WIN32
-
-
-#ifdef _MSC_VER
-    #include <cstdlib>       // for rand()
-    #include <ctime>
-    #include <sys/time.h>
-
-    // Turn off the visual studio warnings (identifier was truncated)
-    #pragma warning(disable:4786)
-
-    #ifdef restrict
-    #undef restrict
-    #endif
-
-    #include <cinttypes>
-    #include <direct.h>
-    #include <process.h>
-
-    #define strtoll             _strtoi64
-    #define strncasecmp         _strnicmp
-    #define snprintf            _snprintf
-
-    #ifdef  _WIN64
-        using ssize_t = __int64;
-    #else
-        using ssize_t = int;
-    #endif
-
-    // Check for execute, only checking existance in MSVC
-    #define X_OK    0
-
-    #if (_MSC_VER < 1800)
-        #define rint( x )               floor(x + 0.5)
-        #define round( x )              floor(x + 0.5)
-
-        #if ( _MSC_VER < 1700)
-            #define signbit( x )        ( x < 0 )
-        #endif
-
-        #undef M_PI
-        #define M_PI 3.14159265358979323846
-    #endif
-
-    #define getpid()                _getpid()
-    #define ftruncate( fd, fsize )  _chsize( fd, fsize )
-
-    #ifndef S_ISCHR
-    #   ifdef S_IFCHR
-    #       define S_ISCHR(m) (((m) & S_IFMT) == S_IFCHR)
-    #   else
-    #       define S_ISCHR(m) 0
-    #   endif
-    #endif /* !S_ISCHR */
-
-    #ifndef S_ISBLK
-    #   define S_ISBLK(m) 0
-    #endif
-
-    #ifndef S_ISREG
-    #   define S_ISREG(m) 1
-    #endif
-
-    #ifndef S_ISDIR
-    #  ifdef S_IFDIR
-    #       define S_ISDIR(m) (((m) & S_IFDIR) == S_IFDIR )
-    #   else
-    #       define S_ISDIR(m) 0
-    #   endif
-    #endif
-
-    using mode_t = uint32_t;
-
-    #if !defined(__cplusplus) && !defined( inline )
-    #   define inline __inline
-    #endif
-
-    #if !defined(__func__) // C99 & C++11
-    #   define __func__ __FUNCTION__
-    #endif
-
-#   define SIGTRAP    SIGBREAK
-#   define STDERR_FILENO (int)GetStdHandle( STD_ERROR_HANDLE )
-
-
-#   if !defined(gmtime_r)
-// FFmpeg libs already have a workaround, use it if the headers are included,
-// use this otherwise.
-static __inline struct tm *gmtime_r(const time_t *timep, struct tm *result)
-{
-    // this is safe on windows, where gmtime uses a thread local variable.
-    // using _gmtime_s() would be better, but needs to be tested on windows.
-    struct tm *tmp = gmtime(timep);
-    if (tmp)
-    {
-        *result = *tmp;
-        return result;
-    }
-    return nullptr;
-}
-#   endif
-
-#   if !defined(localtime_r)
-// FFmpeg libs already have a workaround, use it if the headers are included,
-// use this otherwise.
-static __inline struct tm *localtime_r(const time_t *timep, struct tm *result)
-{
-    // this is safe, windows uses a thread local variable for localtime().
-    if (timep && result)
-    {
-        struct tm *win_tmp = localtime(timep);
-        memcpy(result, win_tmp, sizeof(struct tm));
-        return result;
-    }
-    return nullptr;
-}
-#   endif
-
-#include <sys/stat.h>   // S_IREAD/WRITE on MinGW
-#  define S_IRUSR _S_IREAD
-#  ifndef lseek64
-#    define lseek64( f, o, w ) _lseeki64( f, o, w )
-#  endif
-
-#endif // _MSC_VER
-
+#endif // Q_OS_WINDOWS
 
 #ifndef O_NONBLOCK
 #   define O_NONBLOCK    04000 /* NOLINT(cppcoreguidelines-macro-usage) */

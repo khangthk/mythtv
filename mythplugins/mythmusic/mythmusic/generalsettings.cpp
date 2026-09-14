@@ -4,6 +4,7 @@
 
 // MythTV
 #include <libmythbase/mythcorecontext.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythui/mythdialogbox.h>
 
 // MythMusic
@@ -169,3 +170,5 @@ void GeneralSettings::slotSave(void)
 
     Close();
 }
+
+#include "moc_generalsettings.cpp"

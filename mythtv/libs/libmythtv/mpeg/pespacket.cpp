@@ -1,7 +1,9 @@
 // -*- Mode: c++ -*-
 // Copyright (c) 2003-2004, Daniel Thor Kristjansson
 #include "libmythbase/mythlogging.h"
+#ifndef __cpp_size_t_suffix
 #include "libmythbase/sizetliteral.h"
+#endif
 #include "pespacket.h"
 #include "mpegtables.h"
 
@@ -87,10 +89,20 @@ bool PESPacket::AddTSPacket(const TSPacket* packet, int cardid, bool &broken)
     }
     else if (int(m_ccLast) == cc)
     {
-        // do nothing with repeats
+        // Do nothing with repeats
+        if (VERBOSE_LEVEL_CHECK(VB_RECORD, LOG_DEBUG))
+        {
+            LOG(VB_RECORD, LOG_ERR,
+                QString("AddTSPacket[%1]: Repeat packet!! ").arg(cardid) +
+                QString("PID: 0x%1, continuity counter: %2 ").arg(packet->PID(),0,16).arg(cc) +
+                QString("(expected %1)").arg(ccExp));
+        }
     }
     else
     {
+        // Even if the packet is out of sync it is still the last packet received
+        m_ccLast = cc;
+
         LOG(VB_RECORD, LOG_ERR,
             QString("AddTSPacket[%1]: Out of sync!!! Need to wait for next payloadStart ").arg(cardid) +
             QString("PID: 0x%1, continuity counter: %2 ").arg(packet->PID(),0,16).arg(cc) +
@@ -226,7 +238,7 @@ float SequenceHeader::aspect(bool mpeg1) const
         return 1.0F; // avoid segfaults on broken seq data
 
     uint  index  = aspectNum();
-    float aspect = (mpeg1) ? kMpeg1Aspect[index] : kMpeg2Aspect[index];
+    float aspect = mpeg1 ? kMpeg1Aspect[index] : kMpeg2Aspect[index];
 
     float retval = 0.0F;
     retval = (aspect >  0.0F) ? width() / (aspect * height()) : retval;
@@ -241,25 +253,53 @@ float SequenceHeader::aspect(bool mpeg1) const
 // Memory allocator to avoid malloc global lock and waste less memory. //
 /////////////////////////////////////////////////////////////////////////
 
-#ifndef USING_VALGRIND
-static std::vector<unsigned char*> mem188;
+#if !CONFIG_VALGRIND
+static constexpr size_t BLOCKS188 { 512 };
+#ifdef __cpp_size_t_suffix
+using block188 = std::array<uint8_t, 188UZ>;
+#else
+using block188 = std::array<uint8_t, 188_UZ>;
+#endif
+class groupof188s {
+  public:
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init,modernize-use-equals-default)
+    groupof188s() {}; // // constructor doesn't initialize anything
+
+    std::array<block188, BLOCKS188> blocks;
+};
+
+static constexpr size_t BLOCKS4096 { 128 };
+#ifdef __cpp_size_t_suffix
+using block4096 = std::array<uint8_t, 4096UZ>;
+#else
+using block4096 = std::array<uint8_t, 4096_UZ>;
+#endif
+class groupof4096s {
+  public:
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init,modernize-use-equals-default)
+    groupof4096s() {}; // constructor doesn't initialize anything
+
+    std::array<block4096, BLOCKS4096> blocks;
+};
+
+
+static std::vector<groupof188s*> mem188;
 static std::vector<unsigned char*> free188;
 static std::map<unsigned char*, bool> alloc188;
 
-static std::vector<unsigned char*> mem4096;
+static std::vector<groupof4096s*> mem4096;
 static std::vector<unsigned char*> free4096;
 static std::map<unsigned char*, bool> alloc4096;
 
-static constexpr size_t BLOCKS188 { 512 };
+
 static unsigned char* get_188_block()
 {
     if (free188.empty())
     {
-        mem188.push_back((unsigned char*) malloc(188_UZ * BLOCKS188));
+        mem188.push_back(new groupof188s);
         free188.reserve(BLOCKS188);
-        unsigned char* block_start = mem188.back();
-        for (size_t i = 0; i < BLOCKS188; ++i)
-            free188.push_back((i * 188_UZ) + block_start);
+        for (block188 &b : mem188.back()->blocks)
+            free188.push_back(b.data());
     }
 
     unsigned char *ptr = free188.back();
@@ -270,7 +310,7 @@ static unsigned char* get_188_block()
 
 static bool is_188_block(unsigned char* ptr)
 {
-    return alloc188.find(ptr) != alloc188.end();
+    return alloc188.contains(ptr);
 }
 
 static void return_188_block(unsigned char* ptr)
@@ -280,9 +320,8 @@ static void return_188_block(unsigned char* ptr)
     // free the allocator only if more than 1 block was used
     if (alloc188.empty() && mem188.size() > 1)
     {
-        std::vector<unsigned char*>::iterator it;
-        for (it = mem188.begin(); it != mem188.end(); ++it)
-            free(*it);
+        for (auto *b : mem188)
+            delete b;
         mem188.clear();
         free188.clear();
 #if 0
@@ -291,16 +330,14 @@ static void return_188_block(unsigned char* ptr)
     }
 }
 
-static constexpr size_t BLOCKS4096 { 128 };
 static unsigned char* get_4096_block()
 {
     if (free4096.empty())
     {
-        mem4096.push_back((unsigned char*) malloc(4096_UZ * BLOCKS4096));
+        mem4096.push_back(new groupof4096s);
         free4096.reserve(BLOCKS4096);
-        unsigned char* block_start = mem4096.back();
-        for (size_t i = 0; i < BLOCKS4096; ++i)
-            free4096.push_back((i * 4096_UZ) + block_start);
+        for (block4096 &b : mem4096.back()->blocks)
+            free4096.push_back(b.data());
     }
 
     unsigned char *ptr = free4096.back();
@@ -311,7 +348,7 @@ static unsigned char* get_4096_block()
 
 static bool is_4096_block(unsigned char* ptr)
 {
-    return alloc4096.find(ptr) != alloc4096.end();
+    return alloc4096.contains(ptr);
 }
 
 static void return_4096_block(unsigned char* ptr)
@@ -340,9 +377,8 @@ static void return_4096_block(unsigned char* ptr)
     // free the allocator only if more than 1 block was used
     if (alloc4096.empty() && mem4096.size() > 1)
     {
-        std::vector<unsigned char*>::iterator it;
-        for (it = mem4096.begin(); it != mem4096.end(); ++it)
-            free(*it);
+        for (auto *b : mem4096)
+            delete b;
         mem4096.clear();
         free4096.clear();
 #if 0
@@ -357,24 +393,26 @@ static QMutex pes_alloc_mutex;
 unsigned char *pes_alloc(uint size)
 {
     QMutexLocker locker(&pes_alloc_mutex);
-#ifndef USING_VALGRIND
+#if !CONFIG_VALGRIND
     if (size <= 188)
         return get_188_block();
     if (size <= 4096)
         return get_4096_block();
-#endif // USING_VALGRIND
+#endif // CONFIG_VALGRIND
+    // NOLINTNEXTLINE(cppcoreguidelines-no-malloc)
     return (unsigned char*) malloc(size);
 }
 
 void pes_free(unsigned char *ptr)
 {
     QMutexLocker locker(&pes_alloc_mutex);
-#ifndef USING_VALGRIND
+#if !CONFIG_VALGRIND
     if (is_188_block(ptr))
         return_188_block(ptr);
     else if (is_4096_block(ptr))
         return_4096_block(ptr);
     else
-#endif // USING_VALGRIND
+#endif // CONFIG_VALGRIND
+        // NOLINTNEXTLINE(cppcoreguidelines-no-malloc)
         free(ptr);
 }

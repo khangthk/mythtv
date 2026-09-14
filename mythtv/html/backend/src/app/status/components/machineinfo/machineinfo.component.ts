@@ -1,26 +1,30 @@
 import { Component, OnInit, Input } from '@angular/core';
-import { MachineInfo } from 'src/app/services/interfaces/status.interface';
-import { StorageGroup } from "src/app/services/interfaces/storagegroup.interface";
-import { UtilityService } from 'src/app/services/utility.service';
+import { BackendStatus, MachineInfo } from '../../../services/interfaces/status.interface';
+import { StorageGroup } from "../../../services/interfaces/storagegroup.interface";
+import { UtilityService } from '../../../services/utility.service';
+import { TranslatePipe } from '@ngx-translate/core';
+import { NgTemplateOutlet } from '@angular/common';
 
 @Component({
-  selector: 'app-status-machineinfo',
-  templateUrl: './machineinfo.component.html',
-  styleUrls: ['./machineinfo.component.css', '../../status.component.css']
+    selector: 'app-status-machineinfo',
+    templateUrl: './machineinfo.component.html',
+    styleUrls: ['./machineinfo.component.css', '../../status.component.css'],
+    imports: [NgTemplateOutlet, TranslatePipe]
 })
 export class MachineinfoComponent implements OnInit {
-  @Input() machineinfo?: MachineInfo;
+    @Input() machineinfo?: MachineInfo;
+    @Input() status?: BackendStatus;
 
-  constructor(public utility: UtilityService) { }
+    constructor(public utility: UtilityService) { }
 
-  ngOnInit(): void {
-  }
+    ngOnInit(): void {
+    }
 
-  getStorageGroupTotal(storagegroups : StorageGroup[]) : StorageGroup {
-    return storagegroups.filter(sg => sg['Id'] == 'total')[0];
-  }
+    getStorageGroupTotal(storagegroups: StorageGroup[]): StorageGroup {
+        return storagegroups.filter(sg => sg['Id'] == 'total')[0];
+    }
 
-  getStorageGroupDetails(storagegroups : StorageGroup[]) : StorageGroup[] {
-    return storagegroups.filter(sg => sg['Id'] != 'total');
-  }
+    getStorageGroupDetails(storagegroups: StorageGroup[]): StorageGroup[] {
+        return storagegroups.filter(sg => sg['Id'] != 'total');
+    }
 }

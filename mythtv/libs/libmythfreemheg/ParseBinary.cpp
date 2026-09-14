@@ -59,21 +59,15 @@ void MHParseBinary::ParseString(int endStr, MHOctetString &str)
     }
 
     int nLength = endStr - m_p;
-    auto *stringValue = (unsigned char *)malloc(nLength + 1);
-    if (stringValue == nullptr)
-    {
-        MHERROR("Out of memory");
-    }
-
-    unsigned char *p = stringValue;
+    std::vector<uint8_t> stringValue;
+    stringValue.reserve(nLength + 1);
 
     while (m_p < endStr)
     {
-        *p++ = GetNextChar();
+        stringValue.push_back(GetNextChar());
     }
 
-    str.Copy(MHOctetString((const char *)stringValue, nLength));
-    free(stringValue);
+    str.Copy(MHOctetString((const char *)stringValue.data(), nLength));
 }
 
 // Parse an integer argument.  Also used for bool and enum.
@@ -140,14 +134,13 @@ MHParseNode *MHParseBinary::DoParse()
 
     if (tagNumber == 0x1f)   // Except that if it is 0x1F then the tag is encoded in the following bytes.
     {
-        tagNumber = 0;
-
-        do
+        ch = GetNextChar();
+        tagNumber = ch & 0x7f;
+        while ((ch & 0x80) != 0)   // Top bit set means there's more to come.
         {
             ch = GetNextChar();
             tagNumber = (tagNumber << 7) | (ch & 0x7f);
         }
-        while ((ch & 0x80) != 0);   // Top bit set means there's more to come.
     }
 
     // Next byte is the length.  If it is less than 128 it is the actual length, otherwise it

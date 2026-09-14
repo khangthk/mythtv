@@ -8,9 +8,10 @@
 #include "libmythbase/compat.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
-#include "libmythbase/programinfo.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythbase/referencecounter.h"
 #include "libmythtv/inputinfo.h"
+#include "libmythtv/programinfo.h"
 
 // MythBackend
 #include "mainserver.h"
@@ -20,14 +21,13 @@
 #define LOC_ERR QString("PlaybackSock, Error: ")
 
 PlaybackSock::PlaybackSock(
-    MainServer *parent, MythSocket *lsock,
+    MythSocket *lsock,
     QString lhostname, PlaybackSockEventsMode eventsMode) :
     ReferenceCounter("PlaybackSock"),
     m_sock(lsock),
     m_hostname(std::move(lhostname)),
     m_ip(""),
-    m_eventsMode(eventsMode),
-    m_parent(parent)
+    m_eventsMode(eventsMode)
 {
     QString localhostname = gCoreContext->GetHostName();
     m_local = (m_hostname == localhostname);
@@ -138,16 +138,17 @@ bool PlaybackSock::GoToSleep(void)
 }
 
 /**
- *  \brief Appends host's dir's total and used space in kilobytes.
+ *  \brief Gets the total and used space in kilobytes for the host's directories.
  */
-void PlaybackSock::GetDiskSpace(QStringList &o_strlist)
+FileSystemInfoList PlaybackSock::GetDiskSpace()
 {
     QStringList strlist(QString("QUERY_FREE_SPACE"));
 
-    if (SendReceiveStringList(strlist, 8))
+    if (SendReceiveStringList(strlist, FileSystemInfo::kLines))
     {
-        o_strlist += strlist;
+        return FileSystemInfoManager::FromStringList(strlist);
     }
+    return {};
 }
 
 int PlaybackSock::CheckRecordingActive(const ProgramInfo *pginfo)

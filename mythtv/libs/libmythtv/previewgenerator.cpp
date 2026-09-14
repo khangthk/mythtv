@@ -1,5 +1,6 @@
 // C headers
 #include <cmath>
+#include <thread>
 #include <utility>
 
 // POSIX headers
@@ -20,15 +21,13 @@
 
 // MythTV headers
 #include "libmythbase/exitcodes.h"
-#include "libmythbase/mythconfig.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythdirs.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythrandom.h"
 #include "libmythbase/mythsocket.h"
 #include "libmythbase/mythsystemlegacy.h"
-#include "libmythbase/remotefile.h"
-#include "libmythbase/remoteutil.h"
 #include "libmythbase/storagegroup.h"
 
 #include "io/mythmediabuffer.h"
@@ -192,7 +191,7 @@ bool PreviewGenerator::RunReal(void)
                 dt = fi.lastModified();
         }
 
-        QString message = (ok) ? "PREVIEW_SUCCESS" : "PREVIEW_FAILED";
+        QString message = ok ? "PREVIEW_SUCCESS" : "PREVIEW_FAILED";
         QStringList list;
         list.push_back(QString::number(m_programInfo.GetRecordingID()));
         list.push_back(output_fn);
@@ -330,7 +329,7 @@ bool PreviewGenerator::Run(void)
             dt = fi.lastModified();
     }
 
-    QString message = (ok) ? "PREVIEW_SUCCESS" : "PREVIEW_FAILED";
+    QString message = ok ? "PREVIEW_SUCCESS" : "PREVIEW_FAILED";
     if (m_listener)
     {
         QStringList list;
@@ -539,7 +538,7 @@ bool PreviewGenerator::SaveOutFile(const QByteArray &data, const QDateTime &dt)
         if (written < 0)
         {
             failure_cnt++;
-            usleep(50ms);
+            std::this_thread::sleep_for(50ms);
             continue;
         }
 
@@ -573,8 +572,7 @@ bool PreviewGenerator::SavePreview(const QString &filename,
     if (!data || !width || !height)
         return false;
 
-    const QImage img((unsigned char*) data,
-                     width, height, QImage::Format_RGB32);
+    const QImage img(data, width, height, QImage::Format_RGB32);
 
     float ppw = std::max(desired_width, 0);
     float pph = std::max(desired_height, 0);
@@ -643,7 +641,9 @@ bool PreviewGenerator::LocalPreviewRun(void)
     QDateTime dt = MythDate::current();
 
     if (captime > 0s)
+    {
         LOG(VB_GENERAL, LOG_INFO, "Preview from time spec");
+    }
     else
     {
         capframe = m_programInfo.QueryStartMark();
@@ -692,9 +692,8 @@ bool PreviewGenerator::LocalPreviewRun(void)
     int width = 0;
     int height = 0;
     int sz = 0;
-    auto *data = (unsigned char*) GetScreenGrab(m_programInfo, m_pathname,
-                                                captime, capframe,
-                                                sz, width, height, aspect);
+    auto *data = GetScreenGrab(m_programInfo, m_pathname, captime, capframe,
+                               sz, width, height, aspect);
 
     QString outname = CreateAccessibleFilename(m_pathname, m_outFileName);
 
@@ -792,13 +791,13 @@ bool PreviewGenerator::IsLocal(void) const
  *  \return Buffer allocated with new containing frame in RGBA32 format if
  *          successful, nullptr otherwise.
  */
-char *PreviewGenerator::GetScreenGrab(
+uint8_t *PreviewGenerator::GetScreenGrab(
     const ProgramInfo &pginfo, const QString &filename,
     std::chrono::seconds seektime, long long seekframe,
     int &bufferlen,
     int &video_width, int &video_height, float &video_aspect)
 {
-    char *retbuf = nullptr;
+    uint8_t *retbuf = nullptr;
     bufferlen = 0;
 
     if (!MSqlQuery::testDBConnection())
@@ -863,3 +862,5 @@ char *PreviewGenerator::GetScreenGrab(
 
     return retbuf;
 }
+
+#include "moc_previewgenerator.cpp"

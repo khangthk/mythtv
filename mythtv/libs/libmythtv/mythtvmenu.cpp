@@ -117,7 +117,7 @@ const QString& MythTVMenu::GetKeyBindingContext() const
 
 QString MythTVMenu::Translate(const QString& Text) const
 {
-    return QCoreApplication::translate(m_translationContext, Text.toUtf8(), nullptr);
+    return QCoreApplication::translate(m_translationContext, Text.toUtf8().constData(), nullptr);
 }
 
 bool MythTVMenu::MatchesGroup(const QString &Name, const QString &Prefix,
@@ -167,9 +167,9 @@ QDomNode MythTVMenu::GetNodeFromPath(const QString& path) const
         for (int i = 0 ; i < children.count(); i++)
         {
             auto child = children.at(i).toElement();
-            if (child.isNull() ||
-                (name == child.attribute("text")) ||
-                (name == child.attribute("XXXtext")))
+            if (!child.isNull() &&
+                ((name == child.attribute("text")) ||
+                (name == child.attribute("XXXtext"))))
             {
                 result = child;
                 found = true;
@@ -319,7 +319,7 @@ bool MythTVMenu::Show(const QDomNode& Node, const QDomNode& Selected,
             MenuCurrentContext currentContext = kMenuCurrentDefault;
             if ((current == "active") && !hasSelected)
                 currentContext = kMenuCurrentActive;
-            else if (((current.startsWith("y") || current.startsWith("t") || current == "1")) && !hasSelected)
+            else if ((current.startsWith("y") || current.startsWith("t") || current == "1") && !hasSelected)
                 currentContext = kMenuCurrentAlways;
 
             if (element.tagName() == "menu")
@@ -355,5 +355,3 @@ MythTVMenuNodeTuple::MythTVMenuNodeTuple(MenuTypeId Id, QString Path)
     m_path(std::move(Path))
 {
 }
-
-

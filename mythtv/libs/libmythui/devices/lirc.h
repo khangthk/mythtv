@@ -1,6 +1,7 @@
 #ifndef LIRC_H_
 #define LIRC_H_
 
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QByteArray>
 #include <QString>
 #include <QObject>
@@ -35,12 +36,14 @@ class LIRC : public QObject, public MThread
     virtual void start(void);
     virtual void deleteLater(void);
 
+  protected:
+    void run(void) override; // MThread
+
   private:
     ~LIRC() override;
     void TeardownAll();
 
     bool IsDoRunSet(void) const;
-    void run(void) override; // MThread
     QList<QByteArray> GetCodes(void);
     void Process(const QByteArray &data);
 

@@ -1,4 +1,8 @@
+// C++
+#include <algorithm>
+
 // Qt
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QMetaClassInfo>
 
 // MythTV
@@ -129,11 +133,11 @@ MythHTTPMetaService::MythHTTPMetaService(const QString& Name, const QMetaObject&
 int MythHTTPMetaService::ParseRequestTypes(const QMetaObject& Meta, const QString& Method, QString& ReturnName)
 {
     int custom = HTTPUnknown;
-    int index = Meta.indexOfClassInfo(Method.toLatin1());
+    int index = Meta.indexOfClassInfo(Method.toLatin1().constData());
     if (index > -1)
     {
         QStringList infos = QString(Meta.classInfo(index).value()).split(';', Qt::SkipEmptyParts);
-        foreach (const QString &info, infos)
+        for (const QString &info : std::as_const(infos))
         {
             if (info.startsWith(QStringLiteral("methods=")))
                 custom |= MythHTTP::RequestsFromString(info.mid(8));
@@ -167,13 +171,13 @@ int MythHTTPMetaService::ParseRequestTypes(const QMetaObject& Meta, const QStrin
 
 bool MythHTTPMetaService::isProtected(const QMetaObject& Meta, const QString& Method)
 {
-    int index = Meta.indexOfClassInfo(Method.toLatin1());
+    int index = Meta.indexOfClassInfo(Method.toLatin1().constData());
     if (index > -1)
     {
         QStringList infos = QString(Meta.classInfo(index).value()).split(';', Qt::SkipEmptyParts);
         auto isAuth = [](const QString& info)
             { return info.startsWith(QStringLiteral("AuthRequired=")); };
-        return std::any_of(infos.cbegin(), infos.cend(), isAuth);
+        return std::ranges::any_of(std::as_const(infos), isAuth);
     }
     return false;
 }

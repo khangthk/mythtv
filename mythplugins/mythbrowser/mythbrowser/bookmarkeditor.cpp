@@ -1,8 +1,8 @@
 
 // MythTV
-#include <libmyth/mythcontext.h>
 #include <libmythbase/mythdate.h>
 #include <libmythbase/mythdbcon.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythui/mythmainwindow.h>
 
 // mythbrowser
@@ -149,3 +149,5 @@ void BookmarkEditor::slotCategoryFound(const QString& category)
 {
     m_categoryEdit->SetText(category);
 }
+
+#include "moc_bookmarkeditor.cpp"

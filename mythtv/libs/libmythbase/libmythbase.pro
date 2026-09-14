@@ -20,36 +20,28 @@ HEADERS += mythtimer.h mythdirs.h exitcodes.h
 HEADERS += lcddevice.h mythstorage.h remotefile.h logging.h loggingserver.h
 HEADERS += mythcorecontext.h mythsystem.h mythsystemprivate.h
 HEADERS += mythlocale.h storagegroup.h
-HEADERS += mythcoreutil.h mythdownloadmanager.h mythtranslation.h
+HEADERS += mythdownloadmanager.h mythtranslation.h
 HEADERS += unzip2.h iso639.h iso3166.h mythmedia.h
 HEADERS += mythmiscutil.h mythhdd.h mythcdrom.h autodeletedeque.h dbutil.h
 HEADERS += mythdeque.h mythlogging.h
-HEADERS += mythbaseutil.h referencecounter.h referencecounterlist.h
+HEADERS += referencecounter.h referencecounterlist.h
 HEADERS += version.h mythcommandlineparser.h
 HEADERS += mythscheduler.h filesysteminfo.h hardwareprofile.h serverpool.h
 HEADERS += mythbinaryplist.h signalhandling.h mythtimezone.h mythdate.h
 HEADERS += mythplugin.h mythpluginapi.h housekeeper.h
 HEADERS += mythpluginexport.h
-HEADERS += ffmpeg-mmx.h
 HEADERS += mythrandom.h
 HEADERS += stringutil.h
 HEADERS += mythsystemlegacy.h mythtypes.h
 HEADERS += threadedfilewriter.h mythsingledownload.h
-HEADERS += ternarycompare.h
 HEADERS += mythsession.h
-HEADERS += cleanupguard.h portchecker.h
+HEADERS += portchecker.h
 HEADERS += mythsorthelper.h mythdbcheck.h
 HEADERS += mythpower.h
 HEADERS += configuration.h
+HEADERS += mythappname.h
 HEADERS += netgrabbermanager.h
 HEADERS += netutils.h
-HEADERS += programinfo.h
-HEADERS += programinfoupdater.h
-HEADERS += programtypes.h
-HEADERS += programtypeflags.h
-HEADERS += recordingstatus.h
-HEADERS += recordingtypes.h
-HEADERS += remoteutil.h
 HEADERS += rssmanager.h
 HEADERS += rssparse.h
 HEADERS += unziputil.h
@@ -62,7 +54,7 @@ SOURCES += mythobservable.cpp mythevent.cpp
 SOURCES += mythtimer.cpp mythdirs.cpp
 SOURCES += lcddevice.cpp mythstorage.cpp remotefile.cpp
 SOURCES += mythcorecontext.cpp mythsystem.cpp mythlocale.cpp storagegroup.cpp
-SOURCES += mythcoreutil.cpp mythdownloadmanager.cpp mythtranslation.cpp
+SOURCES += mythdownloadmanager.cpp mythtranslation.cpp
 SOURCES += unzip2.cpp iso639.cpp iso3166.cpp mythmedia.cpp mythmiscutil.cpp
 SOURCES += mythhdd.cpp mythcdrom.cpp dbutil.cpp
 SOURCES += logging.cpp loggingserver.cpp
@@ -75,19 +67,13 @@ SOURCES += mythrandom.cpp
 SOURCES += stringutil.cpp
 SOURCES += threadedfilewriter.cpp mythsingledownload.cpp
 SOURCES += mythsession.cpp
-SOURCES += cleanupguard.cpp portchecker.cpp
+SOURCES += portchecker.cpp
 SOURCES += mythsorthelper.cpp dbcheckcommon.cpp
 SOURCES += mythpower.cpp
 SOURCES += configuration.cpp
 SOURCES += mythversion.cpp
 SOURCES += netgrabbermanager.cpp
 SOURCES += netutils.cpp
-SOURCES += programinfo.cpp
-SOURCES += programinfoupdater.cpp
-SOURCES += programtypes.cpp
-SOURCES += recordingstatus.cpp
-SOURCES += recordingtypes.cpp
-SOURCES += remoteutil.cpp
 SOURCES += rssmanager.cpp
 SOURCES += rssparse.cpp
 SOURCES += unziputil.cpp
@@ -162,7 +148,6 @@ SOURCES += http/serialisers/mythcborserialiser.cpp
 
 using_qtdbus {
     QT      += dbus
-    DEFINES += USING_DBUS
     HEADERS += platforms/mythpowerdbus.h
     SOURCES += platforms/mythpowerdbus.cpp
 }
@@ -172,7 +157,7 @@ unix {
     HEADERS += mythsystemunix.h
 }
 
-mingw | win32-msvc* {
+mingw {
     SOURCES += mythsystemwindows.cpp
     HEADERS += mythsystemwindows.h
     LIBS += -lzip
@@ -186,27 +171,22 @@ inc.files += mythobservable.h mythevent.h verbosedefs.h
 inc.files += mythtimer.h lcddevice.h exitcodes.h mythdirs.h mythstorage.h
 inc.files += mythsocket.h mythsocket_cb.h mythlogging.h
 inc.files += mythcorecontext.h mythsystem.h storagegroup.h loggingserver.h
-inc.files += mythcoreutil.h mythlocale.h mythdownloadmanager.h
+inc.files += mythlocale.h mythdownloadmanager.h
 inc.files += mythtranslation.h iso639.h iso3166.h mythmedia.h mythmiscutil.h
 inc.files += mythcdrom.h autodeletedeque.h dbutil.h mythdeque.h
 inc.files += referencecounter.h referencecounterlist.h mythcommandlineparser.h
 inc.files += mthread.h mthreadpool.h mythchrono.h
 inc.files += filesysteminfo.h hardwareprofile.h bonjourregister.h serverpool.h
-inc.files += plist.h signalhandling.h ffmpeg-mmx.h mythdate.h
+inc.files += plist.h signalhandling.h mythdate.h
 inc.files += mythplugin.h mythpluginapi.h
 inc.files += mythpluginexport.h
 inc.files += remotefile.h mythsystemlegacy.h mythtypes.h
 inc.files += threadedfilewriter.h mythsingledownload.h mythsession.h
 inc.files += mythsorthelper.h mythdbcheck.h
+inc.files += mythconfig.h
 inc.files += mythrandom.h
 inc.files += netgrabbermanager.h
 inc.files += netutils.h
-inc.files += programinfo.h
-inc.files += programtypes.h
-inc.files += programtypeflags.h
-inc.files += recordingstatus.h
-inc.files += recordingtypes.h
-inc.files += remoteutil.h
 inc.files += rssmanager.h
 inc.files += rssparse.h
 inc.files += stringutil.h
@@ -214,14 +194,13 @@ inc.files += unziputil.h
 inc.files += sizetliteral.h
 
 inc2.path = $${PREFIX}/include/mythtv
-inc2.files += mythconfig.h mythconfig.mak
+inc2.files += mythconfig.mak
 
 INSTALLS += inc inc2
 
 INCLUDEPATH += ..
 DEPENDPATH  +=  ../../external/libudfread
 
-DEFINES += RUNPREFIX=\\\"$${RUNPREFIX}\\\"
 DEFINES += LIBDIRNAME=\\\"$${LIBDIRNAME}\\\"
 DEFINES += MBASE_API
 
@@ -255,37 +234,18 @@ use_hidesyms {
 }
 
 using_libdns_sd {
-    DEFINES += USING_LIBDNS_SD
     HEADERS += bonjourregister.h
     SOURCES += bonjourregister.cpp
     !macx: LIBS += -ldns_sd
 }
 
-using_x11:DEFINES += USING_X11
-
 mingw:LIBS += -lws2_32 -lz
-
-win32-msvc* {
-
-    LIBS += -lws2_32
-    EXTRA_LIBS += -lzlib
-
-    # we need to make sure version.h is generated.
-
-    versionTarget.target  = version.h
-    versionTarget.depends = FORCE
-    versionTarget.commands = powershell -noprofile -executionpolicy bypass -File ../../version.ps1 ../..
-
-    PRE_TARGETDEPS += version.h
-    QMAKE_EXTRA_TARGETS += versionTarget
-}
 
 QT += xml sql network widgets
 
 include ( ../libs-targetfix.pro )
 
 using_system_libudfread: {
-    DEFINES += HAVE_LIBUDFREAD
     QMAKE_CXXFLAGS += $$LIBUDFREAD_CFLAGS
     LIBS           += $$LIBUDFREAD_LIBS
 } else {

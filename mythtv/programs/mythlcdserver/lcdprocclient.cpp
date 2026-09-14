@@ -24,11 +24,12 @@
 #include <QTimer>
 
 // mythtv
-#include "libmyth/mythcontext.h"
 #include "libmythbase/compat.h"
 #include "libmythbase/lcddevice.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythdbcon.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythtv/tv.h"
 
 // mythlcdserver
@@ -864,7 +865,7 @@ void LCDProcClient::outputCenteredText(const QString& theScreen, QString theText
     QString aString;
     unsigned int x = 0;
 
-    x = ( m_lcdWidth - theText.length()) / 2 + 1;
+    x = (( m_lcdWidth - theText.length()) / 2) + 1;
 
     if (x > m_lcdWidth )
         x = 1;
@@ -1496,8 +1497,13 @@ void LCDProcClient::scrollMenuText()
                 // Indent this item if nessicary
                 aString += bString.fill(' ', curItem->getIndent());
 
-                aString += curItem->ItemName().mid(curItem->getScrollPos(),
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+                aString += curItem->ItemName().midRef(curItem->getScrollPos(),
                                                    ( m_lcdWidth - lcdStartCol));
+#else
+                aString += QStringView(curItem->ItemName())
+                    .mid(curItem->getScrollPos(), (m_lcdWidth - lcdStartCol));
+#endif
                 aString += "\"";
                 sendToServer(aString);
                 return;
@@ -1607,8 +1613,15 @@ void LCDProcClient::scrollMenuText()
             curItem->incrementScrollPos();
 
             if ((int)curItem->getScrollPos() <= longest_line)
-                aString += curItem->ItemName().mid(curItem->getScrollPos(),
+            {
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+                aString += curItem->ItemName().midRef(curItem->getScrollPos(),
                                                    ( m_lcdWidth-lcdStartCol));
+#else
+                aString += QStringView(curItem->ItemName())
+                    .mid(curItem->getScrollPos(), (m_lcdWidth-lcdStartCol));
+#endif
+            }
 
             aString += "\"";
             sendToServer(aString);
@@ -1881,7 +1894,7 @@ void LCDProcClient::dostdclock()
         y = (int) std::rint( m_lcdHeight / 2) + 1;
 
     QString time = QTime::currentTime().toString( m_timeFormat );
-    x = ( m_lcdWidth - time.length()) / 2 + 1;
+    x = (( m_lcdWidth - time.length()) / 2) + 1;
     aString = "widget_set Time timeWidget ";
     aString += QString::number(x);
     aString += " ";
@@ -2072,7 +2085,7 @@ QStringList LCDProcClient::formatScrollerText(const QString &text) const
             formatedLine = formatedLine.replace(( m_lcdWidth - lastSplit) / 2,
                      lastSplit, line.left(lastSplit));
 
-            lines.append(formatedLine);
+            lines.append(formatedLine); // clazy:exclude=reserve-candidates
 
             if (line[lastSplit] == ' ' || line[lastSplit] == '|')
                 line = line.mid(lastSplit + 1);
@@ -2455,4 +2468,5 @@ void LCDProcClient::updateRecordingList(void)
     if (m_activeScreen == "Time" || m_activeScreen == "RecStatus")
         startTime();
 }
-/* vim: set expandtab tabstop=4 shiftwidth=4: */
+
+#include "moc_lcdprocclient.cpp"

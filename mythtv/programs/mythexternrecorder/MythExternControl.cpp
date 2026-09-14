@@ -22,6 +22,7 @@
 
 #include <array>
 #include <iostream>
+#include <mutex>
 #include <poll.h>
 #include <unistd.h>
 
@@ -57,7 +58,7 @@ MythExternControl::~MythExternControl(void)
 
 Q_SLOT void MythExternControl::Opened(void)
 {
-    std::lock_guard<std::mutex> lock(m_flowMutex);
+    std::scoped_lock lock(m_flowMutex);
 
     m_ready = true;
     m_flowCond.notify_all();
@@ -135,7 +136,7 @@ Q_SLOT void MythExternControl::ErrorMessage(const QString & msg)
 
 void Commands::Close(void)
 {
-    std::lock_guard<std::mutex> lock(m_parent->m_flowMutex);
+    std::scoped_lock lock(m_parent->m_flowMutex);
 
     emit m_parent->Close();
     m_parent->m_ready = false;
@@ -229,11 +230,11 @@ bool Commands::SendStatus(const QString & command,
 
     if (!command.isEmpty())
     {
-        if (command == m_prevCmd)
+        if (command + response + status == m_prevStatus)
         {
             if (++m_repCmdCnt % 25 == 0)
             {
-                LOG(VB_RECORD, LOG_INFO, LOC +
+                LOG(VB_RECORD, LOG_DEBUG, LOC +
                     QString("Processing '%1' --> '%2' (Repeated 25 times)")
                     .arg(command, QString(msgbuf)));
             }
@@ -242,20 +243,22 @@ bool Commands::SendStatus(const QString & command,
         {
             if (m_repCmdCnt)
             {
-                LOG(VB_RECORD, LOG_INFO,
-                    LOC + QString("Processing '%1' (Repeated %2 times)")
-                    .arg(m_prevCmd).arg(m_repCmdCnt % 25));
+                LOG(VB_RECORD, LOG_DEBUG,
+                    LOC + QString("Processing '%1' --> '%2' (Repeated %2 times)")
+                    .arg(m_prevMsgBuf).arg(m_repCmdCnt % 25));
                 m_repCmdCnt = 0;
             }
-            LOG(VB_RECORD, LOG_INFO, LOC +
+            LOG(VB_RECORD, LOG_DEBUG, LOC +
                 QString("Processing '%1' --> '%2'")
                 .arg(command, QString(msgbuf)));
         }
-        m_prevCmd = command;
+        m_prevStatus = command + response + status;
+        m_prevMsgBuf = QString(msgbuf);
     }
     else
     {
-        m_prevCmd.clear();
+        m_prevStatus.clear();
+        m_prevMsgBuf.clear();
         m_repCmdCnt = 0;
     }
 
@@ -315,7 +318,7 @@ bool Commands::ProcessCommand(const QString & query)
     else if (cmd == "Description?")
     {
         if (m_parent->m_desc.trimmed().isEmpty())
-            SendStatus(cmd, "WARN", serial, "Not set");
+            SendStatus(cmd, "OK", serial, "Not set");
         else
             SendStatus(cmd, "OK", serial, m_parent->m_desc.trimmed());
     }
@@ -414,7 +417,7 @@ bool Commands::ProcessCommand(const QString & query)
     }
     else if (cmd == "BlockSize")
     {
-        if (elements.find("value") == elements.end())
+        if (!elements.contains("value"))
             SendStatus(cmd, "ERR", serial, "Missing block size value");
         else
             SetBlockSize(serial, elements["value"].toUInt());
@@ -451,7 +454,11 @@ void Commands::Run(void)
     polls[0].revents = 0;
 
     QFile input;
-    input.open(stdin, QIODevice::ReadOnly);
+    if (!input.open(stdin, QIODevice::ReadOnly))
+    {
+        LOG(VB_RECORD, LOG_ERR, LOC + "Opening of stdin failed");
+        return;
+    }
     QTextStream qtin(&input);
 
     LOG(VB_RECORD, LOG_INFO, LOC + "Command parser ready.");
@@ -657,3 +664,5 @@ void Buffer::Run(void)
     m_parent->m_bufferRunning = false;
     m_parent->m_flowCond.notify_all();
 }
+
+#include "moc_MythExternControl.cpp"

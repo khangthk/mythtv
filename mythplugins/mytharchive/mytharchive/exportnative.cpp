@@ -10,12 +10,11 @@
 #include <QDomDocument>
 
 // myth
-#include <libmyth/mythcontext.h>
 #include <libmythbase/exitcodes.h>
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythdb.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythbase/mythsystemlegacy.h>
-#include <libmythbase/programinfo.h>
-#include <libmythbase/remoteutil.h>
 #include <libmythbase/stringutil.h>
 #include <libmythui/mythdialogbox.h>
 #include <libmythui/mythmainwindow.h>
@@ -491,3 +490,5 @@ void ExportNative::handleAddVideo()
     if (selector->Create())
         mainStack->AddScreen(selector);
 }
+
+#include "moc_exportnative.cpp"

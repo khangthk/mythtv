@@ -1,9 +1,10 @@
 // MythTV
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
 #include "platforms/mythdisplaymutter.h"
 
-#ifdef USING_DRM
+#if CONFIG_DRM
 extern "C" {
 #include <xf86drmMode.h>
 }
@@ -339,7 +340,7 @@ const MythDisplayModes& MythDisplayMutter::GetVideoModes()
                          static_cast<int32_t>(mmode.height));
 
         uint64_t key = MythDisplayMode::CalcKey(resolution, 0.0);
-        if (screenmap.find(key) == screenmap.end())
+        if (!screenmap.contains(key))
             screenmap[key] = MythDisplayMode(resolution, physical, -1.0, rate);
         else
             screenmap[key].AddRefreshRate(rate);
@@ -499,16 +500,22 @@ void MythDisplayMutter::UpdateResources()
             .arg(crtc.height).arg(crtc.x).arg(crtc.y).arg(crtc.currentmode));
     }
 
+    QStringList possiblecrtcs;
+    QStringList modes;
+    QStringList props;
     args[2].value<QDBusArgument>() >> m_outputs;
     for (auto & output : m_outputs)
     {
-        QStringList possiblecrtcs;
+        possiblecrtcs.clear();
+        possiblecrtcs.reserve(output.possible_crtcs.size());
         for (auto poss : std::as_const(output.possible_crtcs))
             possiblecrtcs.append(QString::number(poss));
-        QStringList modes;
+        modes.clear();
+        modes.reserve(output.modes.size());
         for (auto mode : std::as_const(output.modes))
             modes.append(QString::number(mode));
-        QStringList props;
+        props.clear();
+        props.reserve(output.properties.size());
         for (const auto& prop : std::as_const(output.properties))
             props.append(QString("%1:%2").arg(prop.first, prop.second.variant().toString()));
         LOG(VB_GENERAL, LOG_DEBUG, LOC +
@@ -587,3 +594,5 @@ void MythDisplayMutter::UpdateResources()
     m_physicalSize  = QSize(m_outputs[m_outputIdx].widthmm, m_outputs[m_outputIdx].heightmm);
     m_edid = MythEDID(m_outputs[m_outputIdx].edid);
 }
+
+#include "moc_mythdisplaymutter.cpp"

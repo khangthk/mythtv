@@ -2,6 +2,7 @@
 #define MYTHVIDEOTEXTURE_H
 
 // MythTV
+#include "libmythbase/mythconfig.h"
 #include "libmythui/opengl/mythrenderopengl.h"
 #include "mythavutil.h"
 #include "mythframe.h"
@@ -43,7 +44,7 @@ class MythVideoTextureOpenGL : public MythGLTexture
                                                  QOpenGLTexture::WrapMode Wrap = QOpenGLTexture::ClampToEdge);
     static VideoFramebuffer CreateVideoFrameBuffer(MythRenderOpenGL* Context, VideoFrameType OutputType,
                                                    QSize Size, bool HighPrecision = true);
-   ~MythVideoTextureOpenGL() = default;
+   ~MythVideoTextureOpenGL() override = default;
 
   public:
     bool           m_valid          { false };
@@ -53,7 +54,7 @@ class MythVideoTextureOpenGL : public MythGLTexture
     uint           m_plane          { 0 };
     uint           m_planeCount     { 0 };
     bool           m_allowGLSLDeint { false };
-#ifdef USING_MEDIACODEC
+#if CONFIG_MEDIACODEC
     QMatrix4x4    *m_transform      { nullptr };
 #endif
     MythAVCopy    *m_copyContext    { nullptr };

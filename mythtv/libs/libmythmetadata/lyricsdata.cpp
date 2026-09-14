@@ -7,8 +7,9 @@
 #include <QDomDocument>
 
 // mythtv
-#include "libmyth/mythcontext.h"
 #include "libmythbase/mythchrono.h"
+#include "libmythbase/mythcorecontext.h"
+#include "libmythbase/mythlogging.h"
 
 // libmythmetadata
 #include "lyricsdata.h"
@@ -230,6 +231,7 @@ void LyricsData::customEvent(QEvent *event)
 void LyricsData::loadLyrics(const QString &xmlData)
 {
     QDomDocument domDoc;
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     QString errorMsg;
     int errorLine = 0;
     int errorColumn = 0;
@@ -242,6 +244,19 @@ void LyricsData::loadLyrics(const QString &xmlData)
         m_status = STATUS_NOTFOUND;
         return;
     }
+#else
+    auto parseResult = domDoc.setContent(xmlData);
+    if (!parseResult)
+    {
+        LOG(VB_GENERAL, LOG_ERR,
+            QString("LyricsData:: Could not parse lyrics from %1").arg(xmlData) +
+            QString("\n\t\t\tError at line: %1  column: %2 msg: %3")
+            .arg(parseResult.errorLine).arg(parseResult.errorColumn)
+            .arg(parseResult.errorMessage));
+        m_status = STATUS_NOTFOUND;
+        return;
+    }
+#endif
 
     QDomNodeList itemList = domDoc.elementsByTagName("lyrics");
     QDomNode itemNode = itemList.item(0);
@@ -258,7 +273,7 @@ void LyricsData::loadLyrics(const QString &xmlData)
     itemList = itemNode.toElement().elementsByTagName("lyric");
 
     QStringList lyrics;
-
+    lyrics.reserve(itemList.count());
     for (int x = 0; x < itemList.count(); x++)
     {
         QDomNode lyricNode = itemList.at(x);
@@ -276,6 +291,9 @@ void LyricsData::loadLyrics(const QString &xmlData)
                     lyric.remove(0,match.capturedLength(1));
                     match = kTimeCode.match(lyric);
                 }
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+                lyrics.reserve(lyrics.capacity() + times.size());
+#endif
                 for (const auto &time : std::as_const(times))
                     lyrics.append(time + lyric);
             }
@@ -367,3 +385,5 @@ void LyricsData::setLyrics(const QStringList &lyrics)
         m_lyricsMap.insert(line->m_time, line);
     }
 }
+
+#include "moc_lyricsdata.cpp"

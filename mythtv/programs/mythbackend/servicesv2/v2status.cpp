@@ -27,17 +27,19 @@
 #include "libmythbase/compat.h"
 #include "libmythbase/exitcodes.h"
 #include "libmythbase/http/mythhttpmetaservice.h"
-#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythdbcon.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythbase/mythmiscutil.h"
 #include "libmythbase/mythsystemlegacy.h"
 #include "libmythbase/mythversion.h"
+#include "libmythbase/storagegroup.h"
 #include "libmythtv/cardutil.h"
 #include "libmythtv/jobqueue.h"
 #include "libmythtv/tv.h"
 #include "libmythtv/tv_rec.h"
+#include "libmythupnp/ssdpcache.h"
 #include "libmythupnp/upnp.h"
 
 // MythBackend
@@ -49,6 +51,7 @@
 #include "v2backendStatus.h"
 #include "v2serviceUtil.h"
 #include "v2status.h"
+
 
 // This will be initialised in a thread safe manner on first use
 Q_GLOBAL_STATIC_WITH_ARGS(MythHTTPMetaService, s_service,
@@ -72,6 +75,8 @@ void V2Status::RegisterCustomTypes()
     qRegisterMetaType<V2CastMember*>("V2CastMember");
     qRegisterMetaType<V2Input*>("V2Input");
     qRegisterMetaType<V2Backend*>("V2Backend");
+    qRegisterMetaType<V2ShowStats*>("V2ShowStats");
+    qRegisterMetaType<V2RecStats*>("V2RecStats");
 }
 
 V2Status::V2Status () : MythHTTPService(s_service),
@@ -147,6 +152,9 @@ V2BackendStatus*  V2Status::GetBackendStatus()
     pStatus->setAsOf          ( MythDate::current() );
     pStatus->setVersion       ( MYTH_BINARY_VERSION );
     pStatus->setProtoVer      ( MYTH_PROTO_VERSION  );
+    pStatus->setSourcePath    ( GetMythSourcePath() );
+    pStatus->setSourceVer     ( GetMythSourceVersion() );
+    pStatus->setHostName      ( gCoreContext->GetHostName() );
     // Encoders
     FillEncoderList(pStatus->GetEncoders(), pStatus);
     // Upcoming recordings
@@ -296,6 +304,77 @@ V2BackendStatus*  V2Status::GetBackendStatus()
 
         QByteArray input = ms.ReadAll();
         pStatus->setMiscellaneous(QString(input));
+    }
+    return pStatus;
+}
+
+/*
+    Recording stats, such as number of shows, episodes, total recording time, etc.
+    Note RecStatus of -3 means "recorded". Hard coded -3 is used instead of RecStatus.Recorded
+    for efficiency instead of converting the enum to a string for each SQL query.
+*/
+V2RecStats*  V2Status::GetRecStats()
+{
+    auto* pStatus = new V2RecStats();
+    MSqlQuery query(MSqlQuery::InitCon());
+    // Numnber of shows
+    query.prepare("select count(distinct title) from oldrecorded "
+        "where recstatus = -3 and future = 0;");
+    if (query.exec() && query.next())
+        pStatus->setShowCount(query.value(0).toInt());
+    // Number of episodes
+    query.prepare("select count(title) from oldrecorded "
+        "where recstatus = -3 and future = 0;");
+    if (query.exec() && query.next())
+        pStatus->setEpisodeCount(query.value(0).toInt());
+    // First and last recording dates, total recording time, etc.
+    query.prepare("select starttime from oldrecorded "
+        "where recstatus = -3 and future = 0 "
+        "order by starttime asc limit 1;");
+    if (query.exec() && query.next())
+        pStatus->setFirstRecDate(query.value(0).toDateTime());
+    query.prepare("select endtime from oldrecorded "
+        "where recstatus = -3 and future = 0 "
+        "order by starttime desc limit 1;");
+    if (query.exec() && query.next())
+        pStatus->setLastRecDate(query.value(0).toDateTime());
+    query.prepare("select SUM( TIMESTAMPDIFF(SECOND, starttime, endtime) ) "
+        "from oldrecorded "
+        "where recstatus = -3 and future = 0;");
+    if (query.exec() && query.next())
+        pStatus->setRecTimeSecs(query.value(0).toLongLong());
+    pStatus->setRunTimeSecs(pStatus->GetFirstRecDate().secsTo(pStatus->GetLastRecDate()));
+    // Top 10 shows
+    query.prepare("select title, COUNT(*) as recorded, MAX(starttime) as last_recorded "
+        "from oldrecorded "
+        "where recstatus = -3 and future = 0 "
+            "group by title "
+            "order by recorded desc, last_recorded desc, title asc "
+            "limit 10;");
+    if (query.exec()) {
+        while (query.next())
+        {
+            auto* show = pStatus->AddNewShow();
+            show->setTitle(query.value(0).toString());
+            show->setCount(query.value(1).toInt());
+            show->setLastRecDate(query.value(2).toDateTime());
+        }
+    }
+    // Top 10 channels
+    query.prepare("select  c.name, COUNT(*) as recorded, MAX(r.starttime) as last_recorded "
+        "from oldrecorded r "
+        "join channel c on r.chanid = c.chanid "
+        "where r.recstatus = -3 and r.future = 0 "
+            "group by c.callsign "
+            "order by recorded desc, last_recorded desc, c.name asc "
+            "limit 10;");
+    if (query.exec()) {
+        while (query.next()) {
+            auto* channel = pStatus->AddNewChannel();
+            channel->setTitle(query.value(0).toString());
+            channel->setCount(query.value(1).toInt());
+            channel->setLastRecDate(query.value(2).toDateTime());
+        }
     }
     return pStatus;
 }
@@ -489,7 +568,7 @@ void V2Status::FillStatusXML( QDomDocument *pDoc )
     QDomElement frontends = pDoc->createElement("Frontends");
     root.appendChild(frontends);
 
-    SSDPCacheEntries *fes = SSDP::Find(
+    SSDPCacheEntries *fes = SSDPCache::Instance()->Find(
         "urn:schemas-mythtv-org:service:MythFrontend:1");
     if (fes)
     {
@@ -530,7 +609,7 @@ void V2Status::FillStatusXML( QDomDocument *pDoc )
         mbe.setAttribute("url" , masterip + ":" + QString::number(masterport));
     }
 
-    SSDPCacheEntries *sbes = SSDP::Find(
+    SSDPCacheEntries *sbes = SSDPCache::Instance()->Find(
         "urn:schemas-mythtv-org:device:SlaveMediaServer:1");
     if (sbes)
     {
@@ -1037,7 +1116,7 @@ int V2Status::PrintEncoderStatus( QTextStream &os, const QDomElement& encoders )
 
     os << "  </div>\r\n\r\n";
 
-    return( nNumEncoders );
+    return nNumEncoders;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1049,7 +1128,7 @@ int V2Status::PrintScheduled( QTextStream &os, const QDomElement& scheduled )
     QDateTime qdtNow          = MythDate::current();
 
     if (scheduled.isNull())
-        return( 0 );
+        return 0;
 
     int     nNumRecordings= scheduled.attribute( "count", "0" ).toInt();
 
@@ -1060,7 +1139,7 @@ int V2Status::PrintScheduled( QTextStream &os, const QDomElement& scheduled )
     {
         os << "    There are no shows scheduled for recording.\r\n"
            << "    </div>\r\n";
-        return( 0 );
+        return 0;
     }
 
     os << "    The next " << nNumRecordings << " show" << (nNumRecordings == 1 ? "" : "s" )
@@ -1170,7 +1249,7 @@ int V2Status::PrintScheduled( QTextStream &os, const QDomElement& scheduled )
     os  << "    </div>\r\n";
     os << "  </div>\r\n\r\n";
 
-    return( nNumRecordings );
+    return nNumRecordings;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1180,12 +1259,12 @@ int V2Status::PrintScheduled( QTextStream &os, const QDomElement& scheduled )
 int V2Status::PrintFrontends( QTextStream &os, const QDomElement& frontends )
 {
     if (frontends.isNull())
-        return( 0 );
+        return 0;
 
     int nNumFES= frontends.attribute( "count", "0" ).toInt();
 
     if (nNumFES < 1)
-        return( 0 );
+        return 0;
 
 
     os << "  <div class=\"content\">\r\n"
@@ -1218,12 +1297,12 @@ int V2Status::PrintFrontends( QTextStream &os, const QDomElement& frontends )
 int V2Status::PrintBackends( QTextStream &os, const QDomElement& backends )
 {
     if (backends.isNull())
-        return( 0 );
+        return 0;
 
     int nNumBES= backends.attribute( "count", "0" ).toInt();
 
     if (nNumBES < 1)
-        return( 0 );
+        return 0;
 
 
     os << "  <div class=\"content\">\r\n"
@@ -1257,7 +1336,7 @@ int V2Status::PrintBackends( QTextStream &os, const QDomElement& backends )
 int V2Status::PrintJobQueue( QTextStream &os, const QDomElement& jobs )
 {
     if (jobs.isNull())
-        return( 0 );
+        return 0;
 
     int nNumJobs= jobs.attribute( "count", "0" ).toInt();
 
@@ -1391,7 +1470,7 @@ int V2Status::PrintJobQueue( QTextStream &os, const QDomElement& jobs )
 
     os << "  </div>\r\n\r\n ";
 
-    return( nNumJobs );
+    return nNumJobs;
 
 }
 
@@ -1404,7 +1483,7 @@ int V2Status::PrintMachineInfo( QTextStream &os, const QDomElement& info )
     QString   sRep;
 
     if (info.isNull())
-        return( 0 );
+        return 0;
 
     os << "<div class=\"content\">\r\n"
        << "    <h2 class=\"status\">Machine Information</h2>\r\n";
@@ -1642,13 +1721,13 @@ int V2Status::PrintMachineInfo( QTextStream &os, const QDomElement& info )
     }
     os << "\r\n  </div>\r\n";
 
-    return( 1 );
+    return 1;
 }
 
 int V2Status::PrintMiscellaneousInfo( QTextStream &os, const QDomElement& info )
 {
     if (info.isNull())
-        return( 0 );
+        return 0;
 
     // Miscellaneous information
 
@@ -1696,7 +1775,7 @@ int V2Status::PrintMiscellaneousInfo( QTextStream &os, const QDomElement& info )
         os << "</div>\r\n";
     }
 
-    return( 1 );
+    return 1;
 }
 
 void V2Status::FillProgramInfo(QDomDocument *pDoc,
@@ -1832,7 +1911,20 @@ void V2Status::FillChannelInfo( QDomElement &channel,
     }
 }
 
+QStringList V2Status::GetBackupsList()
+{
+    static QRegularExpression re(".*\\.sql\\.gz$");
+    QString thisHost = gCoreContext->GetHostName();
+    StorageGroup sg1("DB Backups", thisHost);
+    QStringList fileList = sg1.GetFileList("/");
+    QStringList result = fileList.filter(re);
+    StorageGroup sg2("Default", thisHost);
+    fileList = sg2.GetFileList("/");
+    result.append(fileList.filter(re));
+    return result;
+}
 
 
 
 // vim:set shiftwidth=4 tabstop=4 expandtab:
+#include "moc_v2status.cpp"

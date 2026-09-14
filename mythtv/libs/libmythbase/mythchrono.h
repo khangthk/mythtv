@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <sys/time.h> // For gettimeofday
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QMetaType>
 
 
@@ -18,17 +19,6 @@ Q_DECLARE_METATYPE(std::chrono::microseconds);
 // Grab the underlying std::chrono::duration data type for future use.
 using CHRONO_TYPE = std::chrono::seconds::rep;
 
-// Copy these c++20 literals from the chrono header file
-#if __cplusplus <= 201703L
-namespace std::chrono // NOLINT(cert-dcl58-cpp)
-{
-    using days   = duration<CHRONO_TYPE, ratio<86400>>;
-    using weeks  = duration<CHRONO_TYPE, ratio<604800>>;
-    using months = duration<CHRONO_TYPE, ratio<2629746>>;
-    using years  = duration<CHRONO_TYPE, ratio<31556952>>;
-}
-#endif // C++20
-
 
 //
 // Set up some additional data types for use by MythTV.
@@ -42,7 +32,7 @@ using floatusecs = std::chrono::duration<double, std::micro>;
 
 // There are a handful of places that hold a time value in units of
 // AV_TIME_BASE. Create a unique type for this.
-#if defined AV_TIME_BASE
+#ifdef AV_TIME_BASE
 using av_duration = std::chrono::duration<int64_t,std::ratio<1,AV_TIME_BASE>>;
 #endif
 
@@ -76,8 +66,8 @@ using SystemTime = std::chrono::time_point<SystemClock>;
 /// \param  value A floating point number that represents a time in seconds.
 /// \returns The same number of seconds as a std::chrono::seconds.
 template <typename T>
-typename std::enable_if_t<std::is_floating_point_v<T>, std::chrono::seconds>
-secondsFromFloat (T value)
+std::chrono::seconds secondsFromFloat (T value)
+requires (std::is_floating_point_v<T>)
 {
     return std::chrono::seconds(static_cast<int64_t>(value));
 }
@@ -87,8 +77,8 @@ secondsFromFloat (T value)
 /// \param  value A floating point number that represents a time in milliseconds.
 /// \returns The same number of seconds as a std::chrono::milliseconds.
 template <typename T>
-typename std::enable_if_t<std::is_floating_point_v<T>, std::chrono::milliseconds>
-millisecondsFromFloat (T value)
+std::chrono::milliseconds millisecondsFromFloat (T value)
+requires (std::is_floating_point_v<T>)
 {
     return std::chrono::milliseconds(static_cast<int64_t>(value));
 }
@@ -98,8 +88,9 @@ millisecondsFromFloat (T value)
 /// \param  value A floating point number that represents a time in microseconds.
 /// \returns The same number of seconds as a std::chrono::microseconds.
 template <typename T>
-typename std::enable_if_t<std::is_floating_point_v<T>, std::chrono::microseconds>
+std::chrono::microseconds
 microsecondsFromFloat (T value)
+requires (std::is_floating_point_v<T>)
 {
     return std::chrono::microseconds(static_cast<int64_t>(value));
 }

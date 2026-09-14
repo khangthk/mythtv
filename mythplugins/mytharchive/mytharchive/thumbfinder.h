@@ -12,8 +12,9 @@ extern "C" {
 #include <QScopedPointer>
 
 // mythtv
-#include <libmythbase/programtypes.h>
+#include <libmythtv/mythavframe.h>
 #include <libmythtv/mythavutil.h>
+#include <libmythtv/programtypes.h>
 #include <libmythui/mythscreentype.h>
 
 // mytharchive
@@ -45,18 +46,19 @@ class ThumbFinder : public MythScreenType
     ~ThumbFinder() override;
 
     bool Create(void) override; // MythScreenType
+    void ShowMenu(void) override; // MythScreenType
     bool keyPressEvent(QKeyEvent *event) override; // MythScreenType
 
+  protected:
+    void Init(void) override; // MythScreenType
 
   private slots:
     void gridItemChanged(MythUIButtonListItem *item);
-    void ShowMenu(void) override; // MythScreenType
     void cancelPressed(void);
     void savePressed(void);
     void updateThumb(void);
 
   private:
-    void Init(void) override; // MythScreenType
     bool getThumbImages(void);
     static int getChapterCount(const QString &menuTheme);
     void changeSeekAmount(bool up);

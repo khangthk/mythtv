@@ -12,6 +12,10 @@
 
 #include "httprequest.h"
 
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QFile>
 #include <QFileInfo>
 #include <QHostInfo>
@@ -19,7 +23,9 @@
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <Qt>
+#include <QUrl>
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdlib>
 #include <fcntl.h>
@@ -29,11 +35,9 @@
 // FOR DEBUGGING
 #include <iostream>
 
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
 #include <netinet/tcp.h>
 #endif
-
-#include "upnp.h"
 
 #include "libmythbase/compat.h"
 #include "libmythbase/configuration.h"
@@ -49,84 +53,144 @@
 #include "serializers/jsonSerializer.h"
 #include "serializers/xmlplistSerializer.h"
 
+#include "httpserver.h"
+#include "upnpresultcode.h"
+
 #ifndef O_LARGEFILE
 #define O_LARGEFILE 0
 #endif
 
+QString UPnPResultCodeDesc(UPnPResultCode eCode)
+{
+    switch( eCode )
+    {
+        case UPnPResult_Success                     : return "Success";
+        case UPnPResult_InvalidAction               : return "Invalid Action";
+        case UPnPResult_InvalidArgs                 : return "Invalid Args";
+        case UPnPResult_ActionFailed                : return "Action Failed";
+        case UPnPResult_ArgumentValueInvalid        : return "Argument Value Invalid";
+        case UPnPResult_ArgumentValueOutOfRange     : return "Argument Value Out Of Range";
+        case UPnPResult_OptionalActionNotImplemented: return "Optional Action Not Implemented";
+        case UPnPResult_OutOfMemory                 : return "Out Of Memory";
+        case UPnPResult_HumanInterventionRequired   : return "Human Intervention Required";
+        case UPnPResult_StringArgumentTooLong       : return "String Argument Too Long";
+        case UPnPResult_ActionNotAuthorized         : return "Action Not Authorized";
+        case UPnPResult_SignatureFailure            : return "Signature Failure";
+        case UPnPResult_SignatureMissing            : return "Signature Missing";
+        case UPnPResult_NotEncrypted                : return "Not Encrypted";
+        case UPnPResult_InvalidSequence             : return "Invalid Sequence";
+        case UPnPResult_InvalidControlURL           : return "Invalid Control URL";
+        case UPnPResult_NoSuchSession               : return "No Such Session";
+        case UPnPResult_MS_AccessDenied             : return "Access Denied";
+
+        case UPnPResult_CDS_NoSuchObject            : return "No Such Object";
+        case UPnPResult_CDS_InvalidCurrentTagValue  : return "Invalid CurrentTagValue";
+        case UPnPResult_CDS_InvalidNewTagValue      : return "Invalid NewTagValue";
+        case UPnPResult_CDS_RequiredTag             : return "Required Tag";
+        case UPnPResult_CDS_ReadOnlyTag             : return "Read Only Tag";
+        case UPnPResult_CDS_ParameterMismatch       : return "Parameter Mismatch";
+        case UPnPResult_CDS_InvalidSearchCriteria   : return "Invalid Search Criteria";
+        case UPnPResult_CDS_InvalidSortCriteria     : return "Invalid Sort Criteria";
+        case UPnPResult_CDS_NoSuchContainer         : return "No Such Container";
+        case UPnPResult_CDS_RestrictedObject        : return "Restricted Object";
+        case UPnPResult_CDS_BadMetadata             : return "Bad Metadata";
+        case UPnPResult_CDS_ResrtictedParentObject  : return "Resrticted Parent Object";
+        case UPnPResult_CDS_NoSuchSourceResource    : return "No Such Source Resource";
+        case UPnPResult_CDS_ResourceAccessDenied    : return "Resource Access Denied";
+        case UPnPResult_CDS_TransferBusy            : return "Transfer Busy";
+        case UPnPResult_CDS_NoSuchFileTransfer      : return "No Such File Transfer";
+        case UPnPResult_CDS_NoSuchDestRes           : return "No Such Destination Resource";
+        case UPnPResult_CDS_DestResAccessDenied     : return "Destination Resource Access Denied";
+        case UPnPResult_CDS_CannotProcessRequest    : return "Cannot Process The Request";
+
+        //case UPnPResult_CMGR_IncompatibleProtocol     = 701,
+        //case UPnPResult_CMGR_IncompatibleDirections   = 702,
+        //case UPnPResult_CMGR_InsufficientNetResources = 703,
+        //case UPnPResult_CMGR_LocalRestrictions        = 704,
+        //case UPnPResult_CMGR_AccessDenied             = 705,
+        //case UPnPResult_CMGR_InvalidConnectionRef     = 706,
+        case UPnPResult_CMGR_NotInNetwork           : return "Not In Network";
+        case UPnPResult_MythTV_NoNamespaceGiven:      return "No Namespace Given";
+        case UPnPResult_MythTV_XmlParseError        : return "XML Parse Error";
+    }
+
+    return "Unknown";
+}
+
 static std::array<const MIMETypes,66> g_MIMETypes
 {{
     // Image Mime Types
-    { "gif" , "image/gif"                  },
-    { "ico" , "image/x-icon"               },
-    { "jpeg", "image/jpeg"                 },
-    { "jpg" , "image/jpeg"                 },
-    { "mng" , "image/x-mng"                },
-    { "png" , "image/png"                  },
-    { "svg" , "image/svg+xml"              },
-    { "svgz", "image/svg+xml"              },
-    { "tif" , "image/tiff"                 },
-    { "tiff", "image/tiff"                 },
+    { .pszExtension="gif" , .pszType="image/gif"                  },
+    { .pszExtension="ico" , .pszType="image/x-icon"               },
+    { .pszExtension="jpeg", .pszType="image/jpeg"                 },
+    { .pszExtension="jpg" , .pszType="image/jpeg"                 },
+    { .pszExtension="mng" , .pszType="image/x-mng"                },
+    { .pszExtension="png" , .pszType="image/png"                  },
+    { .pszExtension="svg" , .pszType="image/svg+xml"              },
+    { .pszExtension="svgz", .pszType="image/svg+xml"              },
+    { .pszExtension="tif" , .pszType="image/tiff"                 },
+    { .pszExtension="tiff", .pszType="image/tiff"                 },
     // Text Mime Types
-    { "htm" , "text/html"                  },
-    { "html", "text/html"                  },
-    { "qsp" , "text/html"                  },
-    { "txt" , "text/plain"                 },
-    { "xml" , "text/xml"                   },
-    { "qxml", "text/xml"                   },
-    { "xslt", "text/xml"                   },
-    { "css" , "text/css"                   },
+    { .pszExtension="htm" , .pszType="text/html"                  },
+    { .pszExtension="html", .pszType="text/html"                  },
+    { .pszExtension="qsp" , .pszType="text/html"                  },
+    { .pszExtension="txt" , .pszType="text/plain"                 },
+    { .pszExtension="xml" , .pszType="text/xml"                   },
+    { .pszExtension="qxml", .pszType="text/xml"                   },
+    { .pszExtension="xslt", .pszType="text/xml"                   },
+    { .pszExtension="css" , .pszType="text/css"                   },
     // Application Mime Types
-    { "crt" , "application/x-x509-ca-cert" },
-    { "doc" , "application/vnd.ms-word"    },
-    { "gz"  , "application/x-tar"          },
-    { "js"  , "application/javascript"     },
-    { "m3u" , "application/x-mpegurl"      }, // HTTP Live Streaming
-    { "m3u8", "application/x-mpegurl"      }, // HTTP Live Streaming
-    { "ogx" , "application/ogg"            }, // http://wiki.xiph.org/index.php/MIME_Types_and_File_Extensions
-    { "pdf" , "application/pdf"            },
-    { "pem" , "application/x-x509-ca-cert" },
-    { "qjs" , "application/javascript"     },
-    { "rm"  , "application/vnd.rn-realmedia" },
-    { "swf" , "application/x-shockwave-flash" },
-    { "xls" , "application/vnd.ms-excel"   },
-    { "zip" , "application/x-tar"          },
+    { .pszExtension="crt" , .pszType="application/x-x509-ca-cert" },
+    { .pszExtension="doc" , .pszType="application/vnd.ms-word"    },
+    { .pszExtension="gz"  , .pszType="application/x-tar"          },
+    { .pszExtension="js"  , .pszType="application/javascript"     },
+    { .pszExtension="m3u" , .pszType="application/x-mpegurl"      }, // HTTP Live Streaming
+    { .pszExtension="m3u8", .pszType="application/x-mpegurl"      }, // HTTP Live Streaming
+    { .pszExtension="ogx" , .pszType="application/ogg"            }, // http://wiki.xiph.org/index.php/MIME_Types_and_File_Extensions
+    { .pszExtension="pdf" , .pszType="application/pdf"            },
+    { .pszExtension="pem" , .pszType="application/x-x509-ca-cert" },
+    { .pszExtension="qjs" , .pszType="application/javascript"     },
+    { .pszExtension="rm"  , .pszType="application/vnd.rn-realmedia" },
+    { .pszExtension="swf" , .pszType="application/x-shockwave-flash" },
+    { .pszExtension="xls" , .pszType="application/vnd.ms-excel"   },
+    { .pszExtension="zip" , .pszType="application/x-tar"          },
     // Audio Mime Types:
-    { "aac" , "audio/mp4"                  },
-    { "ac3" , "audio/vnd.dolby.dd-raw"     }, // DLNA?
-    { "flac", "audio/x-flac"               }, // This may become audio/flac in the future
-    { "m4a" , "audio/x-m4a"                },
-    { "mid" , "audio/midi"                 },
-    { "mka" , "audio/x-matroska"           },
-    { "mp3" , "audio/mpeg"                 },
-    { "oga" , "audio/ogg"                  }, // Defined: http://wiki.xiph.org/index.php/MIME_Types_and_File_Extensions
-    { "ogg" , "audio/ogg"                  }, // Defined: http://wiki.xiph.org/index.php/MIME_Types_and_File_Extensions
-    { "wav" , "audio/wav"                  },
-    { "wma" , "audio/x-ms-wma"             },
+    { .pszExtension="aac" , .pszType="audio/mp4"                  },
+    { .pszExtension="ac3" , .pszType="audio/vnd.dolby.dd-raw"     }, // DLNA?
+    { .pszExtension="flac", .pszType="audio/x-flac"               }, // This may become audio/flac in the future
+    { .pszExtension="m4a" , .pszType="audio/x-m4a"                },
+    { .pszExtension="mid" , .pszType="audio/midi"                 },
+    { .pszExtension="mka" , .pszType="audio/x-matroska"           },
+    { .pszExtension="mp3" , .pszType="audio/mpeg"                 },
+    { .pszExtension="oga" , .pszType="audio/ogg"                  }, // Defined: http://wiki.xiph.org/index.php/MIME_Types_and_File_Extensions
+    { .pszExtension="ogg" , .pszType="audio/ogg"                  }, // Defined: http://wiki.xiph.org/index.php/MIME_Types_and_File_Extensions
+    { .pszExtension="wav" , .pszType="audio/wav"                  },
+    { .pszExtension="wma" , .pszType="audio/x-ms-wma"             },
     // Video Mime Types
-    { "3gp" , "video/3gpp"                 }, // Also audio/3gpp
-    { "3g2" , "video/3gpp2"                }, // Also audio/3gpp2
-    { "asx" , "video/x-ms-asf"             },
-    { "asf" , "video/x-ms-asf"             },
-    { "avi" , "video/x-msvideo"            }, // Also video/avi
-    { "m2p" , "video/mp2p"                 }, // RFC 3555
-    { "m4v" , "video/mp4"                  },
-    { "mpeg", "video/mp2p"                 }, // RFC 3555
-    { "mpeg2","video/mp2p"                 }, // RFC 3555
-    { "mpg" , "video/mp2p"                 }, // RFC 3555
-    { "mpg2", "video/mp2p"                 }, // RFC 3555
-    { "mov" , "video/quicktime"            },
-    { "mp4" , "video/mp4"                  },
-    { "mkv" , "video/x-matroska"           }, // See http://matroska.org/technical/specs/notes.html#MIME (See NOTE 1)
-    { "nuv" , "video/nupplevideo"          },
-    { "ogv" , "video/ogg"                  }, // Defined: http://wiki.xiph.org/index.php/MIME_Types_and_File_Extensions
-    { "ps"  , "video/mp2p"                 }, // RFC 3555
-    { "ts"  , "video/mp2t"                 }, // RFC 3555
-    { "vob" , "video/mpeg"                 }, // Also video/dvd
-    { "wmv" , "video/x-ms-wmv"             },
+    { .pszExtension="3gp" , .pszType="video/3gpp"                 }, // Also audio/3gpp
+    { .pszExtension="3g2" , .pszType="video/3gpp2"                }, // Also audio/3gpp2
+    { .pszExtension="asx" , .pszType="video/x-ms-asf"             },
+    { .pszExtension="asf" , .pszType="video/x-ms-asf"             },
+    { .pszExtension="avi" , .pszType="video/x-msvideo"            }, // Also video/avi
+    { .pszExtension="m2p" , .pszType="video/mp2p"                 }, // RFC 3555
+    { .pszExtension="m4v" , .pszType="video/mp4"                  },
+    { .pszExtension="mpeg", .pszType="video/mp2p"                 }, // RFC 3555
+    { .pszExtension="mpeg2",.pszType="video/mp2p"                 }, // RFC 3555
+    { .pszExtension="mpg" , .pszType="video/mp2p"                 }, // RFC 3555
+    { .pszExtension="mpg2", .pszType="video/mp2p"                 }, // RFC 3555
+    { .pszExtension="mov" , .pszType="video/quicktime"            },
+    { .pszExtension="mp4" , .pszType="video/mp4"                  },
+    { .pszExtension="mkv" , .pszType="video/x-matroska"           }, // See http://matroska.org/technical/specs/notes.html#MIME (See NOTE 1)
+    { .pszExtension="nuv" , .pszType="video/nupplevideo"          },
+    { .pszExtension="ogv" , .pszType="video/ogg"                  }, // Defined: http://wiki.xiph.org/index.php/MIME_Types_and_File_Extensions
+    { .pszExtension="ps"  , .pszType="video/mp2p"                 }, // RFC 3555
+    { .pszExtension="ts"  , .pszType="video/mp2t"                 }, // RFC 3555
+    { .pszExtension="vob" , .pszType="video/mpeg"                 }, // Also video/dvd
+    { .pszExtension="wmv" , .pszType="video/x-ms-wmv"             },
     // Font Mime Types
-    { "ttf"  , "font/ttf"                  },
-    { "woff" , "font/woff"                 },
-    { "woff2", "font/woff2"                }
+    { .pszExtension="ttf"  , .pszType="font/ttf"                  },
+    { .pszExtension="woff" , .pszType="font/woff"                 },
+    { .pszExtension="woff2", .pszType="font/woff2"                }
 }};
 
 // NOTE 1
@@ -377,7 +441,7 @@ qint64 HTTPRequest::SendResponse( void )
     // ----------------------------------------------------------------------
     // DEBUGGING
     if (qEnvironmentVariableIsSet("HTTPREQUEST_DEBUG"))
-        std::cout << m_response.buffer().constData() << std::endl;
+        std::cout << m_response.buffer().constData() << '\n';
     // ----------------------------------------------------------------------
 
     LOG(VB_HTTP, LOG_DEBUG, QString("Reponse Content Length: %1").arg(nContentLen));
@@ -389,7 +453,7 @@ qint64 HTTPRequest::SendResponse( void )
     QBuffer compBuffer;
 
     auto values = m_mapHeaders.values("accept-encoding");
-    bool gzip_found = std::any_of(values.cbegin(), values.cend(),
+    bool gzip_found = std::ranges::any_of(std::as_const(values),
                                   [](const auto & value)
                                       {return value.contains( "gzip" ); });
 
@@ -443,7 +507,27 @@ qint64 HTTPRequest::SendResponse( void )
             nBytes += bytesWritten;
     }
 
-    return( nBytes );
+    return nBytes;
+}
+
+void HTTPRequest::SendResponseRedirect(const QString &hostName)
+{
+    m_eResponseType     = ResponseTypeOther;
+    m_nResponseStatus   = 301;
+
+    QStringList sItems = m_sRawRequest.split( ' ' );
+    QString sUrl = "http://" + GetLastHeader( "host" ) + sItems[1];
+    QUrl url( sUrl );
+    QString ipAddress = gCoreContext->GetSettingOnHost
+                            ("BackendServerAddr",hostName,hostName);
+    url.setHost( ipAddress );
+
+    m_mapRespHeaders[ "Location" ] = url.toString();
+
+    LOG(VB_UPNP, LOG_INFO, QString("Sending http redirect to: %1")
+                               .arg(url.toString()));
+
+    SendResponse();
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -649,7 +733,7 @@ qint64 HTTPRequest::SendFile( QFile &file, qint64 llStart, qint64 llBytes )
 {
     qint64 sent = SendData( (QIODevice *)(&file), llStart, llBytes );
 
-    return( sent );
+    return sent;
 }
 
 
@@ -668,7 +752,7 @@ void HTTPRequest::FormatErrorResponse( bool  bServerError,
 
     stream << R"(<?xml version="1.0" encoding="utf-8"?>)";
 
-    QString sWhere = ( bServerError ) ? "s:Server" : "s:Client";
+    QString sWhere = bServerError ? "s:Server" : "s:Client";
 
     if (m_bSOAPRequest)
     {
@@ -691,6 +775,29 @@ void HTTPRequest::FormatErrorResponse( bool  bServerError,
     }
 
     stream.flush();
+}
+
+void HTTPRequest::FormatErrorResponse(UPnPResultCode eCode, const QString &msg)
+{
+    QString sMsg( msg );
+    QString sDetails = "";
+
+    if (m_bSOAPRequest)
+        sDetails = "<UPnPResult xmlns=\"urn:schemas-upnp-org:control-1-0\">";
+
+    if (sMsg.length() == 0)
+        sMsg = UPnPResultCodeDesc(eCode);
+
+    sDetails += QString( "<errorCode>%1</errorCode>"
+                            "<errorDescription>%2</errorDescription>" )
+                    .arg( eCode )
+                    .arg(QString::fromUtf8(QUrl::toPercentEncoding(sMsg)));
+
+    if (m_bSOAPRequest)
+        sDetails += "</UPnPResult>";
+
+    FormatErrorResponse(true, // -=>TODO: Should make this dynamic
+                        "UPnPResult", sDetails);
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -743,14 +850,14 @@ void HTTPRequest::FormatActionResponse(const NameValues &args)
             for (const auto & attr : std::as_const(*arg.m_pAttributes))
             {
                 stream << " " << attr.m_sName << "='"
-                       << Encode( attr.m_sValue ) << "'";
+                       << QUrl::toPercentEncoding(attr.m_sValue) << "'";
             }
         }
 
         stream << ">";
 
         if (m_bSOAPRequest)
-            stream << Encode( arg.m_sValue );
+            stream << QUrl::toPercentEncoding(arg.m_sValue);
         else
             stream << arg.m_sValue;
 
@@ -797,7 +904,11 @@ void HTTPRequest::FormatFileResponse( const QString &sFileName )
     if (!m_sFileName.isEmpty() && file.exists())
     {
         QDateTime ims = QDateTime::fromString(GetRequestHeader("if-modified-since", ""), Qt::RFC2822Date);
-        ims.setTimeSpec(Qt::OffsetFromUTC);
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
+        ims.setTimeSpec(Qt::UTC);
+#else
+        ims.setTimeZone(QTimeZone(QTimeZone::UTC));
+#endif
         if (ims.isValid() && ims <= file.lastModified()) // Strong validator
         {
             m_eResponseType = ResponseTypeHeader;
@@ -900,47 +1011,47 @@ QString HTTPRequest::GetResponseStatus( void ) const
 {
     switch( m_nResponseStatus )
     {
-        case 200:   return( "200 OK"                               );
-        case 201:   return( "201 Created"                          );
-        case 202:   return( "202 Accepted"                         );
-        case 204:   return( "204 No Content"                       );
-        case 205:   return( "205 Reset Content"                    );
-        case 206:   return( "206 Partial Content"                  );
-        case 300:   return( "300 Multiple Choices"                 );
-        case 301:   return( "301 Moved Permanently"                );
-        case 302:   return( "302 Found"                            );
-        case 303:   return( "303 See Other"                        );
-        case 304:   return( "304 Not Modified"                     );
-        case 305:   return( "305 Use Proxy"                        );
-        case 307:   return( "307 Temporary Redirect"               );
-        case 308:   return( "308 Permanent Redirect"               );
-        case 400:   return( "400 Bad Request"                      );
-        case 401:   return( "401 Unauthorized"                     );
-        case 403:   return( "403 Forbidden"                        );
-        case 404:   return( "404 Not Found"                        );
-        case 405:   return( "405 Method Not Allowed"               );
-        case 406:   return( "406 Not Acceptable"                   );
-        case 408:   return( "408 Request Timeout"                  );
-        case 410:   return( "410 Gone"                             );
-        case 411:   return( "411 Length Required"                  );
-        case 412:   return( "412 Precondition Failed"              );
-        case 413:   return( "413 Request Entity Too Large"         );
-        case 414:   return( "414 Request-URI Too Long"             );
-        case 415:   return( "415 Unsupported Media Type"           );
-        case 416:   return( "416 Requested Range Not Satisfiable"  );
-        case 417:   return( "417 Expectation Failed"               );
+        case 200:   return "200 OK";
+        case 201:   return "201 Created";
+        case 202:   return "202 Accepted";
+        case 204:   return "204 No Content";
+        case 205:   return "205 Reset Content";
+        case 206:   return "206 Partial Content";
+        case 300:   return "300 Multiple Choices";
+        case 301:   return "301 Moved Permanently";
+        case 302:   return "302 Found";
+        case 303:   return "303 See Other";
+        case 304:   return "304 Not Modified";
+        case 305:   return "305 Use Proxy";
+        case 307:   return "307 Temporary Redirect";
+        case 308:   return "308 Permanent Redirect";
+        case 400:   return "400 Bad Request";
+        case 401:   return "401 Unauthorized";
+        case 403:   return "403 Forbidden";
+        case 404:   return "404 Not Found";
+        case 405:   return "405 Method Not Allowed";
+        case 406:   return "406 Not Acceptable";
+        case 408:   return "408 Request Timeout";
+        case 410:   return "410 Gone";
+        case 411:   return "411 Length Required";
+        case 412:   return "412 Precondition Failed";
+        case 413:   return "413 Request Entity Too Large";
+        case 414:   return "414 Request-URI Too Long";
+        case 415:   return "415 Unsupported Media Type";
+        case 416:   return "416 Requested Range Not Satisfiable";
+        case 417:   return "417 Expectation Failed";
         // I'm a teapot
-        case 428:   return( "428 Precondition Required"            ); // RFC 6585
-        case 429:   return( "429 Too Many Requests"                ); // RFC 6585
-        case 431:   return( "431 Request Header Fields Too Large"  ); // RFC 6585
-        case 500:   return( "500 Internal Server Error"            );
-        case 501:   return( "501 Not Implemented"                  );
-        case 502:   return( "502 Bad Gateway"                      );
-        case 503:   return( "503 Service Unavailable"              );
-        case 504:   return( "504 Gateway Timeout"                  );
-        case 505:   return( "505 HTTP Version Not Supported"       );
-        case 510:   return( "510 Not Extended"                     );
-        case 511:   return( "511 Network Authentication Required"  ); // RFC 6585
+        case 428:   return "428 Precondition Required";             // RFC 6585
+        case 429:   return "429 Too Many Requests";                 // RFC 6585
+        case 431:   return "431 Request Header Fields Too Large";   // RFC 6585
+        case 500:   return "500 Internal Server Error";
+        case 501:   return "501 Not Implemented";
+        case 502:   return "502 Bad Gateway";
+        case 503:   return "503 Service Unavailable";
+        case 504:   return "504 Gateway Timeout";
+        case 505:   return "505 HTTP Version Not Supported";
+        case 510:   return "510 Not Extended";
+        case 511:   return "511 Network Authentication Required";   // RFC 6585
     }
 
     return( QString( "%1 Unknown" ).arg( m_nResponseStatus ));
@@ -963,16 +1074,16 @@ QString HTTPRequest::GetResponseType( void ) const
 {
     switch( m_eResponseType )
     {
-        case ResponseTypeXML    : return( "text/xml; charset=\"UTF-8\"" );
-        case ResponseTypeHTML   : return( "text/html; charset=\"UTF-8\"" );
-        case ResponseTypeCSS    : return( "text/css; charset=\"UTF-8\"" );
-        case ResponseTypeJS     : return( "application/javascript" );
-        case ResponseTypeText   : return( "text/plain; charset=\"UTF-8\"" );
-        case ResponseTypeSVG    : return( "image/svg+xml" );
+        case ResponseTypeXML    : return "text/xml; charset=\"UTF-8\"";
+        case ResponseTypeHTML   : return "text/html; charset=\"UTF-8\"";
+        case ResponseTypeCSS    : return "text/css; charset=\"UTF-8\"";
+        case ResponseTypeJS     : return "application/javascript";
+        case ResponseTypeText   : return "text/plain; charset=\"UTF-8\"";
+        case ResponseTypeSVG    : return "image/svg+xml";
         default: break;
     }
 
-    return( "text/plain" );
+    return "text/plain";
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -991,7 +1102,7 @@ QString HTTPRequest::GetMimeType( const QString &sFileExtension )
             return( type.pszType );
     }
 
-    return( "text/plain" );
+    return "text/plain";
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1112,7 +1223,7 @@ QString HTTPRequest::GetRequestHeader( const QString &sKey, const QString &sDefa
     auto it = m_mapHeaders.find( sKey.toLower() );
 
     if ( it == m_mapHeaders.end())
-        return( sDefault );
+        return sDefault;
 
     return *it;
 }
@@ -1134,7 +1245,7 @@ QString HTTPRequest::GetResponseHeaders( void )
         sHeader += *it + "\r\n";
     }
 
-    return( sHeader );
+    return sHeader;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1306,24 +1417,6 @@ bool HTTPRequest::ParseRequest()
 
             if (session.IsValid())
                 m_userSession = session;
-        }
-
-        if (IsUrlProtected( m_sBaseUrl ))
-        {
-            if (!Authenticated())
-            {
-                m_eResponseType   = ResponseTypeHTML;
-                m_nResponseStatus = 401;
-                m_response.write( GetResponsePage() );
-                // Since this may not be the first attempt at authentication,
-                // Authenticated may have set the header with the appropriate
-                // stale attribute
-                SetResponseHeader("WWW-Authenticate", GetAuthenticationHeader(false));
-
-                return true;
-            }
-
-            m_bProtected = true;
         }
 
         bSuccess = true;
@@ -1593,7 +1686,8 @@ bool HTTPRequest::ProcessSOAPPayload( const QString &sSOAPAction )
         QString("HTTPRequest::ProcessSOAPPayload : %1 : ").arg(sSOAPAction));
     QDomDocument doc ( "request" );
 
-    QString sErrMsg;
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
+   QString sErrMsg;
     int     nErrLine = 0;
     int     nErrCol  = 0;
 
@@ -1602,8 +1696,20 @@ bool HTTPRequest::ProcessSOAPPayload( const QString &sSOAPAction )
         LOG(VB_GENERAL, LOG_ERR,
             QString( "Error parsing request at line: %1 column: %2 : %3" )
                 .arg(nErrLine) .arg(nErrCol) .arg(sErrMsg));
-        return( false );
+        return false;
     }
+#else
+    auto parseResult =doc.setContent( m_sPayload,
+                                      QDomDocument::ParseOption::UseNamespaceProcessing );
+    if (!parseResult)
+    {
+        LOG(VB_GENERAL, LOG_ERR,
+            QString( "Error parsing request at line: %1 column: %2 : %3" )
+                .arg(parseResult.errorLine).arg(parseResult.errorColumn)
+                .arg(parseResult.errorMessage));
+        return false;
+    }
+#endif
 
     // --------------------------------------------------------------
     // XML Document Loaded... now parse it
@@ -1726,354 +1832,11 @@ Serializer *HTTPRequest::GetSerializer()
 //
 /////////////////////////////////////////////////////////////////////////////
 
-QString HTTPRequest::Encode(const QString &sIn)
-{
-    QString sStr = sIn;
-#if 0
-    LOG(VB_HTTP, LOG_DEBUG,
-        QString("HTTPRequest::Encode Input : %1").arg(sStr));
-#endif
-    sStr.replace('&', "&amp;" ); // This _must_ come first
-    sStr.replace('<', "&lt;"  );
-    sStr.replace('>', "&gt;"  );
-    sStr.replace('"', "&quot;");
-    sStr.replace("'", "&apos;");
-
-#if 0
-    LOG(VB_HTTP, LOG_DEBUG,
-        QString("HTTPRequest::Encode Output : %1").arg(sStr));
-#endif
-    return sStr;
-}
-
-/////////////////////////////////////////////////////////////////////////////
-//
-/////////////////////////////////////////////////////////////////////////////
-
-QString HTTPRequest::Decode(const QString& sIn)
-{
-    QString sStr = sIn;
-    sStr.replace("&amp;", "&");
-    sStr.replace("&lt;", "<");
-    sStr.replace("&gt;", ">");
-    sStr.replace("&quot;", "\"");
-    sStr.replace("&apos;", "'");
-
-    return sStr;
-}
-
-/////////////////////////////////////////////////////////////////////////////
-//
-/////////////////////////////////////////////////////////////////////////////
-
 QString HTTPRequest::GetETagHash(const QByteArray &data)
 {
     QByteArray hash = QCryptographicHash::hash( data.data(), QCryptographicHash::Sha1);
 
     return ("\"" + hash.toHex() + "\"");
-}
-
-/////////////////////////////////////////////////////////////////////////////
-//
-/////////////////////////////////////////////////////////////////////////////
-
-bool HTTPRequest::IsUrlProtected( const QString &sBaseUrl )
-{
-    QString sProtected = XmlConfiguration().GetValue("HTTP/Protected/Urls", "/setup;/Config");
-
-    QStringList oList = sProtected.split( ';' );
-
-    for( int nIdx = 0; nIdx < oList.count(); nIdx++)
-    {
-        if (sBaseUrl.startsWith( oList[nIdx], Qt::CaseInsensitive ))
-            return true;
-    }
-
-    return false;
-}
-
-/////////////////////////////////////////////////////////////////////////////
-//
-/////////////////////////////////////////////////////////////////////////////
-
-QString HTTPRequest::GetAuthenticationHeader(bool isStale)
-{
-    QString authHeader;
-
-    // For now we support a single realm, that will change
-    QString realm = "MythTV";
-
-    // Always use digest authentication where supported, it may be available
-    // with HTTP 1.0 client as an extension, but we can't tell if that's the
-    // case. It's guaranteed to be available for HTTP 1.1+
-    if (m_nMajor >= 1 && m_nMinor > 0)
-    {
-        QString nonce = CalculateDigestNonce(MythDate::current_iso_string());
-        QString stale = isStale ? "true" : "false"; // FIXME
-        authHeader = QString("Digest realm=\"%1\",nonce=\"%2\","
-                             "qop=\"auth\",stale=\"%3\",algorithm=\"MD5\"")
-                        .arg(realm, nonce, stale);
-    }
-    else
-    {
-        authHeader = QString("Basic realm=\"%1\"").arg(realm);
-    }
-
-    return authHeader;
-}
-
-/////////////////////////////////////////////////////////////////////////////
-//
-/////////////////////////////////////////////////////////////////////////////
-
-QString HTTPRequest::CalculateDigestNonce(const QString& timeStamp) const
-{
-    QString uniqueID = QString("%1:%2").arg(timeStamp, m_sPrivateToken);
-    QString hash = QCryptographicHash::hash( uniqueID.toLatin1(), QCryptographicHash::Sha1).toHex(); // TODO: Change to Sha2 with QT5?
-    QString nonce = QString("%1%2").arg(timeStamp, hash); // Note: since this is going in a header it should avoid illegal chars
-    return nonce;
-}
-
-/////////////////////////////////////////////////////////////////////////////
-//
-/////////////////////////////////////////////////////////////////////////////
-
-bool HTTPRequest::BasicAuthentication()
-{
-    LOG(VB_HTTP, LOG_NOTICE, "Attempting HTTP Basic Authentication");
-    QStringList oList = GetLastHeader( "authorization" ).split( ' ' );
-
-    if (m_nMajor == 1 && m_nMinor == 0) // We only support Basic auth for http 1.0 clients
-    {
-        LOG(VB_GENERAL, LOG_WARNING, "Basic authentication is only allowed for HTTP 1.0");
-        return false;
-    }
-
-    QString sCredentials = QByteArray::fromBase64( oList[1].toUtf8() );
-
-    oList = sCredentials.split( ':' );
-
-    if (oList.count() < 2)
-    {
-        LOG(VB_GENERAL, LOG_WARNING, "Authorization attempt with invalid number of tokens");
-        return false;
-    }
-
-    QString sUsername = oList[0];
-    QString sPassword = oList[1];
-
-    if (sUsername == "nouser") // Special logout username
-        return false;
-
-    MythSessionManager *sessionManager = gCoreContext->GetSessionManager();
-    if (!MythSessionManager::IsValidUser(sUsername))
-    {
-        LOG(VB_GENERAL, LOG_WARNING, "Authorization attempt with invalid username");
-        return false;
-    }
-
-    QString client = QString("WebFrontend_%1").arg(GetPeerAddress());
-    MythUserSession session = sessionManager->LoginUser(sUsername, sPassword,
-                                                        client);
-
-    if (!session.IsValid())
-    {
-        LOG(VB_GENERAL, LOG_WARNING, "Authorization attempt with invalid password");
-        return false;
-    }
-
-    LOG(VB_HTTP, LOG_NOTICE, "Valid Authorization received");
-
-    if (IsEncrypted()) // Only set a session cookie for encrypted connections, not safe otherwise
-        SetCookie("sessionToken", session.GetSessionToken(),
-                    session.GetSessionExpires(), true);
-
-    m_userSession = session;
-
-    return false;
-}
-
-/////////////////////////////////////////////////////////////////////////////
-//
-/////////////////////////////////////////////////////////////////////////////
-
-bool HTTPRequest::DigestAuthentication()
-{
-    LOG(VB_HTTP, LOG_NOTICE, "Attempting HTTP Digest Authentication");
-    QString realm = "MythTV"; // TODO Check which realm applies for the request path
-
-    QString authMethod = GetLastHeader( "authorization" ).section(' ', 0, 0).toLower();
-
-    if (authMethod != "digest")
-    {
-        LOG(VB_GENERAL, LOG_WARNING, "Invalid method in Authorization header");
-        return false;
-    }
-
-    QString parameterStr = GetLastHeader( "authorization" ).section(' ', 1);
-
-    QMap<QString, QString> paramMap;
-    QStringList paramList = parameterStr.split(',');
-    QStringList::iterator it;
-    for (it = paramList.begin(); it != paramList.end(); ++it)
-    {
-        QString key = (*it).section('=', 0, 0).toLower().trimmed();
-        // Since the value may contain '=' return everything after first occurence
-        QString value = (*it).section('=', 1).trimmed();
-        // Remove any quotes surrounding the value
-        value.remove("\"");
-        paramMap[key] = value;
-    }
-
-    if (paramMap.size() < 8)
-    {
-        LOG(VB_GENERAL, LOG_WARNING, "Invalid number of parameters in Authorization header");
-        return false;
-    }
-
-    if (paramMap["nonce"].isEmpty()    || paramMap["username"].isEmpty() ||
-        paramMap["realm"].isEmpty()    || paramMap["uri"].isEmpty() ||
-        paramMap["response"].isEmpty() || paramMap["qop"].isEmpty() ||
-        paramMap["cnonce"].isEmpty()   || paramMap["nc"].isEmpty())
-    {
-        LOG(VB_GENERAL, LOG_WARNING, "Missing required parameters in Authorization header");
-        return false;
-    }
-
-    if (paramMap["username"] == "nouser") // Special logout username
-        return false;
-
-    if (paramMap["uri"] != m_sOriginalUrl)
-    {
-        LOG(VB_GENERAL, LOG_WARNING, "Authorization URI doesn't match the "
-                                     "request URI");
-        m_nResponseStatus = 400; // Bad Request
-        return false;
-    }
-
-    if (paramMap["realm"] != realm)
-    {
-        LOG(VB_GENERAL, LOG_WARNING, "Authorization realm doesn't match the "
-                                  "realm of the requested content");
-        return false;
-    }
-
-    QByteArray nonce = paramMap["nonce"].toLatin1();
-    if (nonce.length() < 20)
-    {
-        LOG(VB_GENERAL, LOG_WARNING, "Authorization nonce is too short");
-        return false;
-    }
-
-    QString  nonceTimeStampStr = nonce.left(20); // ISO 8601 fixed length
-    if (nonce != CalculateDigestNonce(nonceTimeStampStr))
-    {
-        LOG(VB_GENERAL, LOG_WARNING, "Authorization nonce doesn't match reference");
-        LOG(VB_HTTP, LOG_DEBUG, QString("%1  vs  %2").arg(QString(nonce),
-                                                          CalculateDigestNonce(nonceTimeStampStr)));
-        return false;
-    }
-
-    constexpr std::chrono::seconds AUTH_TIMEOUT { 2min }; // 2 Minute timeout to login, to reduce replay attack window
-    QDateTime nonceTimeStamp = MythDate::fromString(nonceTimeStampStr);
-    if (!nonceTimeStamp.isValid())
-    {
-        LOG(VB_GENERAL, LOG_WARNING, "Authorization nonce timestamp is invalid.");
-        LOG(VB_HTTP, LOG_DEBUG, QString("Timestamp was '%1'").arg(nonceTimeStampStr));
-        return false;
-    }
-
-    if (MythDate::secsInPast(nonceTimeStamp) > AUTH_TIMEOUT)
-    {
-        LOG(VB_HTTP, LOG_NOTICE, "Authorization nonce timestamp is invalid or too old.");
-        // Tell the client that the submitted nonce has expired at which
-        // point they may wish to try again with a fresh nonce instead of
-        // telling the user that their credentials were invalid
-        SetResponseHeader("WWW-Authenticate", GetAuthenticationHeader(true), true);
-        return false;
-    }
-
-    MythSessionManager *sessionManager = gCoreContext->GetSessionManager();
-    if (!MythSessionManager::IsValidUser(paramMap["username"]))
-    {
-        LOG(VB_GENERAL, LOG_WARNING, "Authorization attempt with invalid username");
-        return false;
-    }
-
-    if (paramMap["response"].length() != 32)
-    {
-        LOG(VB_GENERAL, LOG_WARNING, "Authorization response field is invalid length");
-        return false;
-    }
-
-    // If you're still reading this, well done, not far to go now
-
-    QByteArray a1 = MythSessionManager::GetPasswordDigest(paramMap["username"]).toLatin1();
-    //QByteArray a1 = "bcd911b2ecb15ffbd6d8e6e744d60cf6";
-    QString methodDigest = QString("%1:%2").arg(GetRequestType(), paramMap["uri"]);
-    QByteArray a2 = QCryptographicHash::hash(methodDigest.toLatin1(),
-                                          QCryptographicHash::Md5).toHex();
-
-    QString responseDigest = QString("%1:%2:%3:%4:%5:%6").arg(a1,
-                                                              paramMap["nonce"],
-                                                              paramMap["nc"],
-                                                              paramMap["cnonce"],
-                                                              paramMap["qop"],
-                                                              a2);
-    QByteArray kd = QCryptographicHash::hash(responseDigest.toLatin1(),
-                                             QCryptographicHash::Md5).toHex();
-
-    if (paramMap["response"].toLatin1() == kd)
-    {
-        LOG(VB_HTTP, LOG_NOTICE, "Valid Authorization received");
-        QString client = QString("WebFrontend_%1").arg(GetPeerAddress());
-        MythUserSession session = sessionManager->LoginUser(paramMap["username"],
-                                                            a1,
-                                                            client);
-        if (!session.IsValid())
-        {
-            LOG(VB_GENERAL, LOG_ERR, "Valid Authorization received, but we "
-                                     "failed to create a valid session");
-            return false;
-        }
-
-        if (IsEncrypted()) // Only set a session cookie for encrypted connections, not safe otherwise
-            SetCookie("sessionToken", session.GetSessionToken(),
-                      session.GetSessionExpires(), true);
-
-        m_userSession = session;
-
-        return true;
-    }
-
-    LOG(VB_GENERAL, LOG_WARNING, "Authorization attempt with invalid password digest");
-    LOG(VB_HTTP, LOG_DEBUG, QString("Received hash was '%1', calculated hash was '%2'")
-                            .arg(paramMap["response"], QString(kd)));
-
-    return false;
-}
-
-/////////////////////////////////////////////////////////////////////////////
-//
-/////////////////////////////////////////////////////////////////////////////
-
-bool HTTPRequest::Authenticated()
-{
-    // Check if the existing user has permission to access this resource
-    if (m_userSession.IsValid()) //m_userSession.CheckPermission())
-        return true;
-
-    QStringList oList = GetLastHeader( "authorization" ).split( ' ' );
-
-    if (oList.count() < 2)
-        return false;
-
-    if (oList[0].compare( "basic", Qt::CaseInsensitive ) == 0)
-        return BasicAuthentication();
-    if (oList[0].compare( "digest", Qt::CaseInsensitive ) == 0)
-        return DigestAuthentication();
-
-    return false;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2329,7 +2092,7 @@ QString BufferedSocketDeviceRequest::ReadLine( std::chrono::milliseconds msecs )
             sLine = m_pSocket->readLine();
     }
 
-    return( sLine );
+    return sLine;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2381,7 +2144,7 @@ qint64 BufferedSocketDeviceRequest::WriteBlock(const char *pData, qint64 nLen)
         m_pSocket->waitForBytesWritten();
     }
 
-    return( bytesWritten );
+    return bytesWritten;
 }
 
 /////////////////////////////////////////////////////////////////////////////

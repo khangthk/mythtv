@@ -3,13 +3,13 @@
 */
 
 // C++
-#include <unistd.h>
+#include <thread>
 
 // qt
 #include <QTimer>
 
 //MythTV
-#include <libmyth/mythcontext.h>
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythdate.h>
 #include <libmythbase/mythlogging.h>
 #include <libmythui/mythdialogbox.h>
@@ -67,7 +67,7 @@ bool ZMClient::connectToHost(const QString &lhostname, unsigned int lport)
 
     m_bConnected = false;
     int count = 0;
-    do
+    while (count < 2 && !m_bConnected)
     {
         ++count;
 
@@ -93,9 +93,8 @@ bool ZMClient::connectToHost(const QString &lhostname, unsigned int lport)
             m_bConnected = true;
         }
 
-        usleep(999999);
-
-    } while (count < 2 && !m_bConnected);
+        std::this_thread::sleep_for(1s);
+    }
 
     if (!m_bConnected)
     {
@@ -650,7 +649,12 @@ void ZMClient::getEventFrame(Event *event, int frameNo, MythImage **image)
     strList << QString::number(event->monitorID());
     strList << QString::number(event->eventID());
     strList << QString::number(frameNo);
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     strList << event->startTime(Qt::LocalTime).toString("yy/MM/dd/hh/mm/ss");
+#else
+    static const QTimeZone localtime(QTimeZone::LocalTime);
+    strList << event->startTime(localtime).toString("yy/MM/dd/hh/mm/ss");
+#endif
     if (!sendReceiveStringList(strList))
         return;
 
@@ -695,7 +699,12 @@ void ZMClient::getAnalyseFrame(Event *event, int frameNo, QImage &image)
     strList << QString::number(event->monitorID());
     strList << QString::number(event->eventID());
     strList << QString::number(frameNo);
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     strList << event->startTime(Qt::LocalTime).toString("yy/MM/dd/hh/mm/ss");
+#else
+    static const QTimeZone localtime(QTimeZone::LocalTime);
+    strList << event->startTime(localtime).toString("yy/MM/dd/hh/mm/ss");
+#endif
     if (!sendReceiveStringList(strList))
     {
         image = QImage();
@@ -996,3 +1005,5 @@ void ZMClient::showMiniPlayer(int monitorID) const
     if (miniPlayer->Create())
         popupStack->AddScreen(miniPlayer);
 }
+
+#include "moc_zmclient.cpp"

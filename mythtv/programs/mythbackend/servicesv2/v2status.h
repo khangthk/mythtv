@@ -20,11 +20,12 @@
 #include "libmythbase/http/mythhttpdata.h"
 #include "libmythbase/http/mythhttpservice.h"
 #include "libmythbase/http/mythmimedatabase.h"
-#include "libmythbase/programinfo.h"
+#include "libmythtv/programinfo.h"
 
 // MythBackend
 #include "preformat.h"
 #include "v2backendStatus.h"
+#include "v2recStats.h"
 
 class Scheduler;
 class AutoExpire;
@@ -54,6 +55,8 @@ class V2Status : public MythHTTPService
         Preformat*         GetStatus ();  // XML
         Preformat*         xml ();        // XML
         V2BackendStatus*   GetBackendStatus(); // Standardized version of GetStatus
+        static V2RecStats* GetRecStats();
+        static QStringList GetBackupsList    ( );
 
     private:
 

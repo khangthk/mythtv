@@ -1,16 +1,67 @@
 #include <algorithm>
+#include <cerrno>
+#include <thread>
+
+#include <fcntl.h>
+#include <sys/types.h>
+
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
+#include <QString>
 
 #include "libmythbase/compat.h"
 #include "libmythbase/mthread.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
+#ifndef __cpp_size_t_suffix
 #include "libmythbase/sizetliteral.h"
+#endif
 
 #include "DeviceReadBuffer.h"
 #include "mpeg/tspacket.h"
 
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
 #include <sys/poll.h>
+#endif
+
+#ifdef Q_OS_WINDOWS
+void DeviceReadBuffer::setup_pipe(pipe_fd_array&, pipe_flag_array&) {}
+#else
+void DeviceReadBuffer::setup_pipe(pipe_fd_array& mypipe, pipe_flag_array& myflags)
+{
+    int pipe_ret = pipe(mypipe.data());
+    if (pipe_ret < 0)
+    {
+        LOG(VB_GENERAL, LOG_ERR, "Failed to open pipes" + ENO);
+        mypipe.fill(-1);
+    }
+    else
+    {
+        errno = 0;
+        long flags = fcntl(mypipe[0], F_GETFL);
+        if (0 == errno)
+        {
+            int ret = fcntl(mypipe[0], F_SETFL, flags|O_NONBLOCK);
+            if (ret < 0)
+                LOG(VB_GENERAL, LOG_ERR,
+                    QString("Set pipe flags error") + ENO);
+        }
+        else
+        {
+            LOG(VB_GENERAL, LOG_ERR, QString("Get pipe flags error") + ENO);
+        }
+
+        for (uint i = 0; i < 2; i++)
+        {
+            errno = 0;
+            flags = fcntl(mypipe[i], F_GETFL);
+            if (0 == errno)
+                myflags[i] = flags;
+        }
+    }
+}
 #endif
 
 /// Set this to 1 to report on statistics
@@ -25,8 +76,8 @@ DeviceReadBuffer::DeviceReadBuffer(
       m_usingPoll(use_poll),
       m_pollTimeoutIsError(error_exit_on_poll_timeout)
 {
-#ifdef USING_MINGW
-#warning mingw DeviceReadBuffer::Poll
+#ifdef Q_OS_WINDOWS
+#   warning mingw DeviceReadBuffer::Poll is not implemented
     if (m_usingPoll)
     {
         LOG(VB_GENERAL, LOG_WARNING, LOC +
@@ -64,13 +115,18 @@ bool DeviceReadBuffer::Setup(const QString &streamName, int streamfd,
     m_requestPause  = false;
     m_paused        = false;
 
-    m_readQuanta   = (readQuanta) ? readQuanta : m_readQuanta;
+    m_readQuanta   = readQuanta ? readQuanta : m_readQuanta;
     m_devBufferCount = deviceBufferCount;
+#ifdef __cpp_size_t_suffix
+    m_size          = gCoreContext->GetNumSetting(
+        "HDRingbufferSize", static_cast<int>(50 * m_readQuanta)) * 1024UZ;
+#else
     m_size          = gCoreContext->GetNumSetting(
         "HDRingbufferSize", static_cast<int>(50 * m_readQuanta)) * 1024_UZ;
+#endif
     m_used          = 0;
     m_devReadSize = m_readQuanta * (m_usingPoll ? 256 : 48);
-    m_devReadSize = (deviceBufferSize) ?
+    m_devReadSize = deviceBufferSize ?
         std::min(m_devReadSize, (size_t)deviceBufferSize) : m_devReadSize;
     m_readThreshold = m_readQuanta * 128;
 
@@ -180,7 +236,7 @@ void DeviceReadBuffer::SetPaused(bool val)
 // The WakePoll code is copied from MythSocketThread::WakeReadyReadThread()
 void DeviceReadBuffer::WakePoll(void) const
 {
-    std::string buf(1,'\0');
+    std::array<char,1> buf {};
     ssize_t wret = 0;
     while (isRunning() && (wret <= 0) && (m_wakePipe[1] >= 0))
     {
@@ -324,7 +380,7 @@ void DeviceReadBuffer::run(void)
 
         if (!IsOpen())
         {
-            usleep(5ms);
+            std::this_thread::sleep_for(5ms);
             continue;
         }
 
@@ -370,7 +426,7 @@ void DeviceReadBuffer::run(void)
 
         // Slow down reading if not under load
         if (errcnt == 0 && total < throttle)
-            usleep(1ms);
+            std::this_thread::sleep_for(1ms);
     }
 
     ClosePipes();
@@ -395,7 +451,7 @@ bool DeviceReadBuffer::HandlePausing(void)
         if (m_readerCB)
             m_readerCB->ReaderPaused(m_streamFd);
 
-        usleep(5ms);
+        std::this_thread::sleep_for(5ms);
         return false;
     }
     if (IsPaused())
@@ -408,12 +464,8 @@ bool DeviceReadBuffer::HandlePausing(void)
 
 bool DeviceReadBuffer::Poll(void) const
 {
-#ifdef _WIN32
-# ifdef _MSC_VER
-#  pragma message( "mingw DeviceReadBuffer::Poll" )
-# else
+#ifdef Q_OS_WINDOWS
 #  warning mingw DeviceReadBuffer::Poll
-# endif
     LOG(VB_GENERAL, LOG_ERR, LOC +
         "mingw DeviceReadBuffer::Poll is not implemented");
     return false;
@@ -487,7 +539,7 @@ bool DeviceReadBuffer::Poll(void) const
                 if ((EAGAIN == errno) || (EINTR  == errno))
                     continue; // errors that tell you to try again
 
-                usleep(2.5ms);
+                std::this_thread::sleep_for(2500us);
             }
             else //  ret == 0
             {
@@ -529,7 +581,7 @@ bool DeviceReadBuffer::Poll(void) const
     }
 
     return retval;
-#endif //!_WIN32
+#endif //!Q_OS_WINDOWS
 }
 
 bool DeviceReadBuffer::CheckForErrors(
@@ -548,12 +600,8 @@ bool DeviceReadBuffer::CheckForErrors(
         return false;
     }
 
-#ifdef _WIN32
-# ifdef _MSC_VER
-#  pragma message( "mingw DeviceReadBuffer::CheckForErrors" )
-# else
+#ifdef Q_OS_WINDOWS
 #  warning mingw DeviceReadBuffer::CheckForErrors
-# endif
     LOG(VB_GENERAL, LOG_ERR, LOC +
         "mingw DeviceReadBuffer::CheckForErrors is not implemented");
     return false;
@@ -564,7 +612,7 @@ bool DeviceReadBuffer::CheckForErrors(
             return false;
         if (EAGAIN == errno)
         {
-            usleep(2.5ms);
+            std::this_thread::sleep_for(2500us);
             return false;
         }
         if (EOVERFLOW == errno)
@@ -584,7 +632,7 @@ bool DeviceReadBuffer::CheckForErrors(
             return false;
         }
 
-        usleep(500ms);
+        std::this_thread::sleep_for(500ms);
         return false;
     }
     if (len == 0)
@@ -600,7 +648,7 @@ bool DeviceReadBuffer::CheckForErrors(
 
             return false;
         }
-        usleep(500ms);
+        std::this_thread::sleep_for(500ms);
         return false;
     }
     return true;
@@ -666,7 +714,7 @@ uint DeviceReadBuffer::WaitForUnused(uint needed) const
             unused = GetUnused();
             if (IsPauseRequested() || !IsOpen() || !m_doRun)
                 return 0;
-            usleep(5ms);
+            std::this_thread::sleep_for(5ms);
         }
         if (IsPauseRequested() || !IsOpen() || !m_doRun)
             return 0;

@@ -5,7 +5,6 @@
 #include <QRect>
 
 // MythTV
-#include "libmyth/mythaverror.h"
 #include "libmythbase/mythchrono.h"
 #include "libmythtv/mythtvexp.h"
 
@@ -73,7 +72,7 @@ enum MythDeintType : std::uint8_t
     DEINT_CPU    = 0x0010,
     DEINT_SHADER = 0x0020,
     DEINT_DRIVER = 0x0040,
-    DEINT_ALL    = 0x0077
+    DEINT_ALL    = 0x0077  // clazy:exclude=unexpected-flag-enumerator-value
 };
 
 inline MythDeintType operator| (MythDeintType a, MythDeintType b) { return static_cast<MythDeintType>(static_cast<int>(a) | static_cast<int>(b)); }
@@ -131,7 +130,7 @@ class MTV_PUBLIC MythVideoFrame
     std::chrono::milliseconds m_timecode          { 0ms };
     std::chrono::milliseconds m_displayTimecode   { 0ms };
     std::array<uint8_t*,4> m_priv      { nullptr };
-    int            m_interlaced        { 0    };
+    bool           m_interlaced        { false };
     bool           m_topFieldFirst     { true };
     bool           m_interlacedReverse { false };
     bool           m_newGOP            { false };

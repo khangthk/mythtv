@@ -1,5 +1,7 @@
 // MythTV
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythcorecontext.h"
+#include "libmythbase/mythlogging.h"
 #include "mythmainwindow.h"
 #include "platforms/mythdrmdevice.h"
 #include "platforms/mythdisplaydrm.h"
@@ -8,7 +10,7 @@
 
 void MythDisplayDRM::MainWindowReady()
 {
-#ifdef USING_QTPRIVATEHEADERS
+#if CONFIG_QTPRIVATEHEADERS
     if (m_device)
         m_device->MainWindowReady();
 #endif
@@ -16,13 +18,13 @@ void MythDisplayDRM::MainWindowReady()
 
 bool MythDisplayDRM::DirectRenderingAvailable()
 {
-#ifdef USING_QTPRIVATEHEADERS
+#if CONFIG_QTPRIVATEHEADERS
     if (!HasMythMainWindow())
         return false;
 
     if (auto *mainwindow = GetMythMainWindow(); mainwindow)
     {
-        if (auto *drmdisplay = dynamic_cast<MythDisplayDRM*>(mainwindow->GetDisplay()); drmdisplay)
+        if (auto *drmdisplay = qobject_cast<MythDisplayDRM*>(mainwindow->GetDisplay()); drmdisplay)
         {
             if (auto drm = drmdisplay->GetDevice(); drm && drm->Atomic() && drm->Authenticated())
             {
@@ -39,7 +41,7 @@ MythDisplayDRM::MythDisplayDRM([[maybe_unused]] MythMainWindow* MainWindow)
 {
     m_device = MythDRMDevice::Create(m_screen);
     Initialise();
-#ifdef USING_QTPRIVATEHEADERS
+#if CONFIG_QTPRIVATEHEADERS
     if (MainWindow && m_device && m_device->GetVideoPlane())
         connect(MainWindow, &MythMainWindow::SignalWindowReady, this, &MythDisplayDRM::MainWindowReady);
 #endif
@@ -77,7 +79,7 @@ bool MythDisplayDRM::VideoModesAvailable()
 
 bool MythDisplayDRM::IsPlanar()
 {
-#ifdef USING_QTPRIVATEHEADERS
+#if CONFIG_QTPRIVATEHEADERS
     return m_device && m_device->Authenticated() && m_device->Atomic() &&
            m_device->GetVideoPlane() && m_device->GetVideoPlane()->m_id;
 #else
@@ -150,7 +152,7 @@ const MythDisplayModes& MythDisplayDRM::GetVideoModes()
 
         QSize resolution(width, height);
         auto key = MythDisplayMode::CalcKey(resolution, 0.0);
-        if (screenmap.find(key) == screenmap.end())
+        if (!screenmap.contains(key))
             screenmap[key] = MythDisplayMode(resolution, physicalsize, -1.0, rate);
         else
             screenmap[key].AddRefreshRate(rate);
@@ -189,3 +191,5 @@ bool MythDisplayDRM::SwitchToVideoMode(QSize Size, double DesiredRate)
 
     return m_device->SwitchMode(m_modeMap.value(mode));
 }
+
+#include "moc_mythdisplaydrm.cpp"

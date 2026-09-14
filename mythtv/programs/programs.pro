@@ -2,6 +2,12 @@ include ( ../settings.pro )
 
 TEMPLATE = subdirs
 
+# unit tests mythcommflag
+mythcommflag-test.depends = sub-mythcommflag
+mythcommflag-test.target = buildtestmythcommflag
+mythcommflag-test.commands = cd mythcommflag/test && $(QMAKE) && $(MAKE)
+unix:QMAKE_EXTRA_TARGETS += mythcommflag-test
+
 # Directories
 using_frontend {
     SUBDIRS += mythavtest mythfrontend mythcommflag
@@ -10,7 +16,7 @@ using_frontend {
     !win32-*: SUBDIRS += mythwelcome
     SUBDIRS += mythpreviewgen mythmediaserver mythccextractor
     SUBDIRS += mythscreenwizard
-    !mingw:!win32-msvc*: SUBDIRS += mythtranscode/external/replex
+    !mingw: SUBDIRS += mythtranscode/external/replex
 
     # unit tests mythfrontend
     mythfrontend-test.depends = sub-mythfrontend
@@ -23,9 +29,9 @@ using_backend {
     SUBDIRS += mythbackend mythfilldatabase mythtv-setup 
     SUBDIRS += mythmetadatalookup
 
-    !win32-msvc*:SUBDIRS += scripts
-    !mingw:!win32-msvc*: SUBDIRS += mythfilerecorder
-    !mingw:!win32-msvc*: SUBDIRS += mythexternrecorder
+    SUBDIRS += scripts
+    !mingw: SUBDIRS += mythfilerecorder
+    !mingw: SUBDIRS += mythexternrecorder
 
     # unit tests mythbackend
     mythbackend-test.depends = sub-mythbackend
@@ -36,7 +42,7 @@ using_backend {
 
 using_mythtranscode: SUBDIRS += mythtranscode
 
-unittest.depends = mythfrontend-test mythbackend-test
+unittest.depends = mythfrontend-test mythbackend-test mythcommflag-test
 unittest.target = test
 unittest.commands = scripts/unittests.sh
 unix:QMAKE_EXTRA_TARGETS += unittest

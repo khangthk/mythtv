@@ -5,12 +5,17 @@
 #include <QOpenGLContext>
 
 // MythTV
+#include "libmythbase/mythconfig.h"
 #include "libmythui/mythuiexp.h"
 
 using MYTH_EGLIMAGETARGET  = void  (*)(GLenum, void*);
 using MYTH_EGLCREATEIMAGE  = void* (*)(void*, void*, unsigned int, void*, const int32_t *);
 using MYTH_EGLDESTROYIMAGE = void  (*)(void*, void*);
+#ifdef Q_OS_DARWIN
+using MYTH_EGLGETPLATFORMDISPLAY = void* (*)(GLenum, int, const intptr_t*);
+#else
 using MYTH_EGLGETPLATFORMDISPLAY = void* (*)(GLenum, void*, const intptr_t*);
+#endif
 
 class MythRenderOpenGL;
 
@@ -21,7 +26,7 @@ class MUI_PUBLIC MythEGL
    ~MythEGL() = default;
 
     bool  IsEGL(void);
-    bool  HasEGLExtension(QString Extension);
+    bool  HasEGLExtension(const QString& Extension);
     void* GetEGLDisplay(void);
     static qint32 GetEGLError(void);
     void  eglImageTargetTexture2DOES (GLenum Target, void* Image);
@@ -34,7 +39,9 @@ class MUI_PUBLIC MythEGL
     Q_DISABLE_COPY(MythEGL)
     bool  InitEGL(void);
 
+#if CONFIG_EGL
     MythRenderOpenGL    *m_context                    { nullptr };
+#endif
     void*                m_eglDisplay                 { nullptr };
     MYTH_EGLIMAGETARGET  m_eglImageTargetTexture2DOES { nullptr };
     MYTH_EGLCREATEIMAGE  m_eglCreateImageKHR          { nullptr };

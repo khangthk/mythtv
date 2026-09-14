@@ -1,7 +1,13 @@
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
+
 // Standard UNIX C headers
+#include <algorithm>
 #include <unistd.h>
 #include <fcntl.h>
-#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(_WIN32)
+#if defined(Q_OS_BSD4) || defined(Q_OS_WINDOWS)
 #include <sys/types.h>
 #else
 #include <sys/sysmacros.h>
@@ -15,18 +21,22 @@
 #include <QJsonObject>
 
 // MythTV
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/compat.h"
+#include "libmythbase/mythcorecontext.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythbase/mythscheduler.h"
-#include "libmythbase/programinfo.h"
-#include "libmythbase/programtypes.h"
-#include "libmythbase/recordingtypes.h"
+// #include "libmythbase/mythsorthelper.h"
 #include "libmythmetadata/videoutils.h"
 #include "libmythtv/cardutil.h"
 #include "libmythtv/channelgroup.h"
 #include "libmythtv/channelinfo.h"
 #include "libmythtv/channelutil.h"
+#include "libmythtv/programinfo.h"
+#include "libmythtv/programtypes.h"
 #include "libmythtv/recorders/firewiredevice.h"
 #include "libmythtv/recordinginfo.h"
+#include "libmythtv/recordingtypes.h"
 #include "libmythtv/tv_rec.h"
 
 // MythBackend
@@ -80,13 +90,7 @@ void V2FillProgramInfo( V2Program *pProgram,
 
         if (pInfo->GetOriginalAirDate().isValid())
             pProgram->setAirdate( pInfo->GetOriginalAirDate() );
-        else if (pInfo->GetYearOfInitialRelease() > 0)
-        {
-            QDate year;
-            year.setDate(pInfo->GetYearOfInitialRelease(), 1, 1);
-            pProgram->setAirdate( year );
-        }
-
+        pProgram->setReleaseYear( pInfo->GetYearOfInitialRelease());
         pProgram->setDescription( pInfo->GetDescription() );
         pProgram->setInetref    ( pInfo->GetInetRef()     );
         pProgram->setSeason     ( pInfo->GetSeason()      );
@@ -125,7 +129,8 @@ void V2FillProgramInfo( V2Program *pProgram,
 
         pRecording->setRecordedId ( pRecInfo.GetRecordingID()     );
         pRecording->setStatus  ( pRecInfo.GetRecordingStatus()    );
-        pRecording->setStatusName  ( pRecInfo.GetRecordingStatus()    );
+        pRecording->setStatusName  (  RecStatus::toString( pRecInfo.GetRecordingStatus() )   );
+        pRecording->setRecTypeStatus  ( pRecInfo.GetRecTypeStatus(true)    );
         pRecording->setPriority( pRecInfo.GetRecordingPriority()  );
         pRecording->setStartTs ( pRecInfo.GetRecordingStartTime() );
         pRecording->setEndTs   ( pRecInfo.GetRecordingEndTime()   );
@@ -277,10 +282,18 @@ void V2FillRecRuleInfo( V2RecRule  *pRecRule,
     pRecRule->setSeason         (  pRule->m_season                 );
     pRecRule->setEpisode        (  pRule->m_episode                );
     pRecRule->setCategory       (  pRule->m_category               );
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     pRecRule->setStartTime      (  QDateTime(pRule->m_startdate,
                                              pRule->m_starttime, Qt::UTC));
     pRecRule->setEndTime        (  QDateTime(pRule->m_enddate,
                                              pRule->m_endtime, Qt::UTC));
+#else
+    static const QTimeZone utc(QTimeZone::UTC);
+    pRecRule->setStartTime      (  QDateTime(pRule->m_startdate,
+                                             pRule->m_starttime, utc));
+    pRecRule->setEndTime        (  QDateTime(pRule->m_enddate,
+                                             pRule->m_endtime, utc));
+#endif
     pRecRule->setSeriesId       (  pRule->m_seriesid               );
     pRecRule->setProgramId      (  pRule->m_programid              );
     pRecRule->setInetref        (  pRule->m_inetref                );
@@ -403,12 +416,22 @@ void V2FillVideoMetadataInfo (
     pVideoMetadataInfo->setInetref(pMetadata->GetInetRef());
     pVideoMetadataInfo->setCollectionref(pMetadata->GetCollectionRef());
     pVideoMetadataInfo->setHomePage(pMetadata->GetHomepage());
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     pVideoMetadataInfo->setReleaseDate(
         QDateTime(pMetadata->GetReleaseDate(),
                   QTime(0,0),Qt::LocalTime).toUTC());
     pVideoMetadataInfo->setAddDate(
         QDateTime(pMetadata->GetInsertdate(),
                   QTime(0,0),Qt::LocalTime).toUTC());
+#else
+    static const QTimeZone localtime(QTimeZone::LocalTime);
+    pVideoMetadataInfo->setReleaseDate(
+        QDateTime(pMetadata->GetReleaseDate(),
+                  QTime(0,0),localtime).toUTC());
+    pVideoMetadataInfo->setAddDate(
+        QDateTime(pMetadata->GetInsertdate(),
+                  QTime(0,0),localtime).toUTC());
+#endif
     pVideoMetadataInfo->setUserRating(pMetadata->GetUserRating());
     pVideoMetadataInfo->setChildID(pMetadata->GetChildID());
     pVideoMetadataInfo->setLength(pMetadata->GetLength().count());
@@ -429,6 +452,7 @@ void V2FillVideoMetadataInfo (
     pVideoMetadataInfo->setBanner(pMetadata->GetBanner());
     pVideoMetadataInfo->setScreenshot(pMetadata->GetScreenshot());
     pVideoMetadataInfo->setTrailer(pMetadata->GetTrailer());
+    pVideoMetadataInfo->setCategory(pMetadata->GetCategoryID());
 
     if (bDetails)
     {
@@ -616,13 +640,25 @@ void V2FillCastMemberList(V2CastMemberList* pCastMemberList,
 }
 
 
-void V2FillCutList(V2CutList* pCutList, ProgramInfo* rInfo, int marktype)
+void V2FillCutList(V2CutList* pCutList, ProgramInfo* rInfo, int marktype, bool includeFps)
 {
     frm_dir_map_t markMap;
     frm_dir_map_t::const_iterator it;
 
     if (rInfo && rInfo->GetChanID())
     {
+        if (includeFps)
+        {
+            rInfo->QueryMarkupMap(markMap, MARK_VIDEO_RATE);
+            it = markMap.cbegin();
+            if (it != markMap.cend())
+            {
+                V2Cutting *pCutting = pCutList->AddNewCutting();
+                pCutting->setMark(*it);
+                pCutting->setOffset(it.key());
+            }
+            markMap.clear();
+        }
         rInfo->QueryCutList(markMap);
 
         for (it = markMap.cbegin(); it != markMap.cend(); ++it)
@@ -658,13 +694,25 @@ void V2FillCutList(V2CutList* pCutList, ProgramInfo* rInfo, int marktype)
     }
 }
 
-void V2FillCommBreak(V2CutList* pCutList, ProgramInfo* rInfo, int marktype)
+void V2FillCommBreak(V2CutList* pCutList, ProgramInfo* rInfo, int marktype, bool includeFps)
 {
     frm_dir_map_t markMap;
     frm_dir_map_t::const_iterator it;
 
     if (rInfo)
     {
+        if (includeFps)
+        {
+            rInfo->QueryMarkupMap(markMap, MARK_VIDEO_RATE);
+            it = markMap.cbegin();
+            if (it != markMap.cend())
+            {
+                V2Cutting *pCutting = pCutList->AddNewCutting();
+                pCutting->setMark(*it);
+                pCutting->setOffset(it.key());
+            }
+            markMap.clear();
+        }
         rInfo->QueryCommBreakList(markMap);
 
         for (it = markMap.cbegin(); it != markMap.cend(); ++it)
@@ -791,7 +839,8 @@ int FillUpcomingList(QVariantList &list, QObject* parent,
                                         bool bShowAll,
                                         int  nRecordId,
                                         int  nRecStatus,
-                                        const QString  &Sort )
+                                        const QString &Sort,
+                                        const QString &RecGroup )
 {
     RecordingList  recordingList; // Auto-delete deque
     RecList  tmpList; // Standard deque, objects must be deleted
@@ -823,6 +872,16 @@ int FillUpcomingList(QVariantList &list, QObject* parent,
             continue;
         }
 
+        if (!RecGroup.isEmpty())
+        {
+            if ( (*it)-> GetRecordingGroup() != RecGroup )
+            {
+                delete *it;
+                *it = nullptr;
+                continue;
+            }
+        }
+
         if (!bShowAll && ((((*it)->GetRecordingStatus() >= RecStatus::Pending) &&
                            ((*it)->GetRecordingStatus() <= RecStatus::WillRecord)) ||
                           ((*it)->GetRecordingStatus() == RecStatus::Offline) ||
@@ -848,8 +907,14 @@ int FillUpcomingList(QVariantList &list, QObject* parent,
         sortType = 10;
     else if (Sort.startsWith("title", Qt::CaseInsensitive))
         sortType = 20;
-    if (Sort.endsWith("desc"), Qt::CaseInsensitive)
+    else if (Sort.startsWith("length", Qt::CaseInsensitive))
+        sortType = 30;
+    else if (Sort.startsWith("status", Qt::CaseInsensitive))
+        sortType = 40;
+    if (Sort.endsWith("desc", Qt::CaseInsensitive))
         sortType += 1;
+
+    static QRegularExpression regex("[_-]");
 
     auto comp = [sortType](const RecordingInfo *First, const RecordingInfo *Second)
     {
@@ -860,20 +925,42 @@ int FillUpcomingList(QVariantList &list, QObject* parent,
             case 1:
                 return First->GetScheduledStartTime() > Second->GetScheduledStartTime();
             case 10:
-                return First->GetChanNum().replace('-','.').toDouble() < Second->GetChanNum().replace('-','.').toDouble();
+                return First->GetChanNum().replace(regex,".").toDouble()
+                     < Second->GetChanNum().replace(regex,".").toDouble();
             case 11:
-                return First->GetChanNum().replace('-','.').toDouble() > Second->GetChanNum().replace('-','.').toDouble();
+                return First->GetChanNum().replace(regex,".").toDouble()
+                     > Second->GetChanNum().replace(regex,".").toDouble();
             case 20:
-                return QString::compare(First->GetTitle(), Second->GetTitle(), Qt::CaseInsensitive) < 0 ;
+                return QString::compare(First->GetSortTitle(), Second->GetSortTitle(), Qt::CaseInsensitive) < 0 ;
             case 21:
-                return QString::compare(First->GetTitle(), Second->GetTitle(), Qt::CaseInsensitive) > 0 ;
+                return QString::compare(First->GetSortTitle(), Second->GetSortTitle(), Qt::CaseInsensitive) > 0 ;
+            case 30:
+            {
+                qint64 time1 = First->GetScheduledStartTime().msecsTo( First->GetScheduledEndTime());
+                qint64 time2 = Second->GetScheduledStartTime().msecsTo( Second->GetScheduledEndTime());
+                return time1 < time2 ;
+            }
+            case 31:
+            {
+                qint64 time1 = First->GetScheduledStartTime().msecsTo( First->GetScheduledEndTime());
+                qint64 time2 = Second->GetScheduledStartTime().msecsTo( Second->GetScheduledEndTime());
+                return time1 > time2 ;
+            }
+            case 40:
+                return QString::compare(RecStatus::toString(First->GetRecordingStatus()),
+                                        RecStatus::toString(Second->GetRecordingStatus()),
+                                        Qt::CaseInsensitive) < 0 ;
+            case 41:
+                return QString::compare(RecStatus::toString(First->GetRecordingStatus()),
+                                        RecStatus::toString(Second->GetRecordingStatus()),
+                                        Qt::CaseInsensitive) > 0 ;
         }
         return false;
     };
 
     // no need to sort when zero because that is the default order from the scheduler
     if (sortType > 0)
-        std::stable_sort(recordingList.begin(), recordingList.end(), comp);
+        std::ranges::stable_sort(recordingList, comp);
 
     // ----------------------------------------------------------------------
     // Build Response
@@ -1042,7 +1129,7 @@ uint fillSelectionsFromDir(const QDir& dir,
                     QStringList inputs;
                     CardUtil::GetDeviceInputNames(filepath, cardType, inputs);
                     pDev->setInputNames(inputs);
-                    inputs = CardUtil::ProbeAudioInputs(filepath);
+                    inputs = CardUtil::ProbeAudioInputs(filepath, cardType);
                     pDev->setAudioDevices(inputs);
                     if (cardType == "HDPVR")
                         pDev->setChannelTimeout ( 15000 );
@@ -1062,7 +1149,7 @@ V2CaptureDeviceList* getFirewireList ([[maybe_unused]] const QString & cardType)
 {
     auto* pList = new V2CaptureDeviceList();
 
-#ifdef USING_FIREWIRE
+#if CONFIG_FIREWIRE
     std::vector<AVCInfo> list = FirewireDevice::GetSTBList();
     for (auto & info : list)
     {
@@ -1076,6 +1163,6 @@ V2CaptureDeviceList* getFirewireList ([[maybe_unused]] const QString & cardType)
         pDev->setSignalTimeout ( 2000 );
         pDev->setChannelTimeout ( 9000 );
     }
-#endif // USING_FIREWIRE
+#endif // CONFIG_FIREWIRE
     return pList;
 }

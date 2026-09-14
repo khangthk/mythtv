@@ -17,8 +17,8 @@
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythevent.h"
 #include "libmythbase/mythlogging.h"
-#include "libmythbase/programinfo.h"
-#include "libmythbase/remoteutil.h"
+#include "libmythtv/programinfo.h"
+#include "libmythtv/programinforemoteutil.h"
 
 // MythFrontend
 #include "programinfocache.h"
@@ -168,6 +168,13 @@ void ProgramInfoCache::Refresh(void)
             if (!it->GetChanID())
                 continue;
 
+            if (m_cache.contains(it->GetRecordingID()))
+            {
+                // An entry using that key already exists in hash.
+                // Free allocated memory for the entry to be replaced.
+                delete m_cache[it->GetRecordingID()];
+            }
+
             m_cache[it->GetRecordingID()] = it;
         }
         delete m_nextCache;
@@ -225,7 +232,7 @@ ProgramInfoCache::UpdateStates ProgramInfoCache::Update(const ProgramInfo &pginf
     }
 
     LOG(VB_GUI, LOG_DEBUG, QString("Pg %1 %2 update state %3")
-        .arg(recordingId).arg(pg.GetTitle()).arg(flags));
+        .arg(recordingId).arg(pg.GetTitle()).arg(int(flags)));
     return flags;
 }
 
@@ -238,6 +245,9 @@ void ProgramInfoCache::UpdateFileSize(uint recordingID, uint64_t filesize,
 {
     Cache::iterator it = m_cache.find(recordingID);
     if (it == m_cache.end())
+        return;
+
+    if ((*it)->GetAvailableStatus() != asAvailable)
         return;
 
     ProgramInfo *pg = *it;
@@ -262,7 +272,7 @@ void ProgramInfoCache::UpdateFileSize(uint recordingID, uint64_t filesize,
     if (flags & PIC_MARK_CHANGED)
         pg->m_previewUpdate = pg->GetBookmarkUpdate();
 
-    QString mesg = QString("UPDATE_UI_ITEM %1 %2").arg(recordingID).arg(flags);
+    QString mesg = QString("UPDATE_UI_ITEM %1 %2").arg(recordingID).arg(int(flags));
     QCoreApplication::postEvent(m_listener, new MythEvent(mesg));
 
     LOG(VB_GUI, LOG_DEBUG, mesg);
@@ -314,12 +324,12 @@ namespace {
 
 void ProgramInfoCache::GetOrdered(std::vector<ProgramInfo*> &list, bool newest_first)
 {
-    std::copy(m_cache.cbegin(), m_cache.cend(), std::back_inserter(list));
+    std::ranges::copy(std::as_const(m_cache), std::back_inserter(list));
 
     if (newest_first)
-        std::sort(list.begin(), list.end(), reversePISort);
+        std::ranges::sort(list, reversePISort);
     else
-        std::sort(list.begin(), list.end(), PISort);
+        std::ranges::sort(list, PISort);
 
 }
 

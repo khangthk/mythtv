@@ -1,6 +1,8 @@
 #ifndef VIDEOVISUALGOOM_H
 #define VIDEOVISUALGOOM_H
 
+#include "libmythbase/mythconfig.h"
+
 #include "videovisual.h"
 
 class MythGLTexture;
@@ -19,7 +21,9 @@ class VideoVisualGoom : public VideoVisual
 
   private:
     unsigned int*  m_buffer    { nullptr };
+#if CONFIG_OPENGL
     MythGLTexture* m_glSurface { nullptr };
+#endif
     bool           m_hd        { false   };
 };
 

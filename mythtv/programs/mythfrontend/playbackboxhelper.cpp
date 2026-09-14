@@ -12,16 +12,15 @@
 
 // MythTV
 #include "libmythbase/filesysteminfo.h"
-#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdirs.h"
 #include "libmythbase/mythevent.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythrandom.h"
-#include "libmythbase/programinfo.h"
-#include "libmythbase/remoteutil.h"
 #include "libmythbase/storagegroup.h"
 #include "libmythtv/metadataimagehelper.h"
 #include "libmythtv/previewgeneratorqueue.h"
+#include "libmythtv/programinfo.h"
+#include "libmythtv/programinforemoteutil.h"
 #include "libmythtv/tvremoteutil.h"
 
 //  MythFrontend
@@ -96,7 +95,9 @@ AvailableStatusType PBHEventHandler::CheckAvailability(const QStringList &slist)
 
     AvailableStatusType availableStatus = asAvailable;
     if (!evinfo.HasPathname() && !evinfo.GetChanID())
+    {
         availableStatus = asFileNotFound;
+    }
     else
     {
         // Note IsFileReadable() implicitly calls GetPlaybackURL
@@ -205,7 +206,8 @@ bool PBHEventHandler::event(QEvent *e)
                 bool ok = RemoteDeleteRecording( recordingID, forceDelete,
                                                  forgetHistory);
 
-                QStringList &res = (ok) ? successes : failures;
+                QStringList &res = ok ? successes : failures;
+                res.reserve(3);
                 for (uint i = 0; i < 3; i++)
                 {
                     res.push_back(list.front());
@@ -236,7 +238,7 @@ bool PBHEventHandler::event(QEvent *e)
 
                 bool ok = RemoteUndeleteRecording(recordingID);
 
-                QStringList &res = (ok) ? successes : failures;
+                QStringList &res = ok ? successes : failures;
 
                 res.push_back(QString::number(recordingID));
                 list.pop_front();
@@ -379,8 +381,8 @@ void PlaybackBoxHelper::DeleteRecording( uint recordingID, bool forceDelete,
 {
     QStringList list;
     list.push_back(QString::number(recordingID));
-    list.push_back((forceDelete)    ? "1" : "0");
-    list.push_back((forgetHistory)  ? "1" : "0");
+    list.push_back(forceDelete   ? "1" : "0");
+    list.push_back(forgetHistory ? "1" : "0");
     DeleteRecordings(list);
 }
 
@@ -400,7 +402,7 @@ void PlaybackBoxHelper::UndeleteRecording(uint recordingID)
 
 void PlaybackBoxHelper::UpdateFreeSpace(void)
 {
-    QList<FileSystemInfo> fsInfos = FileSystemInfo::RemoteGetInfo();
+    FileSystemInfoList fsInfos = FileSystemInfoManager::GetInfoList();
 
     QMutexLocker locker(&m_lock);
     for (const auto& fsInfo : std::as_const(fsInfos))
@@ -469,7 +471,7 @@ QString PlaybackBoxHelper::LocateArtwork(
     QStringList list(inetref);
     list.push_back(QString::number(season));
     list.push_back(QString::number(type));
-    list.push_back((pginfo)?QString::number(pginfo->GetRecordingID()):"");
+    list.push_back(pginfo?QString::number(pginfo->GetRecordingID()):"");
     list.push_back(groupname);
     auto *e = new MythEvent("LOCATE_ARTWORK", list);
     QCoreApplication::postEvent(m_eventHandler, e);

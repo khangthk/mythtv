@@ -150,6 +150,7 @@ SignalMonitorList SignalMonitorValue::Parse(const QStringList& slist)
 {
     SignalMonitorValue smv;
     SignalMonitorList monitor_list;
+    monitor_list.reserve(slist.size());
     for (int i=0; i+1<slist.size(); i+=2)
     {
 #if DEBUG_SIGNAL_MONITOR_VALUE
@@ -157,7 +158,9 @@ SignalMonitorList SignalMonitorValue::Parse(const QStringList& slist)
             "Parse(" + slist[i] + ", (" + slist[i+1] + "))");
 #endif
         if (smv.Set(slist[i], slist[i+1]))
+        {
             monitor_list.push_back(smv);
+        }
         else
         {
             LOG(VB_GENERAL, LOG_ERR,
@@ -176,7 +179,7 @@ SignalMonitorList SignalMonitorValue::Parse(const QStringList& slist)
 bool SignalMonitorValue::AllGood(const SignalMonitorList& slist)
 {
     auto isgood = [](const auto & smv){ return smv.IsGood(); };
-    bool good = std::all_of(slist.cbegin(), slist.cend(), isgood);
+    bool good = std::ranges::all_of(slist, isgood);
 #if DEBUG_SIGNAL_MONITOR_VALUE
     if (!good)
     {

@@ -17,7 +17,11 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
+#ifndef LIBMYTHTV_TEST_SUBTITLESCREEN_H
+#define LIBMYTHTV_TEST_SUBTITLESCREEN_H
 
+#include <QChar>     // Fix Qt6 GCC SFINAE warning
+#include <QBitArray> // Fix Qt6 GCC SFINAE warning
 #include <QTest>
 
 class TestSubtitleScreen : public QObject
@@ -31,3 +35,5 @@ class TestSubtitleScreen : public QObject
     static void testSRT();
     static void test608();
 };
+
+#endif // LIBMYTHTV_TEST_SUBTITLESCREEN_H

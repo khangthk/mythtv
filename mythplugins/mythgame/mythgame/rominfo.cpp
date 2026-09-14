@@ -1,9 +1,10 @@
 // Qt
 #include <QFile>
+#include <algorithm>
 
 // MythTV
-#include <libmyth/mythcontext.h>
 #include <libmythbase/mythdb.h>
+#include <libmythbase/mythlogging.h>
 
 // MythGame
 #include "romedit.h"
@@ -163,7 +164,7 @@ bool RomInfo::FindImage(QString BaseFileName, QString *result)
 
 
     BaseFileName.truncate(dotLocation + 1);
-    return std::any_of(graphic_formats.cbegin(), graphic_formats.cend(),
+    return std::ranges::any_of(std::as_const(graphic_formats),
                        [BaseFileName,result](const auto & format)
                            { *result = BaseFileName + format;
                              return QFile::exists(*result); } );

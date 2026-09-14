@@ -12,6 +12,7 @@
 
 // libmythbase headers
 #include "libmythbase/lcddevice.h"
+#include "libmythbase/mythappname.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythdb.h"
@@ -232,7 +233,9 @@ bool MythThemedMenu::keyPressEvent(QKeyEvent *event)
                 selExit = "STANDBY_MODE";
 
             if (!m_allocedstate)
+            {
                 handleAction(menuaction);
+            }
             else if (m_state->m_killable)
             {
                 m_wantpop = true;
@@ -256,7 +259,9 @@ bool MythThemedMenu::keyPressEvent(QKeyEvent *event)
                         MYTH_APPNAME_MYTHTV_SETUP))) && lastScreen)
             {
                 if (callbacks)
+                {
                     m_state->m_callback(m_state->m_callbackdata, selExit);
+                }
                 else
                 {
                     QCoreApplication::exit();
@@ -375,7 +380,7 @@ void MythThemedMenu::customEvent(QEvent *event)
 {
     if (event->type() == DialogCompletionEvent::kEventType)
     {
-        auto *dce = (DialogCompletionEvent*)(event);
+        auto *dce = (DialogCompletionEvent*)event;
 
         QString resultid = dce->GetId();
         //int buttonnum = dce->GetResult();
@@ -463,7 +468,7 @@ void MythThemedMenu::parseThemeButton(QDomElement &element)
                     info.attribute("lang","").isEmpty())
                 {
                     text = QCoreApplication::translate("ThemeUI",
-                                           parseText(info).toUtf8() );
+                                           parseText(info).toUtf8().constData() );
                 }
                 else if ((info.attribute("lang","").toLower() ==
                           gCoreContext->GetLanguageAndVariant()) ||
@@ -479,7 +484,7 @@ void MythThemedMenu::parseThemeButton(QDomElement &element)
                     info.attribute("lang","").isEmpty())
                 {
                     alttext = QCoreApplication::translate("ThemeUI",
-                                              parseText(info).toUtf8());
+                                              parseText(info).toUtf8().constData());
                 }
                 else if ((info.attribute("lang","").toLower() ==
                           gCoreContext->GetLanguageAndVariant()) ||
@@ -525,7 +530,7 @@ void MythThemedMenu::parseThemeButton(QDomElement &element)
                     info.attribute("lang","").isEmpty())
                 {
                     description = QCoreApplication::translate("ThemeUI",
-                                                  getFirstText(info).toUtf8());
+                                                  getFirstText(info).toUtf8().constData());
                 }
                 else if ((info.attribute("lang","").toLower() ==
                           gCoreContext->GetLanguageAndVariant()) ||
@@ -595,6 +600,7 @@ bool MythThemedMenu::parseMenu(const QString &menuname)
         return false;
     }
 
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     QString errorMsg;
     int errorLine = 0;
     int errorColumn = 0;
@@ -611,6 +617,22 @@ bool MythThemedMenu::parseMenu(const QString &menuname)
                         .arg(menuname));
         return false;
     }
+#else
+    auto parseResult = doc.setContent(&f);
+    if (!parseResult)
+    {
+        LOG(VB_GENERAL, LOG_ERR,
+            QString("Error parsing: %1\nat line: %2  column: %3 msg: %4")
+            .arg(filename).arg(parseResult.errorLine)
+            .arg(parseResult.errorColumn).arg(parseResult.errorMessage));
+        f.close();
+
+        if (menuname != "mainmenu.xml")
+            ShowOkPopup(tr("The menu file %1 is incomplete.")
+                        .arg(menuname));
+        return false;
+    }
+#endif
 
     f.close();
 
@@ -970,3 +992,5 @@ void MythThemedMenu::mediaEvent(MythMediaEvent* event)
             return;
     }
 }
+
+#include "moc_myththemedmenu.cpp"

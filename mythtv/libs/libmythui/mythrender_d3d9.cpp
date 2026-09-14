@@ -7,6 +7,7 @@
 #include <QMap>
 #include <QMutex>
 
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythlogging.h"
 #include "mythrender_d3d9.h"
 
@@ -1116,7 +1117,7 @@ void MythRenderD3D9::SetTextureVertices(IDirect3DDevice9* dev, bool enable)
 IDirect3DDevice9* MythRenderD3D9::AcquireDevice(void)
 {
     m_lock.lock();
-#ifdef USING_DXVA2
+#if CONFIG_DXVA2
     if (m_deviceManager)
     {
         IDirect3DDevice9* result = nullptr;
@@ -1147,7 +1148,7 @@ IDirect3DDevice9* MythRenderD3D9::AcquireDevice(void)
 
 void MythRenderD3D9::ReleaseDevice(void)
 {
-#ifdef USING_DXVA2
+#if CONFIG_DXVA2
     if (m_deviceManager)
     {
         HRESULT hr = IDirect3DDeviceManager9_UnlockDevice(m_deviceManager, m_deviceHandle, false);
@@ -1158,14 +1159,14 @@ void MythRenderD3D9::ReleaseDevice(void)
     m_lock.unlock();
 }
 
-#ifdef USING_DXVA2
+#if CONFIG_DXVA2
 using CreateDeviceManager9Ptr = HRESULT (WINAPI *)(UINT *pResetToken,
                                                   IDirect3DDeviceManager9 **);
 #endif
 
 void MythRenderD3D9::CreateDeviceManager(void)
 {
-#ifdef USING_DXVA2
+#if CONFIG_DXVA2
     CreateDeviceManager9Ptr CreateDeviceManager9 =
         (CreateDeviceManager9Ptr)ResolveAddress("DXVA2",
                                                 "DXVA2CreateDirect3DDeviceManager9");
@@ -1208,7 +1209,7 @@ void MythRenderD3D9::CreateDeviceManager(void)
 
 void MythRenderD3D9::DestroyDeviceManager(void)
 {
-#ifdef USING_DXVA2
+#if CONFIG_DXVA2
     if (m_deviceHandle && m_deviceManager)
         IDirect3DDeviceManager9_CloseDeviceHandle(m_deviceManager, m_deviceHandle);
     if (m_deviceManager)

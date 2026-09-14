@@ -9,8 +9,8 @@
 
 // MythTV
 #include "libmythbase/mthread.h"
-#include "libmythbase/programtypes.h"
 #include "channelinfo.h"
+#include "programtypes.h"
 #include "tv.h"
 
 // Std
@@ -61,6 +61,7 @@ class TVBrowseHelper : public MThread
     void BrowseChannel(const QString& Channum);
     BrowseInfo GetBrowsedInfo() const;
     uint GetBrowseChanId(const QString& Channum, uint PrefCardid, uint PrefSourceid) const;
+    void run() override;
 
     int                     m_browseTimerId         { 0 };
 
@@ -68,11 +69,9 @@ class TVBrowseHelper : public MThread
     Q_DISABLE_COPY(TVBrowseHelper)
     void GetNextProgram(BrowseDirection Direction, InfoMap& Infomap) const;
     void GetNextProgramDB(BrowseDirection Direction, InfoMap& Infomap) const;
-    void run() override;
 
     TV*                     m_parent                { nullptr };
     ChannelInfoList         m_dbAllChannels;
-    ChannelInfoList         m_dbAllVisibleChannels;
     std::chrono::seconds    m_dbBrowseMaxForward    { 0s };
     bool                    m_dbBrowseAllTuners     { false };
     bool                    m_dbUseChannelGroups    { false };

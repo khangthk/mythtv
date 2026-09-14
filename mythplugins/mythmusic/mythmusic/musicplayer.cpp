@@ -9,10 +9,11 @@
 #include <QWidget>
 
 // mythtv
-#include <libmyth/audio/audiooutput.h>
-#include <libmyth/mythcontext.h>
+#include <libmythtv/audio/audiooutput.h>
 #include <libmythbase/mthreadpool.h>
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythdb.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythmetadata/metaio.h>
 #include <libmythmetadata/musicutils.h>
 #include <libmythui/mythdialogbox.h>
@@ -287,7 +288,7 @@ void MusicPlayer::stop(bool stopAll)
 
     // because we don't actually stop the audio output we have to fake a Stopped
     // event so any listeners can act on it
-    OutputEvent oe(OutputEvent::kStopped);
+    AudioOutput::Event oe(AudioOutput::Event::kStopped);
     dispatch(oe);
 
     gCoreContext->emitTVPlaybackStopped();
@@ -388,20 +389,10 @@ bool MusicPlayer::openOutputDevice(void)
                    AUDIOOUTPUT_MUSIC, true, false,
                    gCoreContext->GetNumSetting("MusicDefaultUpmix", 0) + 1);
 
-    if (!m_output)
+    if (m_output == nullptr || !m_output->isConfigured())
     {
         LOG(VB_GENERAL, LOG_ERR,
             QString("MusicPlayer: Cannot open audio output device: %1").arg(adevice));
-
-        return false;
-    }
-
-    if (!m_output->GetError().isEmpty())
-    {
-        LOG(VB_GENERAL, LOG_ERR,
-            QString("MusicPlayer: Cannot open audio output device: %1").arg(adevice));
-        LOG(VB_GENERAL, LOG_ERR,
-            QString("Error was: %1").arg(m_output->GetError()));
 
         delete m_output;
         m_output = nullptr;
@@ -409,14 +400,12 @@ bool MusicPlayer::openOutputDevice(void)
         return false;
     }
 
-    m_output->setBufferSize(256 * 1024);
-
     m_output->addListener(this);
 
     // add any visuals to the audio output
     // NOLINTNEXTLINE(modernize-loop-convert)
     for (auto it = m_visualisers.begin(); it != m_visualisers.end() ; ++it)
-        m_output->addVisual((MythTV::Visual*)(*it));
+        m_output->addVisual((Visualization*)(*it));
 
     // add any listeners to the audio output
     QMutexLocker locker(m_lock);
@@ -431,7 +420,8 @@ void MusicPlayer::next(void)
 {
     int currentTrack = m_currentTrack;
 
-    if (!getCurrentPlaylist())
+    Playlist *playlist = getCurrentPlaylist();
+    if (nullptr == playlist)
         return;
 
     if (m_oneshotMetadata)
@@ -444,7 +434,7 @@ void MusicPlayer::next(void)
         currentTrack++;
     }
 
-    if (currentTrack >= getCurrentPlaylist()->getTrackCount())
+    if (currentTrack >= playlist->getTrackCount())
     {
         if (m_repeatMode == REPEAT_ALL)
         {
@@ -470,7 +460,8 @@ void MusicPlayer::previous(void)
 {
     int currentTrack = m_currentTrack;
 
-    if (!getCurrentPlaylist())
+    Playlist *playlist = getCurrentPlaylist();
+    if (nullptr == playlist)
         return;
 
     if (m_oneshotMetadata)
@@ -501,7 +492,8 @@ void MusicPlayer::previous(void)
 
 void MusicPlayer::nextAuto(void)
 {
-    if (!getCurrentPlaylist())
+    Playlist *playlist = getCurrentPlaylist();
+    if (nullptr == playlist)
         return;
 
     if (m_oneshotMetadata)
@@ -620,11 +612,17 @@ void MusicPlayer::customEvent(QEvent *event)
             if (list.size() >= 3 && list[1] == gCoreContext->GetHostName())
             {
                 if (list[2] == "PLAY")
+                {
                     play();
+                }
                 else if (list[2] == "STOP")
+                {
                     stop();
+                }
                 else if (list[2] == "PAUSE")
+                {
                     pause();
+                }
                 else if (list[2] == "SET_VOLUME")
                 {
                     if (list.size() > 3)
@@ -812,22 +810,24 @@ void MusicPlayer::customEvent(QEvent *event)
         }
     }
 
-    if (event->type() == OutputEvent::kError)
+    if (event->type() == AudioOutput::Event::kError)
     {
-        auto *aoe = dynamic_cast<OutputEvent *>(event);
+        auto *aoe = dynamic_cast<AudioOutput::Event *>(event);
 
         if (!aoe)
             return;
 
-        LOG(VB_GENERAL, LOG_ERR, QString("Audio Output Error: %1").arg(*aoe->errorMessage()));
+        LOG(VB_GENERAL, LOG_ERR, QString("Audio Output Error: %1").arg(aoe->errorMessage()));
 
-        MythErrorNotification n(tr("Audio Output Error"), tr("MythMusic"), *aoe->errorMessage());
+        MythErrorNotification n(tr("Audio Output Error"), tr("MythMusic"), aoe->errorMessage());
         GetNotificationCenter()->Queue(n);
 
         m_errorCount++;
 
         if (m_errorCount <= 5)
+        {
             nextAuto();
+        }
         else
         {
             m_errorCount = 0;
@@ -849,7 +849,9 @@ void MusicPlayer::customEvent(QEvent *event)
         m_errorCount++;
 
         if (m_playMode != PLAYMODE_RADIO && m_errorCount <= 5)
+        {
             nextAuto();
+        }
         else
         {
             m_errorCount = 0;
@@ -871,16 +873,18 @@ void MusicPlayer::customEvent(QEvent *event)
         m_errorCount++;
 
         if (m_errorCount <= 5)
+        {
             nextAuto();
+        }
         else
         {
             m_errorCount = 0;
             stop(true);
         }
     }
-    else if (event->type() == OutputEvent::kInfo)
+    else if (event->type() == AudioOutput::Event::kInfo)
     {
-        auto *oe = dynamic_cast<OutputEvent*>(event);
+        auto *oe = dynamic_cast<AudioOutput::Event*>(event);
 
         if (!oe)
             return;
@@ -984,7 +988,9 @@ void MusicPlayer::loadPlaylist(void)
         if (getResumeMode() > MusicPlayer::RESUME_OFF)
         {
             int bookmark = gCoreContext->GetNumSetting("MusicRadioBookmark", 0);
-            if (bookmark < 0 || bookmark >= getCurrentPlaylist()->getTrackCount())
+            Playlist *playlist = getCurrentPlaylist();
+            if ((bookmark < 0) ||
+                (playlist && bookmark >= playlist->getTrackCount()))
                 bookmark = 0;
 
             m_currentTrack = bookmark;
@@ -1001,7 +1007,9 @@ void MusicPlayer::loadPlaylist(void)
         if (getResumeMode() > MusicPlayer::RESUME_OFF)
         {
             int bookmark = gCoreContext->GetNumSetting("MusicBookmark", 0);
-            if (bookmark < 0 || bookmark >= getCurrentPlaylist()->getTrackCount())
+            Playlist *playlist = getCurrentPlaylist();
+            if ((bookmark < 0) ||
+                (playlist && bookmark >= getCurrentPlaylist()->getTrackCount()))
                 bookmark = 0;
 
             m_currentTrack = bookmark;
@@ -1036,7 +1044,8 @@ void MusicPlayer::loadStreamPlaylist(void)
 
 void MusicPlayer::moveTrackUpDown(bool moveUp, int whichTrack)
 {
-    if (!getCurrentPlaylist())
+    Playlist *playlist = getCurrentPlaylist();
+    if (nullptr == playlist)
         return;
 
     if (moveUp && whichTrack <= 0)
@@ -1045,11 +1054,11 @@ void MusicPlayer::moveTrackUpDown(bool moveUp, int whichTrack)
     if (!moveUp && whichTrack >=  getCurrentPlaylist()->getTrackCount() - 1)
         return;
 
-    MusicMetadata *currTrack = getCurrentPlaylist()->getSongAt(m_currentTrack);
+    MusicMetadata *currTrack = playlist->getSongAt(m_currentTrack);
 
-    getCurrentPlaylist()->moveTrackUpDown(moveUp, whichTrack);
+    playlist->moveTrackUpDown(moveUp, whichTrack);
 
-    m_currentTrack = getCurrentPlaylist()->getTrackPosition(currTrack->ID());
+    m_currentTrack = playlist->getTrackPosition(currTrack->ID());
 }
 
 bool MusicPlayer::setCurrentTrackPos(int pos)
@@ -1101,12 +1110,13 @@ void MusicPlayer::restorePosition(void)
             id = gCoreContext->GetNumSetting("MusicBookmark", 0);
     }
 
-    if (getCurrentPlaylist())
+    Playlist *playlist = gPlayer->getCurrentPlaylist();
+    if (playlist)
     {
-        for (int x = 0; x < getCurrentPlaylist()->getTrackCount(); x++)
+        for (int x = 0; x < playlist->getTrackCount(); x++)
         {
-            if (getCurrentPlaylist()->getSongAt(x) &&
-                getCurrentPlaylist()->getSongAt(x)->ID() == id)
+            if (playlist->getSongAt(x) &&
+                playlist->getSongAt(x)->ID() == id)
             {
                 m_currentTrack = x;
                 break;
@@ -1155,7 +1165,8 @@ void MusicPlayer::showMiniPlayer(void) const
 /// change the current track to the given track
 void MusicPlayer::changeCurrentTrack(int trackNo)
 {
-    if (!getCurrentPlaylist())
+    Playlist *playlist = getCurrentPlaylist();
+    if (nullptr == playlist)
         return;
 
     // check to see if we need to save the current tracks volatile  metadata (playcount, last played etc)
@@ -1164,7 +1175,7 @@ void MusicPlayer::changeCurrentTrack(int trackNo)
     m_currentTrack = trackNo;
 
     // sanity check the current track
-    if (m_currentTrack < 0 || m_currentTrack >= getCurrentPlaylist()->getTrackCount())
+    if (m_currentTrack < 0 || m_currentTrack >= playlist->getTrackCount())
     {
         LOG(VB_GENERAL, LOG_ERR,
             QString("MusicPlayer: asked to set the current track to an invalid track no. %1")
@@ -1180,10 +1191,11 @@ MusicMetadata *MusicPlayer::getCurrentMetadata(void)
     if (m_oneshotMetadata)
         return m_oneshotMetadata;
 
-    if (!getCurrentPlaylist() || !getCurrentPlaylist()->getSongAt(m_currentTrack))
+    Playlist *playlist = getCurrentPlaylist();
+    if (!playlist || !playlist->getSongAt(m_currentTrack))
         return nullptr;
 
-    return getCurrentPlaylist()->getSongAt(m_currentTrack);
+    return playlist->getSongAt(m_currentTrack);
 }
 
 /// get the metadata for the next track in the playlist
@@ -1195,20 +1207,21 @@ MusicMetadata *MusicPlayer::getNextMetadata(void)
     if (m_oneshotMetadata)
         return getCurrentMetadata();
 
-    if (!getCurrentPlaylist() || !getCurrentPlaylist()->getSongAt(m_currentTrack))
+    Playlist *playlist = gPlayer->getCurrentPlaylist();
+    if (!playlist || !playlist->getSongAt(m_currentTrack))
         return nullptr;
 
     if (m_repeatMode == REPEAT_TRACK)
         return getCurrentMetadata();
 
     // if we are not playing the last track then just return the next track
-    if (m_currentTrack < getCurrentPlaylist()->getTrackCount() - 1)
-        return getCurrentPlaylist()->getSongAt(m_currentTrack + 1);
+    if (m_currentTrack < playlist->getTrackCount() - 1)
+        return playlist->getSongAt(m_currentTrack + 1);
 
     // if we are playing the last track then we need to take the
     // repeat mode into account
     if (m_repeatMode == REPEAT_ALL)
-        return getCurrentPlaylist()->getSongAt(0);
+        return playlist->getSongAt(0);
     return nullptr;
 }
 
@@ -1268,16 +1281,17 @@ void MusicPlayer::setShuffleMode(ShuffleMode mode)
     if (m_playMode != PLAYMODE_RADIO)
         m_shuffleMode = mode;
 
-    if (!getCurrentPlaylist())
+    Playlist *playlist = getCurrentPlaylist();
+    if (nullptr == playlist)
         return;
 
-    getCurrentPlaylist()->shuffleTracks(mode);
+    playlist->shuffleTracks(mode);
 
     if (curTrackID != -1)
     {
-        for (int x = 0; x < getCurrentPlaylist()->getTrackCount(); x++)
+        for (int x = 0; x < playlist->getTrackCount(); x++)
         {
-            MusicMetadata *mdata = getCurrentPlaylist()->getSongAt(x);
+            MusicMetadata *mdata = playlist->getSongAt(x);
             if (mdata && mdata->ID() == (MusicMetadata::IdType) curTrackID)
             {
                 m_currentTrack = x;
@@ -1471,7 +1485,8 @@ void MusicPlayer::activePlaylistChanged(int trackID, bool deleted)
     }
 
     // if we don't have any tracks to play stop here
-    if (!getCurrentPlaylist() || getCurrentPlaylist()->getTrackCount() == 0)
+    Playlist *playlist = getCurrentPlaylist();
+    if (!playlist || playlist->getTrackCount() == 0)
     {
         m_currentTrack = -1;
         if (isPlaying())
@@ -1484,9 +1499,9 @@ void MusicPlayer::activePlaylistChanged(int trackID, bool deleted)
     // make sure the current playing track is still valid
     if (isPlaying() && getDecoderHandler())
     {
-        for (int x = 0; x < getCurrentPlaylist()->getTrackCount(); x++)
+        for (int x = 0; x < playlist->getTrackCount(); x++)
         {
-            if (getCurrentPlaylist()->getSongAt(x)->ID() == getDecoderHandler()->getMetadata().ID())
+            if (playlist->getSongAt(x)->ID() == getDecoderHandler()->getMetadata().ID())
             {
                 trackPos = x;
                 break;
@@ -1564,7 +1579,7 @@ void MusicPlayer::decoderHandlerReady(void)
     // NOLINTNEXTLINE(modernize-loop-convert)
     for (auto it = m_visualisers.begin(); it != m_visualisers.end() ; ++it)
     {
-        //m_output->addVisual((MythTV::Visual*)(*it));
+        //m_output->addVisual((Visualization*)(*it));
         //(*it)->setDecoder(decoder);
         //m_visual->setOutput(m_output);
     }
@@ -1603,11 +1618,14 @@ void MusicPlayer::removeTrack(int trackID)
     MusicMetadata *mdata = gMusicData->m_all_music->getMetadata(trackID);
     if (mdata)
     {
-        int trackPos = getCurrentPlaylist()->getTrackPosition(mdata->ID());
+        Playlist *playlist = getCurrentPlaylist();
+        if (nullptr == playlist)
+            return;
+        int trackPos = playlist->getTrackPosition(mdata->ID());
         if (m_currentTrack > 0 && m_currentTrack >= trackPos)
             m_currentTrack--;
 
-        getCurrentPlaylist()->removeTrack(trackID);
+        playlist->removeTrack(trackID);
     }
 }
 
@@ -1635,7 +1653,7 @@ StreamList  *MusicPlayer::getStreamList(void)
 
 int MusicPlayer::getNotificationID (const QString& hostname)
 {
-    if (m_notificationMap.find(hostname) == m_notificationMap.end())
+    if (!m_notificationMap.contains(hostname))
         m_notificationMap.insert(hostname, GetNotificationCenter()->Register(this));
 
     return m_notificationMap[hostname];
@@ -1661,3 +1679,5 @@ void MusicPlayer::sendNotification(int notificationID, const QString &title, con
     GetNotificationCenter()->Queue(*n);
     delete n;
 }
+
+#include "moc_musicplayer.cpp"

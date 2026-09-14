@@ -1,0 +1,44 @@
+import { Injectable } from '@angular/core';
+import { HttpRequest, HttpHandler, HttpEvent, HttpInterceptor } from '@angular/common/http';
+import { catchError, Observable, throwError } from 'rxjs';
+
+@Injectable()
+export class ErrorInterceptor implements HttpInterceptor {
+
+    constructor() { }
+
+    intercept(request: HttpRequest<unknown>, next: HttpHandler): Observable<HttpEvent<unknown>> {
+        return next.handle(request).pipe(catchError(err => {
+            if (err.status == 401) {
+                // auto logout if 401 response returned from api
+                if (sessionStorage.getItem('accessToken')) {
+                    // Prevent multiple reloads after a logout by only allowing
+                    // one reload here per 3 seconds
+                    let priorTime = 0;
+                    let priorTimeStr = sessionStorage.getItem('reLoginTime');
+                    if (priorTimeStr)
+                        priorTime = Number.parseInt(priorTimeStr)
+                    let now = (new Date()).getTime();
+                    if (priorTime) {
+                        if (now - priorTime < 3000)
+                            return throwError(() => error);
+                    }
+                    sessionStorage.setItem('reLoginTime', now.toString());
+
+                    sessionStorage.removeItem('accessToken');
+                    sessionStorage.removeItem('loggedInUser');
+                    sessionStorage.removeItem('APIAuthReqd');
+                    location.reload();
+                }
+                else if (!sessionStorage.getItem('APIAuthReqd')) {
+                    sessionStorage.setItem('APIAuthReqd', 'true');
+                    location.reload();
+                }
+                const error = err.error?.message || err.statusText;
+                console.error(err);
+            }
+            return throwError(() => err);
+        }))
+    }
+
+}

@@ -3,6 +3,8 @@
 #include <QFontMetrics>
 #include <QRegularExpression>
 
+#include "libmythbase/mythconfig.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythui/mythfontproperties.h"
 #include "libmythui/mythpainter.h"
@@ -262,7 +264,7 @@ SubtitleFormat::GetFont(const QString &family,
                         int pixelSize, int zoom, int stretch)
 {
     int origPixelSize = pixelSize;
-    float scale = zoom / 100.0;
+    float scale = zoom / 100.0F;
     if ((attr.m_penSize & 0x3) == k708AttrSizeSmall)
         scale = scale * 32 / 42;
     else if ((attr.m_penSize & 0x3) == k708AttrSizeLarge)
@@ -947,6 +949,7 @@ void FormattedTextSubtitle::Draw(void)
 QStringList FormattedTextSubtitle::ToSRT(void) const
 {
     QStringList result;
+    result.reserve(m_lines.size());
     for (const auto & ftl : std::as_const(m_lines))
     {
         QString line;
@@ -1047,9 +1050,13 @@ void FormattedTextSubtitleSRT::Init(const QStringList &subs)
                 QString html = text.left(htmlLen).toLower();
                 text = text.mid(htmlLen);
                 if (html == "<i>")
+                {
                     isItalic = true;
+                }
                 else if (html == "</i>")
+                {
                     isItalic = false;
+                }
                 else if (html.startsWith(htmlPrefix) &&
                          html.endsWith(htmlSuffix))
                 {
@@ -1239,7 +1246,7 @@ void FormattedTextSubtitle608::Layout(void)
         prevY = firstY;
         for (int i = 0; i < m_lines.size(); i++)
         {
-            m_lines[i].m_yIndent = prevY + spaceBefore[i] * shrink;
+            m_lines[i].m_yIndent = prevY + (spaceBefore[i] * shrink);
             prevY = m_lines[i].m_yIndent + heights[i];
         }
     }
@@ -1301,7 +1308,7 @@ void FormattedTextSubtitle608::Init(const std::vector<CC608Text*> &buffers)
         if (xmid)
         {
             // center horizontally
-            x = xmid + (orig_x - xscale / 2) * fontwidth;
+            x = xmid + ((orig_x - (xscale / 2)) * fontwidth);
         }
         else
         {
@@ -1419,7 +1426,7 @@ SubtitleScreen::~SubtitleScreen(void)
 {
     ClearAllSubtitles();
     delete m_format;
-#ifdef USING_LIBASS
+#if CONFIG_LIBASS
     CleanupAssLibrary();
 #endif
 }
@@ -1495,7 +1502,7 @@ void SubtitleScreen::ClearAllSubtitles(void)
 {
     ClearNonDisplayedSubtitles();
     ClearDisplayedSubtitles();
-#ifdef USING_LIBASS
+#if CONFIG_LIBASS
     if (m_assTrack)
         ass_flush_events(m_assTrack);
 #endif
@@ -1528,8 +1535,8 @@ void SubtitleScreen::DisplayDVDButton(AVSubtitle* dvdButton, QRect &buttonPos)
     if (!vo)
         return;
 
-    DeleteAllChildren();
     SetElementDeleted();
+    DeleteAllChildren();
 
     float tmp = 0.0;
     QRect dummy;
@@ -1604,11 +1611,8 @@ std::chrono::milliseconds SubtitleScreen::GetDelay(void) const
 
 void SubtitleScreen::Clear708Cache(uint64_t mask)
 {
-    QList<MythUIType *> list = m_childrenList;
-    QList<MythUIType *>::iterator it;
-    for (it = list.begin(); it != list.end(); ++it)
+    for (auto *child : std::as_const(m_childrenList))
     {
-        MythUIType *child = *it;
         auto *wrapper = dynamic_cast<SubWrapper *>(child);
         if (wrapper)
         {
@@ -1636,7 +1640,7 @@ void SubtitleScreen::SetElementResized(void)
     SetElementAdded();
 }
 
-// SetElementAdded() should be called *before* an element is deleted
+// SetElementDeleted() should be called *before* an element is deleted
 // from the subtitle screen.
 void SubtitleScreen::SetElementDeleted(void)
 {
@@ -1751,19 +1755,14 @@ bool SubtitleScreen::Create(void)
 
 void SubtitleScreen::Pulse(void)
 {
-    QList<MythUIType *>::iterator it;
-    QList<MythUIType *>::iterator itNext;
-
     MythVideoOutput *videoOut = m_player->GetVideoOutput();
     MythVideoFrame *currentFrame = videoOut ? videoOut->GetLastShownFrame() : nullptr;
     std::chrono::milliseconds now =
         currentFrame ? currentFrame->m_timecode : std::chrono::milliseconds::max();
     bool needRescale = (m_textFontZoom != m_textFontZoomPrev);
 
-    for (it = m_childrenList.begin(); it != m_childrenList.end(); it = itNext)
+    for (auto *child : std::as_const(m_childrenList))
     {
-        itNext = it + 1;
-        MythUIType *child = *it;
         auto *wrapper = dynamic_cast<SubWrapper *>(child);
         if (!wrapper)
             continue;
@@ -1772,8 +1771,8 @@ void SubtitleScreen::Pulse(void)
         std::chrono::milliseconds expireTime = wrapper->GetExpireTime();
         if (expireTime > 0ms && expireTime < now)
         {
-            DeleteChild(child);
             SetElementDeleted();
+            DeleteChild(child);
             continue;
         }
 
@@ -1832,11 +1831,9 @@ void SubtitleScreen::OptimiseDisplayedArea(void)
         return;
 
     QRegion visible;
-    QListIterator<MythUIType *> i(m_childrenList);
-    while (i.hasNext())
+    for (const auto *img : std::as_const(m_childrenList))
     {
-        MythUIType *img = i.next();
-        auto *wrapper = dynamic_cast<SubWrapper *>(img);
+        const auto *wrapper = dynamic_cast<const SubWrapper *>(img);
         if (wrapper && img->IsVisible())
             visible = visible.united(wrapper->GetOrigArea());
     }
@@ -1851,10 +1848,8 @@ void SubtitleScreen::OptimiseDisplayedArea(void)
     int top  = m_safeArea.top()  - bounding.top();
     SetArea(MythRect(bounding));
 
-    i.toFront();
-    while (i.hasNext())
+    for (auto *img : std::as_const(m_childrenList))
     {
-        MythUIType *img = i.next();
         auto *wrapper = dynamic_cast<SubWrapper *>(img);
         if (wrapper && img->IsVisible())
             img->SetArea(MythRect(wrapper->GetOrigArea().translated(left, top)));
@@ -2083,7 +2078,7 @@ void SubtitleScreen::DisplayAVSubtitles(void)
                                              displayuntil, late);
                 }
             }
-#ifdef USING_LIBASS
+#if CONFIG_LIBASS
             else if (displaysub && rect->type == SUBTITLE_ASS)
             {
                 InitialiseAssTrack(m_player->GetDecoder()->GetTrack(kTrackTypeSubtitle));
@@ -2093,7 +2088,7 @@ void SubtitleScreen::DisplayAVSubtitles(void)
         }
         SubtitleReader::FreeAVSubtitle(subtitle);
     }
-#ifdef USING_LIBASS
+#if CONFIG_LIBASS
     RenderAssTrack(currentFrame->m_timecode, assForceNext);
 #endif
 }
@@ -2214,7 +2209,7 @@ int SubtitleScreen::DisplayScaledAVSubtitles(const AVSubtitleRect *rect,
     int hsize = m_safeArea.width();
     int vsize = m_safeArea.height();
 
-    scaled.moveLeft(((100 - m_textFontZoom) * hsize / 2 + m_textFontZoom * scaled.left()) / 100);
+    scaled.moveLeft((((100 - m_textFontZoom) * hsize / 2) + (m_textFontZoom * scaled.left())) / 100);
     if (top)
     {
         // anchor up
@@ -2223,7 +2218,7 @@ int SubtitleScreen::DisplayScaledAVSubtitles(const AVSubtitleRect *rect,
     else
     {
         // anchor down
-        scaled.moveTop(((100 - m_textFontZoom) * vsize + m_textFontZoom * scaled.top()) / 100);
+        scaled.moveTop((((100 - m_textFontZoom) * vsize) + (m_textFontZoom * scaled.top())) / 100);
     }
 
     MythImage* image = m_painter->GetFormatImage();
@@ -2275,8 +2270,8 @@ void SubtitleScreen::DisplayRawTextSubtitles(void)
     m_safeArea = vo->GetSafeRect();
 
     // delete old subs that may still be on screen
-    DeleteAllChildren();
     SetElementDeleted();
+    DeleteAllChildren();
     DrawTextSubtitles(subs, currentFrame->m_timecode, duration);
 }
 
@@ -2397,7 +2392,7 @@ void SubtitleScreen::AddScaledImage(QImage &img, QRect &pos)
     }
 }
 
-#ifdef USING_LIBASS
+#if CONFIG_LIBASS
 static void myth_libass_log(int level, const char *fmt, va_list vl, void */*ctx*/)
 {
     uint64_t verbose_mask = VB_GENERAL;
@@ -2652,4 +2647,6 @@ void SubtitleScreen::RenderAssTrack(std::chrono::milliseconds timecode, bool for
         count++;
     }
 }
-#endif // USING_LIBASS
+#endif // CONFIG_LIBASS
+
+#include "moc_subtitlescreen.cpp"

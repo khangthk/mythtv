@@ -4,10 +4,10 @@
 // C++ headers
 #include <algorithm>
 #include <cstdlib>
-#include <ctime>
 #include <fstream>
 
 // Qt headers
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -346,7 +346,7 @@ bool FillData::Run(DataSourceList &sourcelist)
             else
             {
                 LOG(VB_GENERAL, LOG_INFO,
-                    QString("No channels are configured to use grabber."));
+                    QString("No channels are configured to use grabber (none have XMLTVIDs)."));
             }
         }
         else

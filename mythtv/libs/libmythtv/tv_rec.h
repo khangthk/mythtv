@@ -19,13 +19,12 @@
 
 // MythTV headers
 #include "libmythbase/mthread.h"
-#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythdeque.h"
 #include "libmythbase/mythtimer.h"
-#include "libmythbase/programtypes.h"   // for RecStatus, RecStatus::Type, etc
 
 #include "inputinfo.h"
 #include "mythtvexp.h"                  // for MTV_PUBLIC
+#include "programtypes.h"   // for RecStatus, RecStatus::Type, etc
 #include "recordinginfo.h"
 #include "signalmonitorlistener.h"
 #include "tv.h"
@@ -122,7 +121,7 @@ class TuningRequest
     int            m_progNum   {-1};
 };
 using TuningQueue = MythDeque<TuningRequest>;
-inline TuningRequest myth_deque_init(const TuningRequest */*request*/) { return (TuningRequest)(0); }
+inline TuningRequest myth_deque_init(const TuningRequest */*request*/) { return (TuningRequest)0; }
 
 class PendingInfo
 {
@@ -150,6 +149,7 @@ class MTV_PUBLIC TVRec : public SignalMonitorListener, public QRunnable
     explicit TVRec(int _inputid);
    ~TVRec(void) override;
 
+    void run(void) override; // QRunnable
     bool Init(void);
 
     void RecordPending(const ProgramInfo *rcinfo, std::chrono::seconds secsleft, bool hasLater);
@@ -250,10 +250,10 @@ class MTV_PUBLIC TVRec : public SignalMonitorListener, public QRunnable
     void StatusChannelTuned(const SignalMonitorValue &/*val*/) override { } // SignalMonitorListener
     void StatusSignalLock(const SignalMonitorValue &/*val*/) override { } // SignalMonitorListener
     void StatusSignalStrength(const SignalMonitorValue &/*val*/) override { } // SignalMonitorListener
+    void SetChannelTimeout(std::chrono::milliseconds timeout);
     void EnableActiveScan(bool enable);
 
   protected:
-    void run(void) override; // QRunnable
     bool WaitForEventThreadSleep(bool wake = true,
                                  std::chrono::milliseconds time = std::chrono::milliseconds::max());
 
@@ -295,6 +295,8 @@ class MTV_PUBLIC TVRec : public SignalMonitorListener, public QRunnable
     MPEGStreamData *TuningSignalCheck(void);
 
     void TuningNewRecorder(MPEGStreamData *streamData);
+    bool TuningNewRecorderReal(MPEGStreamData *streamData, RecordingInfo **rec,
+                               RecordingProfile& profile, bool had_dummyrec);
     void TuningRestartRecorder(void);
     QString TuningGetChanNum(const TuningRequest &request, QString &input) const;
     bool TuningOnSameMultiplex(TuningRequest &request);
@@ -322,7 +324,7 @@ class MTV_PUBLIC TVRec : public SignalMonitorListener, public QRunnable
     QDateTime GetRecordEndTime(const ProgramInfo *pi) const;
     void CheckForRecGroupChange(void);
     void NotifySchedulerOfRecording(RecordingInfo *rec);
-    enum AutoRunInitType { kAutoRunProfile, kAutoRunNone, };
+    enum AutoRunInitType : uint8_t { kAutoRunProfile, kAutoRunNone, };
     void InitAutoRunJobs(RecordingInfo *rec, AutoRunInitType t,
                          RecordingProfile *recpro, int line);
 

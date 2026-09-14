@@ -8,12 +8,58 @@ if(BUILD_TESTING)
   add_subdirectory(test)
 endif()
 
+set(AUDIO_HEADERS
+    audio/audioconvert.h
+    audio/audiooutput.h
+    audio/audiooutputsettings.h
+    audio/audiosettings.h
+    audio/eldutils.h
+    audio/visualization.h
+    audio/volumebase.h
+    )
+
+set(AUDIO_HEADERS_NOT_INSTALLED
+    audio/audiooutputbase.h
+    audio/audiooutputbase.h
+    audio/audiooutputdigitalencoder.h
+    audio/audiooutputnull.h
+    audio/freesurround.h
+    audio/freesurround_decoder.h
+    audio/pink.h
+    audio/spdifencoder.h
+    )
+
 #
 # Define the library
 #
 
+set(LIBMYTHTV_HEADERS
+    programinfo.h
+    programinforemoteutil.h
+    programtypes.h
+    programtypeflags.h
+    recordingstatus.h
+    recordingtypes.h
+    )
+
 add_library(
   mythtv # cmake-format: unsort
+  ${AUDIO_HEADERS_NOT_INSTALLED}
+  ${AUDIO_HEADERS}
+  audio/audioconvert.cpp
+  audio/audiooutput.cpp
+  audio/audiooutputbase.cpp
+  audio/audiooutputdigitalencoder.cpp
+  audio/audiooutputnull.cpp
+  audio/audiooutputsettings.cpp
+  audio/audiosettings.cpp
+  audio/eldutils.cpp
+  audio/freesurround.cpp
+  audio/freesurround_decoder.cpp
+  audio/pink.cpp
+  audio/spdifencoder.cpp
+  audio/volumebase.cpp
+  ${LIBMYTHTV_HEADERS}
   bitreader.h
   bytereader.cpp
   bytereader.h
@@ -29,8 +75,6 @@ add_library(
   captions/cc708window.h
   captions/subtitlereader.cpp
   captions/subtitlereader.h
-  captions/vbi608extractor.cpp
-  captions/vbi608extractor.h
   cardutil.cpp
   cardutil.h
   channelgroup.cpp
@@ -40,7 +84,8 @@ add_library(
   dbcheck.cpp
   dbcheck.h
   driveroption.h
-  format.h
+  io/httplivestreambuffer.cpp
+  io/httplivestreambuffer.h
   io/mythavformatbuffer.cpp
   io/mythavformatbuffer.h
   io/mythfilebuffer.cpp
@@ -60,6 +105,12 @@ add_library(
   livetvchain.h
   metadataimagehelper.cpp
   metadataimagehelper.h
+  mythavbufferref.cpp
+  mythavbufferref.h
+  mythaverror.cpp
+  mythaverror.h
+  mythavframe.h
+  mythavrational.h
   mythavutil.cpp
   mythavutil.h
   mythframe.cpp
@@ -77,6 +128,11 @@ add_library(
   previewgenerator.h
   previewgeneratorqueue.cpp
   previewgeneratorqueue.h
+  programinfo.cpp
+  programinforemoteutil.cpp
+  programinfoupdater.cpp
+  programinfoupdater.h
+  programtypes.cpp
   recordingfile.cpp
   recordingfile.h
   recordinginfo.cpp
@@ -85,6 +141,8 @@ add_library(
   recordingprofile.h
   recordingrule.cpp
   recordingrule.h
+  recordingstatus.cpp
+  recordingtypes.cpp
   remoteencoder.cpp
   remoteencoder.h
   restoredata.cpp
@@ -204,6 +262,7 @@ add_library(
   frequencies.h
   frequencytables.cpp
   frequencytables.h
+  iptvtuningdata.cpp
   iptvtuningdata.h
   # subtitles: srt
   captions/srtwriter.cpp
@@ -215,6 +274,7 @@ add_library(
   DVD/mythdvdcontext.h
   DVD/mythdvdinfo.cpp
   DVD/mythdvdinfo.h
+  DVD/mythdvdio.cpp
   DVD/mythdvdstream.cpp
   DVD/mythdvdstream.h
   # Bluray
@@ -226,34 +286,62 @@ add_library(
   Bluray/mythbdiowrapper.h
   Bluray/mythbdoverlay.cpp
   Bluray/mythbdoverlay.h
-  # HLS
-  HLS/httplivestream.cpp
-  HLS/httplivestream.h
-  HLS/httplivestreambuffer.cpp
-  HLS/httplivestreambuffer.h
-  HLS/m3u.cpp
-  HLS/m3u.h)
+  )
 if(APPLE)
   target_sources(mythtv PRIVATE util-osx.h util-osx.mm)
+  if(APPLE_VIDEOTOOLBOX_LIBRARY)
+    target_sources(mythtv PRIVATE decoders/mythvtbcontext.cpp
+                                  decoders/mythvtbcontext.h)
+  endif()
 endif()
 if(WIN32)
   set_source_files_properties(cardutil.cpp PROPERTIES COMPILE_DEFINITIONS
                                                       O_NONBLOCK=0)
-  if(HAVE_DXVA2)
-    target_compile_definitions(mythtv PRIVATE USING_DXVA2)
+endif(WIN32)
+
+#
+# Platform stuff
+#
+
+if(TARGET mythtv_oss)
+  target_sources(mythtv PRIVATE audio/audiooutputoss.cpp audio/audiooutputoss.h)
+endif()
+
+if(TARGET ALSA::ALSA)
+  target_sources(mythtv PRIVATE audio/audiooutputalsa.cpp audio/audiooutputalsa.h)
+endif()
+if(TARGET PkgConfig::JACK)
+  target_sources(mythtv PRIVATE audio/audiooutputjack.cpp audio/audiooutputjack.h)
+endif()
+if(TARGET PkgConfig::PULSEAUDIO)
+  target_sources(mythtv PRIVATE audio/audiopulsehandler.cpp
+                              audio/audiopulsehandler.h)
+  if(ENABLE_AUDIO_PULSEOUTPUT)
+    target_sources(mythtv PRIVATE audio/audiooutputpulse.cpp
+                                audio/audiooutputpulse.h)
   endif()
-else(WIN32)
+endif()
+
+if(WIN32)
   target_sources(
     mythtv
-    PRIVATE recorders/vbitext/cc.h
-            recorders/vbitext/dllist.h
-            recorders/vbitext/lang.h
-            recorders/vbitext/vbi.h
-            recorders/vbitext/vt.h
-            recorders/vbitext/cc.cpp
-            recorders/vbitext/vbi.cpp
-            recorders/vbitext/lang.cpp)
-endif(WIN32)
+    PRIVATE audio/audiooutputwin.cpp audio/audiooutputdx.cpp
+            audio/audiooutputwin.h audio/audiooutputdx.h)
+  target_link_libraries(mythtv PRIVATE winmm ws2_32 user32 PkgConfig::SAMPLERATE
+                                     PkgConfig::SoundTouch)
+elseif(ANDROID)
+  target_sources(
+    mythtv PRIVATE audio/audiooutputopensles.cpp audio/audiooutputaudiotrack.cpp
+                 audio/audiooutputopensles.h audio/audiooutputaudiotrack.h)
+endif()
+
+if(APPLE)
+  target_sources(mythtv PRIVATE audio/audiooutputca.cpp audio/audiooutputca.h)
+  target_link_libraries(
+    mythtv
+    PRIVATE ${APPLE_APPLICATIONSERVICES_LIBRARY} ${APPLE_AUDIOTOOLBOX_LIBRARY}
+            ${APPLE_AUDIOUNIT_LIBRARY} ${APPLE_COREAUDIO_LIBRARY})
+endif()
 
 target_compile_definitions(mythtv PRIVATE MTV_API)
 
@@ -265,6 +353,15 @@ target_include_directories(
 
 target_link_libraries(
   mythtv
+  PRIVATE
+          PkgConfig::SAMPLERATE
+          $<TARGET_NAME_IF_EXISTS:mythtv_oss>
+          $<TARGET_NAME_IF_EXISTS:ALSA::ALSA>
+          $<TARGET_NAME_IF_EXISTS:PkgConfig::JACK>
+          $<TARGET_NAME_IF_EXISTS:PkgConfig::PULSEAUDIO>
+          $<$<BOOL:${WIN32}>:winmm>
+          $<$<BOOL:${WIN32}>:ws2_32>
+          $<$<BOOL:${WIN32}>:user32>
   PUBLIC Qt${QT_VERSION_MAJOR}::Core
          Qt${QT_VERSION_MAJOR}::Network
          Qt${QT_VERSION_MAJOR}::Sql
@@ -276,19 +373,22 @@ target_link_libraries(
          PkgConfig::LIBAVUTIL
          PkgConfig::LIBSWRESAMPLE
          PkgConfig::LIBSWSCALE
-         PkgConfig::LIBPOSTPROC
          Iconv::Iconv
          $<TARGET_NAME_IF_EXISTS:PkgConfig::LibXml2>
          $<TARGET_NAME_IF_EXISTS:PkgConfig::SYSTEMD>
          PkgConfig::LIBCRYPTO
          PkgConfig::SoundTouch
+         PkgConfig::MythDvdNav
          mythbluray
-         myth
-         mythservicecontracts
          mythbase
          mythui
          mythupnp
-         mythdvdnav)
+         )
+
+target_link_libraries(
+  mythtv
+  PRIVATE
+  ${MYTHTV_EXTRA_LIBRARIES})
 
 #
 # Total Android Hack. The check as to whether or not libxml2 is present ends up
@@ -325,17 +425,27 @@ if(ENABLE_FRONTEND OR ENABLE_BACKEND)
     target_link_libraries(mythtv PRIVATE PkgConfig::V4L2)
     target_sources(mythtv PRIVATE v4l2util.cpp v4l2util.h)
   endif()
-
-  include(cmake/Frontend.cmake)
-  include(cmake/Backend.cmake)
+  if(ENABLE_FRONTEND)
+    include(cmake/Frontend.cmake)
+  endif()
+  if(ENABLE_BACKEND)
+    include(cmake/Backend.cmake)
+  endif()
 endif()
 
 #
 # Installation section
 #
 
-set(HEADERS_TO_INSTALL1 metadataimagehelper.h mythavutil.h mythframe.h
-                        mythtvexp.h playgroup.h)
+set(HEADERS_TO_INSTALL1
+    metadataimagehelper.h
+    mythaverror.h
+    mythavframe.h
+    mythavutil.h
+    mythframe.h
+    mythtvexp.h
+    playgroup.h
+    )
 
 set(HEADERS_TO_INSTALL2
     visualisations/goom/drawmethods.h
@@ -353,9 +463,12 @@ set(HEADERS_TO_INSTALL2
 
 install(TARGETS mythtv LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
-install(FILES ${HEADERS_TO_INSTALL1}
+install(FILES ${HEADERS_TO_INSTALL1} ${LIBMYTHTV_HEADERS}
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/mythtv/libmythtv)
 
 install(
   FILES ${HEADERS_TO_INSTALL2}
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/mythtv/libmythtv/visualisations/goom)
+
+install(FILES ${AUDIO_HEADERS}
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/mythtv/libmythtv/audio)

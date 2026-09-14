@@ -31,9 +31,6 @@
 #include <QEventLoop>
 #include <QTimer>
 
-// MythDB headers
-#include "mythexp.h"
-
 // MythBase headers
 #include "libmythbase/mythchrono.h"
 
@@ -48,7 +45,7 @@ class MythUIStateType;
 class MythUIProgressBar;
 class MythTimer;
 
-class MPUBLIC GUIStartup : public MythScreenType
+class GUIStartup : public MythScreenType
 {
     Q_OBJECT
 
@@ -67,6 +64,7 @@ class MPUBLIC GUIStartup : public MythScreenType
     void setTotal(std::chrono::seconds total);
 
   public slots:
+    void Close(void) override; // MythScreenType
     bool updateProgress(bool finished);
     void updateProgress(void);
 
@@ -74,7 +72,6 @@ class MPUBLIC GUIStartup : public MythScreenType
     void Retry(void);
     void Search(void);
     void Setup(void);
-    void Close(void) override; // MythScreenType
     void OnClosePromptReturn(bool submit);
 
   signals:

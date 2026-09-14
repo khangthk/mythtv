@@ -17,11 +17,13 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
+#ifndef LIBMYTHMETADATA_TEST_MUSICMETADATA_H
+#define LIBMYTHMETADATA_TEST_MUSICMETADATA_H
 
+#include <QChar>     // Fix Qt6 GCC SFINAE warning
+#include <QBitArray> // Fix Qt6 GCC SFINAE warning
 #include <QTest>
-#include <iostream>
 
-#include "libmythbase/mythcorecontext.h"
 #include "libmythmetadata/metaio.h"
 
 class TestMusicMetadata : public QObject
@@ -33,9 +35,12 @@ private slots:
     static void dump(MusicMetadata *data);
     static void test_flac(void);
     static void test_ogg(void);
+    static void test_opus(void);
     static void test_mp4(void);
     static void test_mp3(void);
     static void test_wv(void);
     static void test_aiff(void);
     static void cleanupTestCase();
 };
+
+#endif // LIBMYTHMETADATA_TEST_MUSICMETADATA_H

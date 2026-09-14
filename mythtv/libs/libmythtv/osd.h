@@ -3,10 +3,10 @@
 
 // MythTV
 #include "libmythbase/mythtypes.h"
-#include "libmythbase/programtypes.h"
 #include "libmythtv/mythmediaoverlay.h"
 #include "libmythtv/mythplayerstate.h"
 #include "libmythui/mythscreentype.h"
+#include "libmythtv/programtypes.h"
 
 // Screen names are prepended with alphanumerics to force the correct ordering
 // when displayed. This is slightly complicated by the default windows
@@ -130,16 +130,19 @@ class OSD : public MythMediaOverlay
     bool DialogHandleGesture(MythGestureEvent *Event);
     void DialogGetText(InfoMap &Map);
 
+  protected:
+    void TearDown() override;
+
   private:
     void PositionWindow(MythScreenType* Window);
     void RemoveWindow(const QString& Window);
     void DialogShow(const QString& Window, const QString& Text = "", std::chrono::milliseconds UpdateFor = 0ms);
     void DialogAddButton(const QString& Text, QVariant Data, bool Menu = false, bool Current = false);
     void DialogBack(const QString& Text = "", const QVariant& Data = 0, bool Exit = false);
-    void TearDown() override;
     void LoadWindows();
     void CheckExpiry();
     void SetExpiryPriv(const QString &Window, enum OSDTimeout Timeout, std::chrono::milliseconds CustomTimeout);
+    void DoPulse(const QDateTime& now, const QDateTime& expire);
 
   private:
     bool            m_embedded          { false };

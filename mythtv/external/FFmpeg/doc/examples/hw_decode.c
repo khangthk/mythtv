@@ -24,18 +24,18 @@
  */
 
 /**
- * @file
- * HW-Accelerated decoding example.
- *
+ * @file HW-accelerated decoding API usage.example
  * @example hw_decode.c
- * This example shows how to do HW-accelerated decoding with output
- * frames from the HW video surfaces.
+ *
+ * Perform HW-accelerated decoding with output frames from HW video
+ * surfaces.
  */
 
 #include <stdio.h>
 
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+#include <libavutil/mem.h>
 #include <libavutil/pixdesc.h>
 #include <libavutil/hwcontext.h>
 #include <libavutil/opt.h>
@@ -215,8 +215,10 @@ int main(int argc, char *argv[])
         return AVERROR(ENOMEM);
 
     video = input_ctx->streams[video_stream];
-    if (avcodec_parameters_to_context(decoder_ctx, video->codecpar) < 0)
+    if (avcodec_parameters_to_context(decoder_ctx, video->codecpar) < 0) {
+        avcodec_free_context(&decoder_ctx);
         return -1;
+    }
 
     decoder_ctx->get_format  = get_hw_format;
 

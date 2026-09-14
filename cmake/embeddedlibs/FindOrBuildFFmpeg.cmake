@@ -23,7 +23,9 @@ function(find_or_build_ffmpeg)
       PROPERTY MANUALLY_ADDED_DEPENDENCIES)
   endif()
 
-  if(LIBS_INSTALL_FFMPEG)
+  if(MYTH_STAGING_PREFIX)
+    set(FFMPEG_INSTALL_PREFIX ${MYTH_STAGING_PREFIX})
+  elseif(LIBS_INSTALL_FFMPEG)
     set(FFMPEG_INSTALL_PREFIX ${LIBS_INSTALL_PREFIX})
   else()
     set(FFMPEG_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX})
@@ -52,12 +54,19 @@ function(find_or_build_ffmpeg)
     --disable-stripping
     --disable-static
     --enable-shared
-    --extra-cflags=-w)
+    )
 
   if(NOT LIBS_INSTALL_PREFIX STREQUAL CMAKE_INSTALL_PREFIX)
     list(APPEND FF_ARGS --extra-cflags=-I${LIBS_INSTALL_PREFIX}/include
          --extra-ldflags=-L${LIBS_INSTALL_PREFIX}/lib
          --extra-ldflags=-L${LIBS_INSTALL_PREFIX}/lib64)
+  endif()
+
+  if(ANDROID)
+    list(APPEND FF_ARGS --enable-mediacodec --enable-jni)
+  endif()
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "ppc|powerpc")
+    list(APPEND FF_ARGS $<IF:$<BOOL:${ENABLE_ALTIVEC}>,--enable-altivec,--disable-altivec>)
   endif()
 
   #
@@ -72,6 +81,26 @@ function(find_or_build_ffmpeg)
     list(APPEND FF_ARGS --enable-libmp3lame)
   else()
     list(APPEND FF_ARGS --disable-libmp3lame)
+  endif()
+
+  # ALSA only on linux systems
+  if(NOT TARGET ALSA::ALSA)
+    list(APPEND FF_ARGS --disable-alsa)
+  endif()
+
+  # Special handling for Vulkan. On Debian 12 and Ubuntu 24.04 systems
+  # the cmake test and the FFmpeg test for whether or not Vulkan is
+  # installed give different results.  The problem appears to be a
+  # missing stdbit.h file in libc6-dev on those systems causing the
+  # FFmpeg test to fail.  (Perhaps this is a change in the FFmpeg test
+  # in the latest version?)  If this code tries to force FFmpeg Vulkan
+  # support based on the cmake test, the compile will fail.  If this
+  # code allows FFmpeg to determine for itself whether Vulkan is
+  # present the compile will succeed.  Instead of explicitly forcing
+  # Vulkan on/off like before, only force it off when requested.
+  # Otherwise allow FFmpeg to do its own thing.
+  if(NOT ENABLE_VULKAN OR NOT TARGET:Vulkan::Vulkan)
+    list(APPEND FF_ARGS --disable-vulkan)
   endif()
 
   #
@@ -90,16 +119,27 @@ function(find_or_build_ffmpeg)
   endif()
 
   #
+  # Handle extra arguments passed from the user on the command line. Converting
+  # the user's string to a list allows the ExternalProject_Add command below to
+  # properly pass multiple arguments to FFmpeg's configure (instead of passing
+  # them all as a single argument).
+  #
+  if(FF_USER_OPTS)
+    string(REPLACE " " ";" FF_USER_OPTS ${FF_USER_OPTS})
+  endif()
+
+  #
   # Create the project to build FFmpeg
   #
   ExternalProject_Add(
     FFmpeg
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/mythtv/external/FFmpeg
+    DOWNLOAD_COMMAND
+      ${CMAKE_COMMAND} -E echo "Using FFmpeg sources in <SOURCE_DIR>"
     CONFIGURE_COMMAND
       ${CMAKE_COMMAND} -E env ${_PROGS} PKG_CONFIG_PATH=${PKG_CONFIG_PATH_STR}
       ${CMAKE_CURRENT_SOURCE_DIR}/mythtv/external/FFmpeg/configure ${FF_ARGS}
       "${FF_PLATFORM_ARGS}"
-      $<IF:$<BOOL:${CRYSTALHD_FOUND}>,--enable-crystalhd,--disable-crystalhd>
       $<IF:$<BOOL:${SYSTEM_LIBBLURAY_FOUND}>,--enable-libbluray,--disable-libbluray>
       $<IF:$<TARGET_EXISTS:Fontconfig::Fontconfig::LIBXVID>,--enable-libfontconfig,--disable-libfontconfig>
       $<IF:$<TARGET_EXISTS:LibX264::LibX264>,--enable-libx264,--disable-libx264>
@@ -117,8 +157,8 @@ function(find_or_build_ffmpeg)
       $<IF:$<TARGET_EXISTS:PkgConfig::LIBXVID>,--enable-libxvid,--disable-libxvid>
       $<IF:$<TARGET_EXISTS:PkgConfig::VAAPI>,--enable-vaapi,--disable-vaapi>
       $<IF:$<TARGET_EXISTS:PkgConfig::VDPAU>,--enable-vdpau,--disable-vdpau>
-      $<IF:$<TARGET_EXISTS:Vulkan::Vulkan>,--enable-vulkan,--disable-vulkan>
     # $<IF:$<TARGET_EXISTS:PkgConfig::SDL2>,--enable-sdl2,--disable-sdl2>
+      ${FF_USER_OPTS}
     BUILD_COMMAND ${MAKE_EXECUTABLE} ${MAKE_JFLAG}
     BUILD_ALWAYS ${LIBS_ALWAYS_REBUILD}
     INSTALL_COMMAND ${MAKE_EXECUTABLE} install
@@ -127,6 +167,9 @@ function(find_or_build_ffmpeg)
     DEPENDS lame external_libs ${after_libs})
 
   add_dependencies(embedded_libs FFmpeg)
+  if(LIBS_INSTALL_FFMPEG)
+    set_target_properties(embedded_libs PROPERTIES REQUIRES_RW TRUE)
+  endif()
 
   message(STATUS "Will build FFmpeg (embedded)")
 
@@ -135,26 +178,6 @@ function(find_or_build_ffmpeg)
     DEPENDEES install
     WORKING_DIRECTORY <BINARY_DIR>
     COMMAND ${MAKE_EXECUTABLE} install-pkgconfig)
-
-  #
-  # Install internal headers that are used by MythTV.  This must go away if
-  # MythTV is ever want to use the distribution supplied FFmpeg.
-  #
-  set(FFMPEG_INSTALL_INCLUDEDIR ${FFMPEG_INSTALL_PREFIX}/include/mythtv/)
-  ExternalProject_Add_Step(
-    FFmpeg expose_internal_headers_hack
-    DEPENDEES install
-    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/mythtv/external/FFmpeg
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-            ${FFMPEG_INSTALL_INCLUDEDIR}/compat/cuda
-    COMMAND ${CMAKE_COMMAND} -E copy libavformat/url.h
-            ${FFMPEG_INSTALL_INCLUDEDIR}/libavformat/
-    COMMAND ${CMAKE_COMMAND} -E copy libavutil/wchar_filename.h
-            ${FFMPEG_INSTALL_INCLUDEDIR}/libavutil/
-    COMMAND ${CMAKE_COMMAND} -E copy compat/w32dlfcn.h
-            ${FFMPEG_INSTALL_INCLUDEDIR}/compat/
-    COMMAND ${CMAKE_COMMAND} -E copy compat/cuda/dynlink_loader.h
-            ${FFMPEG_INSTALL_INCLUDEDIR}/compat/cuda/)
 
 endfunction()
 

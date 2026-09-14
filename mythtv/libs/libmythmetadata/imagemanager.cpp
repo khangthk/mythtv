@@ -4,9 +4,11 @@
 #include <QRunnable>
 #include <utility>
 
-#include "libmyth/mythmediamonitor.h"
 #include "libmythbase/mthreadpool.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
+#include "libmythbase/mythlogging.h"
+#include "libmythui/mediamonitor.h"
 
 #include "dbaccess.h"  // for FileAssociations
 
@@ -290,6 +292,7 @@ ImageAdapterBase::ImageAdapterBase() :
     // Generate glob list from supported extensions
     QStringList glob;
     QStringList allExt = m_imageFileExt + m_videoFileExt;
+    glob.reserve(allExt.size());
     for (const auto& ext : std::as_const(allExt))
         glob << "*." + ext;
 
@@ -312,6 +315,7 @@ QStringList ImageAdapterBase::SupportedImages()
     // Determine supported picture formats from Qt
     QStringList formats;
     QList<QByteArray> supported = QImageReader::supportedImageFormats();
+    formats.reserve(supported.size());
     for (const auto& ext : std::as_const(supported))
         formats << QString(ext);
     return formats;
@@ -402,6 +406,23 @@ void ImageAdapterLocal::Notify(const QString &mesg,
     gCoreContext->SendEvent(MythEvent(QString("%1 %2").arg(mesg, host), extra));
 }
 
+ImageAdapterSg::ImageAdapterSg() :
+    m_hostname(gCoreContext->GetMasterHostName()),
+    m_hostport(MythCoreContext::GetMasterServerPort()),
+    m_sg(StorageGroup(IMAGE_STORAGE_GROUP, m_hostname, false))
+{
+}
+
+QString ImageAdapterSg::MakeFileUrl(const QString &path) const
+{
+    return MythCoreContext::GenMythURL(m_hostname, m_hostport, path, IMAGE_STORAGE_GROUP);
+}
+
+QString ImageAdapterSg::MakeThumbUrl(const QString &devPath, const QString &path) const
+{
+    return MythCoreContext::GenMythURL(m_hostname, m_hostport, devPath + "/" + path,
+                                       THUMBNAIL_STORAGE_GROUP);
+}
 
 /*!
  \brief Construct a remote image from a file
@@ -1701,15 +1722,16 @@ QStringList ImageHandler<DBFS>::HandleCreateThumbnails
 template <class DBFS>
 void ImageHandler<DBFS>::RemoveFiles(ImageList &images) const
 {
-#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
-    QMutableVectorIterator<ImagePtr> it(images);
-#else
-    QMutableListIterator<ImagePtr> it(images);
-#endif
-    it.toBack();
-    while (it.hasPrevious())
+    if (images.empty())
+        return;
+
+    // Qt6 changed the iterator, so 'auto*' fails to compile.
+    // NOLINTNEXTLINE(readability-qualified-auto)
+    for (auto it = images.end();
+         it != images.begin();
+         /* no inc */)
     {
-        ImagePtrK im = it.previous();
+        ImagePtrK im = *(--it);
 
         // Remove file or directory
         QString absFilename = DBFS::GetAbsFilePath(im);
@@ -1718,13 +1740,15 @@ void ImageHandler<DBFS>::RemoveFiles(ImageList &images) const
                 && (im->IsFile() ? QFile::remove(absFilename)
                                  : QDir::root().rmdir(absFilename));
         if (success)
+        {
             LOG(VB_FILE, LOG_DEBUG, LOC + QString("Deleted %1").arg(absFilename));
+        }
         else
         {
             LOG(VB_GENERAL, LOG_ERR, LOC +
                 QString("Can't delete %1").arg(absFilename));
             // Remove from list
-            it.remove();
+            it = images.erase(it);
         }
     }
 }
@@ -2232,6 +2256,8 @@ QString ImageManagerFe::CreateImages(int destId, const ImageListK &images)
     const QString seperator("...");
     QStringList imageDefs(seperator);
     ImageIdList ids;
+    imageDefs.reserve(1 + images.size());
+    ids.reserve(images.size());
     for (const auto& im : std::as_const(images))
     {
         ids << im->m_id;
@@ -2271,6 +2297,7 @@ QString ImageManagerFe::MoveDbImages(const ImagePtrK& destDir, ImageListK &image
                                      const QString &srcPath)
 {
     QStringList idents;
+    idents.reserve(images.size());
     for (const auto& im : std::as_const(images))
         idents << QString::number(im->m_id);
 

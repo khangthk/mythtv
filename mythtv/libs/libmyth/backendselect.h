@@ -1,6 +1,7 @@
 #ifndef BACKENDSELECT_H
 #define BACKENDSELECT_H
 
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QMutex>
 #include <QString>
 
@@ -13,16 +14,6 @@ class MythUIButtonList;
 class MythUIButton;
 
 class DatabaseParams;
-
-// TODO: The following do not belong here, but I cannot think of a better
-//       location at this moment in time
-// Some common UPnP search and XML value strings
-const QString kBackendURI = "urn:schemas-mythtv-org:device:MasterMediaServer:1";
-const QString kDefaultDB  = "Database/";
-const QString kDefaultWOL = "WakeOnLAN/";
-const QString kDefaultMFE = "UPnP/MythFrontend/DefaultBackend/";
-const QString kDefaultPIN = kDefaultMFE + "SecurityPin";
-const QString kDefaultUSN = kDefaultMFE + "USN";
 
 using ItemMap = QMap <QString, DeviceLocation*>;
 
@@ -52,7 +43,11 @@ class BackendSelection : public MythScreenType
 
     bool Create(void) override; // MythScreenType
     void Close(void) override; // MythScreenType
+
+  protected:
     void customEvent(QEvent *event) override; // QObject
+    void Load(void) override; // MythScreenType
+    void Init(void) override; // MythScreenType
 
   protected slots:
     void Accept(void);
@@ -61,8 +56,6 @@ class BackendSelection : public MythScreenType
     void Cancel(void);  ///< Linked to 'Cancel' button
 
   private:
-    void Load(void) override; // MythScreenType
-    void Init(void) override; // MythScreenType
     bool ConnectBackend(DeviceLocation *dev);
     void AddItem(DeviceLocation *dev);
     void RemoveItem(const QString& USN);

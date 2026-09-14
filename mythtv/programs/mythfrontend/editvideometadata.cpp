@@ -2,13 +2,15 @@
 #include <algorithm>
 
 // Qt
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QImageReader>
 #include <QUrl>
 
 // MythTV
-#include "libmyth/mythcontext.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdirs.h"
-#include "libmythbase/remoteutil.h"
+#include "libmythbase/mythlogging.h"
+#include "libmythbase/storagegroup.h"
 #include "libmythbase/stringutil.h"
 #include "libmythmetadata/dbaccess.h"
 #include "libmythmetadata/globals.h"
@@ -214,6 +216,7 @@ namespace
         QStringList ret;
 
         QList<QByteArray> exts = QImageReader::supportedImageFormats();
+        ret.reserve(exts.size());
         for (const auto & ext : std::as_const(exts))
             ret.append(QString("*.").append(ext));
         return ret;
@@ -261,6 +264,7 @@ namespace
 
         const FileAssociations::association_list fa_list =
                 FileAssociations::getFileAssociation().getList();
+        exts.reserve(fa_list.size());
         for (const auto & fa : fa_list)
             exts << QString("*.%1").arg(fa.extension.toUpper());
 
@@ -379,7 +383,7 @@ void EditMetadataDialog::fillWidgets()
         }
         tc.emplace_back(md->GetID(), title);
     }
-    std::sort(tc.begin(), tc.end(), title_sort<title_list::value_type>());
+    std::ranges::sort(tc, title_sort<title_list::value_type>());
 
     for (const auto & t : tc)
     {
@@ -431,7 +435,7 @@ void EditMetadataDialog::fillWidgets()
             !m_workingMetadata->GetCoverFile().isEmpty() &&
             !m_workingMetadata->GetCoverFile().startsWith("/"))
         {
-            m_coverart->SetFilename(generate_file_url("Coverart",
+            m_coverart->SetFilename(StorageGroup::generate_file_url("Coverart",
                                   m_workingMetadata->GetHost(),
                                   m_workingMetadata->GetCoverFile()));
         }
@@ -449,7 +453,7 @@ void EditMetadataDialog::fillWidgets()
             !m_workingMetadata->GetScreenshot().isEmpty() &&
             !m_workingMetadata->GetScreenshot().startsWith("/"))
         {
-            m_screenshot->SetFilename(generate_file_url("Screenshots",
+            m_screenshot->SetFilename(StorageGroup::generate_file_url("Screenshots",
                                   m_workingMetadata->GetHost(),
                                   m_workingMetadata->GetScreenshot()));
         }
@@ -467,7 +471,7 @@ void EditMetadataDialog::fillWidgets()
             !m_workingMetadata->GetBanner().isEmpty() &&
             !m_workingMetadata->GetBanner().startsWith("/"))
         {
-            m_banner->SetFilename(generate_file_url("Banners",
+            m_banner->SetFilename(StorageGroup::generate_file_url("Banners",
                                   m_workingMetadata->GetHost(),
                                   m_workingMetadata->GetBanner()));
         }
@@ -485,7 +489,7 @@ void EditMetadataDialog::fillWidgets()
             !m_workingMetadata->GetFanart().isEmpty() &&
             !m_workingMetadata->GetFanart().startsWith("/"))
         {
-            m_fanart->SetFilename(generate_file_url("Fanart",
+            m_fanart->SetFilename(StorageGroup::generate_file_url("Fanart",
                                   m_workingMetadata->GetHost(),
                                   m_workingMetadata->GetFanart()));
         }
@@ -635,7 +639,7 @@ void EditMetadataDialog::FindCoverArt()
 {
     if (!m_workingMetadata->GetHost().isEmpty())
     {
-        QString url = generate_file_url("Coverart",
+        QString url = StorageGroup::generate_file_url("Coverart",
                       m_workingMetadata->GetHost(),
                       "");
         FindImagePopup(url, "", *this, CEID_COVERARTFILE);
@@ -814,7 +818,7 @@ void EditMetadataDialog::FindBanner()
 {
     if (!m_workingMetadata->GetHost().isEmpty())
     {
-        QString url = generate_file_url("Banners",
+        QString url = StorageGroup::generate_file_url("Banners",
                       m_workingMetadata->GetHost(),
                       "");
         FindImagePopup(url, "", *this, CEID_BANNERFILE);
@@ -861,7 +865,7 @@ void EditMetadataDialog::FindFanart()
 {
     if (!m_workingMetadata->GetHost().isEmpty())
     {
-        QString url = generate_file_url("Fanart",
+        QString url = StorageGroup::generate_file_url("Fanart",
                       m_workingMetadata->GetHost(),
                       "");
         FindImagePopup(url, "", *this, CEID_FANARTFILE);
@@ -908,7 +912,7 @@ void EditMetadataDialog::FindScreenshot()
 {
     if (!m_workingMetadata->GetHost().isEmpty())
     {
-        QString url = generate_file_url("Screenshots",
+        QString url = StorageGroup::generate_file_url("Screenshots",
                       m_workingMetadata->GetHost(),
                       "");
         FindImagePopup(url, "", *this, CEID_SCREENSHOTFILE);
@@ -956,7 +960,7 @@ void EditMetadataDialog::FindTrailer()
 {
     if (!m_workingMetadata->GetHost().isEmpty())
     {
-        QString url = generate_file_url("Trailers",
+        QString url = StorageGroup::generate_file_url("Trailers",
                       m_workingMetadata->GetHost(),
                       "");
         FindVideoFilePopup(url, "", *this, CEID_TRAILERFILE);
@@ -994,7 +998,7 @@ void EditMetadataDialog::customEvent(QEvent *levent)
 {
     if (levent->type() == DialogCompletionEvent::kEventType)
     {
-        auto *dce = (DialogCompletionEvent*)(levent);
+        auto *dce = (DialogCompletionEvent*)levent;
 
         const QString resultid = dce->GetId();
 
@@ -1074,3 +1078,5 @@ void EditMetadataDialog::customEvent(QEvent *levent)
         GetNotificationCenter()->Queue(n);
     }
 }
+
+#include "moc_editvideometadata.cpp"

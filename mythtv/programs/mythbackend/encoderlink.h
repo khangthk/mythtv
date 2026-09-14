@@ -10,7 +10,7 @@
 #include <QMutex>                       // for QMutex
 #include <QString>                      // for QString
 
-#include "libmythbase/recordingstatus.h"
+#include "libmythtv/recordingstatus.h"
 #include "libmythtv/tv.h"               // for SleepStatus, etc
 #include "libmythtv/videoouttypes.h"    // for PictureAttribute
 
@@ -81,7 +81,6 @@ class EncoderLink
     bool IsTunerLocked(void) const { return m_locked; }
 
     bool CheckFile(ProgramInfo *pginfo);
-    void GetDiskSpace(QStringList &o_strlist);
     long long GetMaxBitrate(void);
     std::chrono::milliseconds SetSignalMonitoringRate(std::chrono::milliseconds rate, int notifyFrontend);
 

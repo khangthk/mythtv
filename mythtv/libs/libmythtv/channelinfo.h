@@ -14,7 +14,6 @@
 
 // MythTV headers
 #include "libmythbase/mythtypes.h"
-#include "libmythbase/programtypes.h"
 #include "libmythtv/mythtvexp.h"
 
 enum ChannelVisibleType : std::int8_t
@@ -129,6 +128,7 @@ class MTV_PUBLIC ChannelInfo
     QList<uint>  m_inputIdList;
 };
 using ChannelInfoList = std::vector<ChannelInfo>;
+using ChannelInfoList_ci = std::vector<ChannelInfo>::const_iterator;
 
 class MTV_PUBLIC ChannelInsertInfo
 {

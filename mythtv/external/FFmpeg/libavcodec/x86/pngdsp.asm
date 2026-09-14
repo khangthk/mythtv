@@ -29,9 +29,8 @@ cextern pw_255
 
 SECTION .text
 
-; %1 = nr. of xmm registers used
-%macro ADD_BYTES_FN 1
-cglobal add_bytes_l2, 4, 6, %1, dst, src1, src2, wa, w, i
+INIT_XMM sse2
+cglobal add_bytes_l2, 4, 6, 2, dst, src1, src2, wa, w, i
 %if ARCH_X86_64
     movsxd             waq, wad
 %endif
@@ -53,7 +52,6 @@ cglobal add_bytes_l2, 4, 6, %1, dst, src1, src2, wa, w, i
     cmp                 iq, waq
     jl .loop_v
 
-%if mmsize == 16
     ; vector loop
     mov                waq, wq
     and                waq, ~7
@@ -66,7 +64,6 @@ cglobal add_bytes_l2, 4, 6, %1, dst, src1, src2, wa, w, i
 .end_l:
     cmp                 iq, waq
     jl .loop_l
-%endif
 
     ; scalar loop for leftover
     jmp .end_s
@@ -78,19 +75,10 @@ cglobal add_bytes_l2, 4, 6, %1, dst, src1, src2, wa, w, i
 .end_s:
     cmp                 iq, wq
     jl .loop_s
-    REP_RET
-%endmacro
+    RET
 
-%if ARCH_X86_32
-INIT_MMX mmx
-ADD_BYTES_FN 0
-%endif
-
-INIT_XMM sse2
-ADD_BYTES_FN 2
-
-%macro ADD_PAETH_PRED_FN 1
-cglobal add_png_paeth_prediction, 5, 7, %1, dst, src, top, w, bpp, end, cntr
+INIT_MMX ssse3
+cglobal png_add_paeth_prediction, 5, 7, 0, dst, src, top, w, bpp, end, cntr
 %if ARCH_X86_64
     movsxd            bppq, bppd
     movsxd              wq, wd
@@ -121,21 +109,9 @@ cglobal add_png_paeth_prediction, 5, 7, %1, dst, src, top, w, bpp, end, cntr
     psubw               m4, m0
     mova                m5, m3
     paddw               m5, m4
-%if cpuflag(ssse3)
     pabsw               m3, m3
     pabsw               m4, m4
     pabsw               m5, m5
-%else ; !cpuflag(ssse3)
-    psubw               m7, m5
-    pmaxsw              m5, m7
-    pxor                m6, m6
-    pxor                m7, m7
-    psubw               m6, m3
-    psubw               m7, m4
-    pmaxsw              m3, m6
-    pmaxsw              m4, m7
-    pxor                m7, m7
-%endif ; cpuflag(ssse3)
     mova                m6, m4
     pminsw              m6, m5
     pcmpgtw             m3, m6
@@ -163,11 +139,5 @@ cglobal add_png_paeth_prediction, 5, 7, %1, dst, src, top, w, bpp, end, cntr
     dec              cntrq
     jge .bpp_loop
     POP               dstq
+    emms
     RET
-%endmacro
-
-INIT_MMX mmxext
-ADD_PAETH_PRED_FN 0
-
-INIT_MMX ssse3
-ADD_PAETH_PRED_FN 0

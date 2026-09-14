@@ -2,18 +2,19 @@
 #include <cstdlib> // for llabs
 
 #include <QtGlobal>
-#if defined(Q_OS_DARWIN) || defined(__FreeBSD__)
+#ifdef Q_OS_BSD4
 #include <sys/param.h>
 #include <sys/mount.h>
-#elif __linux__
+#elif defined(Q_OS_LINUX)
 #include <sys/vfs.h>
 #endif
 
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QMutex>
 #include <QFile>
 #include <QMap>
 
-#include "libmythbase/programinfo.h"
+#include "libmythtv/programinfo.h"
 
 #include "requesthandler/fileserverutil.h"
 

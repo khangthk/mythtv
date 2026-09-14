@@ -11,12 +11,13 @@
 #include <QTextStream>
 
 // myth
-#include <mythconfig.h>
-#include <libmyth/mythcontext.h>
+#include <libmythbase/mythconfig.h> // PYTHON_EXE
 #include <libmythbase/exitcodes.h>
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythdate.h>
 #include <libmythbase/mythdb.h>
 #include <libmythbase/mythdirs.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythbase/mythmiscutil.h>
 #include <libmythbase/mythsystemlegacy.h>
 #include <libmythbase/stringutil.h>
@@ -394,7 +395,9 @@ void MythBurn::updateArchiveList(void)
             MythUIBusyDialog(message, popupStack, "mythburnbusydialog");
 
     if (busyPopup->Create())
+    {
         popupStack->AddScreen(busyPopup, false);
+    }
     else
     {
         delete busyPopup;
@@ -864,12 +867,15 @@ void MythBurn::changeProfile()
 
     auto *profileDialog = new ProfileDialog(popupStack, curItem, m_profileList);
 
-    if (profileDialog->Create())
+    if (!profileDialog->Create())
     {
-        popupStack->AddScreen(profileDialog, false);
-        connect(profileDialog, &ProfileDialog::haveResult,
-                this, &MythBurn::profileChanged);
+        delete profileDialog;
+        return;
     }
+
+    popupStack->AddScreen(profileDialog, false);
+    connect(profileDialog, &ProfileDialog::haveResult,
+            this, &MythBurn::profileChanged);
 }
 
 void MythBurn::profileChanged(int profileNo)
@@ -1175,4 +1181,4 @@ void BurnMenu::doBurn(int mode)
     showLogViewer();
 }
 
-/* vim: set expandtab tabstop=4 shiftwidth=4: */
+#include "moc_mythburn.cpp"

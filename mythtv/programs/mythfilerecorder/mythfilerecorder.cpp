@@ -11,12 +11,15 @@
 // Qt
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
+#include <QTextStream>
 #include <QThread>
 #include <QTime>
 
 // MythTV
 #include "libmyth/mythcontext.h"
 #include "libmythbase/exitcodes.h"
+#include "libmythbase/mythappname.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythversion.h"
 
@@ -246,7 +249,9 @@ bool Commands::process_command(QString & cmd)
         else
         {
             if (m_eof.loadAcquire() != 0)
+            {
                 send_status("ERR:End of file");
+            }
             else
             {
                 send_status("OK");
@@ -292,7 +297,11 @@ bool Commands::process_command(QString & cmd)
     }
     else if (cmd.startsWith("BlockSize"))
     {
-        m_streamer->BlockSize(cmd.mid(10).toInt());
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+        m_streamer->BlockSize(cmd.midRef(10).toInt());
+#else
+        m_streamer->BlockSize(QStringView(cmd).mid(10).toInt());
+#endif
         send_status("OK");
     }
     else if (cmd.startsWith("StartStreaming"))
@@ -342,7 +351,12 @@ bool Commands::Run(const QString & filename, int data_rate, bool loopinput)
     streamThread->start();
 
     QFile input;
-    input.open(stdin, QIODevice::ReadOnly);
+    if (!input.open(stdin, QIODevice::ReadOnly))
+    {
+        LOG(VB_RECORD, LOG_ERR, LOC + "Opening of stdin failed");
+        return false;
+    }
+
     QTextStream qtin(&input);
 
     LOG(VB_RECORD, LOG_INFO, LOC + "Listening for commands");
@@ -444,4 +458,4 @@ int main(int argc, char *argv[])
     return GENERIC_EXIT_OK;
 }
 
-/* vim: set expandtab tabstop=4 shiftwidth=4: */
+#include "moc_mythfilerecorder.cpp"

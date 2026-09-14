@@ -3,6 +3,10 @@
 #include <cmath>
 
 // Qt
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtEnvironmentVariables>
+#endif
 #include <QLibrary>
 #include <QPainter>
 #include <QWindow>
@@ -10,6 +14,7 @@
 #include <QGuiApplication>
 
 // MythTV
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
 
@@ -17,16 +22,11 @@
 #include "mythrenderopengl.h"
 #include "mythrenderopenglshaders.h"
 #include "mythuitype.h"
-#ifdef USING_X11
+#if CONFIG_X11
 #include "platforms/mythxdisplay.h"
 #endif
 
 #define LOC QString("OpenGL: ")
-
-#ifdef Q_OS_ANDROID
-#include <android/log.h>
-#include <QWindow>
-#endif
 
 static constexpr GLuint VERTEX_INDEX  { 0 };
 static constexpr GLuint COLOR_INDEX   { 1 };
@@ -83,7 +83,7 @@ MythRenderOpenGL* MythRenderOpenGL::Create(QWidget *Widget)
     if (!Widget)
         return nullptr;
 
-#ifdef USING_X11
+#if CONFIG_X11
     if (MythXDisplay::DisplayIsRemote())
     {
         LOG(VB_GENERAL, LOG_WARNING, LOC + "OpenGL is disabled for Remote X Session");
@@ -306,7 +306,7 @@ bool MythRenderOpenGL::Init(void)
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxtexsz);
     glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &maxunits);
     m_maxTextureUnits = maxunits;
-    m_maxTextureSize  = (maxtexsz) ? maxtexsz : 512;
+    m_maxTextureSize  = maxtexsz ? maxtexsz : 512;
     QSurfaceFormat fmt = format();
 
     // Pixel buffer objects
@@ -420,7 +420,7 @@ void MythRenderOpenGL::DebugFeatures(void)
     LOG(VB_GENERAL, LOG_INFO, LOC + QString("OpenGL renderer      : %1").arg(reinterpret_cast<const char*>(glGetString(GL_RENDERER))));
     LOG(VB_GENERAL, LOG_INFO, LOC + QString("OpenGL version       : %1").arg(reinterpret_cast<const char*>(glGetString(GL_VERSION))));
     LOG(VB_GENERAL, LOG_INFO, LOC + QString("Qt platform          : %1").arg(QGuiApplication::platformName()));
-#ifdef USING_EGL
+#if CONFIG_EGL
     bool eglfuncs = IsEGL();
     LOG(VB_GENERAL, LOG_INFO, LOC + QString("EGL display          : %1").arg(GLYesNo(GetEGLDisplay() != nullptr)));
     LOG(VB_PLAYBACK, LOG_INFO, LOC + QString("EGL images           : %1").arg(GLYesNo(eglfuncs)));
@@ -541,14 +541,7 @@ void MythRenderOpenGL::SetWidget(QWidget *Widget)
         return;
     }
 
-#ifdef Q_OS_ANDROID
-    // Ensure surface type is always OpenGL
-    m_window->setSurfaceType(QWindow::OpenGLSurface);
-    if (native && native->windowHandle())
-        native->windowHandle()->setSurfaceType(QWindow::OpenGLSurface);
-#endif
-
-#ifdef USING_QTWEBENGINE
+#ifdef CONFIG_QTWEBENGINE
     auto * globalcontext = QOpenGLContext::globalShareContext();
     if (globalcontext)
     {
@@ -558,9 +551,13 @@ void MythRenderOpenGL::SetWidget(QWidget *Widget)
 #endif
 
     if (!create())
+    {
         LOG(VB_GENERAL, LOG_CRIT, LOC + "Failed to create OpenGLContext!");
+    }
     else
+    {
         Widget->setAttribute(Qt::WA_PaintOnScreen);
+    }
 }
 
 void MythRenderOpenGL::makeCurrent()
@@ -862,9 +859,8 @@ void MythRenderOpenGL::DrawBitmap(MythGLTexture *Texture, QOpenGLFramebufferObje
             void* target = buffer->map(QOpenGLBuffer::WriteOnly);
             if (target)
             {
-                std::copy(Texture->m_vertexData.cbegin(),
-                          Texture->m_vertexData.cend(),
-                          static_cast<GLfloat*>(target));
+                std::ranges::copy(Texture->m_vertexData,
+                                  static_cast<GLfloat*>(target));
             }
             buffer->unmap();
         }
@@ -928,9 +924,8 @@ void MythRenderOpenGL::DrawBitmap(std::vector<MythGLTexture *> &Textures,
             void* target = buffer->map(QOpenGLBuffer::WriteOnly);
             if (target)
             {
-                std::copy(first->m_vertexData.cbegin(),
-                          first->m_vertexData.cend(),
-                          static_cast<GLfloat*>(target));
+                std::ranges::copy(first->m_vertexData,
+                                  static_cast<GLfloat*>(target));
             }
             buffer->unmap();
         }
@@ -1062,6 +1057,7 @@ inline void MythRenderOpenGL::glVertexAttribPointerI(GLuint Index, GLint Size, G
 {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
+    // NOLINTNEXTLINE(performance-no-int-to-ptr)
     glVertexAttribPointer(Index, Size, Type, Normalize, Stride, reinterpret_cast<const char *>(Value));
 #pragma GCC diagnostic pop
 }
@@ -1591,3 +1587,5 @@ void MythRenderOpenGL::Check16BitFBO(void)
         delete fbo;
     }
 }
+
+#include "moc_mythrenderopengl.cpp"

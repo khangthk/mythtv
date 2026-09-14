@@ -17,9 +17,11 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
+#ifndef LIBMYTHBASE_TEST_MYTHSYSTEMLEGACY_H
+#define LIBMYTHBASE_TEST_MYTHSYSTEMLEGACY_H
 
-#include <unistd.h> // for usleep()
-
+#include <QChar>     // Fix Qt6 GCC SFINAE warning
+#include <QBitArray> // Fix Qt6 GCC SFINAE warning
 #include <QTest>
 #include <QTemporaryFile>
 #include <QDateTime>
@@ -124,7 +126,7 @@ class TestMythSystemLegacy: public QObject
     static void stdin_works(void)
     {
         QTemporaryFile tempfile;
-        tempfile.open();
+        QCOMPARE(tempfile.open(), true);
         QByteArray in = QString(__FUNCTION__).toLatin1();
         MythSystemLegacy cmd(QString("cat - > %1").arg(tempfile.fileName()),
                              kMSStdIn | kMSRunShell);
@@ -196,3 +198,5 @@ class TestMythSystemLegacy: public QObject
 
     // TODO test current GetStatus() results.
 };
+
+#endif // LIBMYTHBASE_TEST_MYTHSYSTEMLEGACY_H

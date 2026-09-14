@@ -70,15 +70,19 @@ static constexpr const char* MYTH_PROTO_TOKEN { "BuzzOff" };
  *      mythtv/bindings/perl/MythTV.pm
  *
  *  MythTV Python Bindings
- *      mythtv/bindings/python/MythTV/static.py
+ *      mythtv/bindings/python/MythTV/_versions.py.in
  *
  *  MythTV PHP Bindings
  *      mythtv/bindings/php/MythBackend.php
  */
 
-static constexpr const char* MYTH_DATABASE_VERSION { "1380" };
+static constexpr const char* MYTH_DATABASE_VERSION { "1385" };
 
 MBASE_PUBLIC  const char *GetMythSourceVersion();
 MBASE_PUBLIC  const char *GetMythSourcePath();
 
+// The version argument exists only for the test code.  It should
+// never be used from production code.
+MBASE_PUBLIC  bool ParseMythSourceVersion(bool& devel, uint& major, uint& minor,
+                                          const char* version = nullptr);
 #endif

@@ -1,10 +1,12 @@
 // Qt
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QImageReader>
 #include <QApplication>
 
 // MythtTV
-#include <libmyth/mythcontext.h>
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythdirs.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythui/mythdialogbox.h>
 #include <libmythui/mythmainwindow.h>
 #include <libmythui/mythuibutton.h>
@@ -89,6 +91,7 @@ namespace
         QStringList ret;
 
         QList<QByteArray> exts = QImageReader::supportedImageFormats();
+        ret.reserve(exts.size());
         for (const auto & ext : std::as_const(exts))
             ret.append(QString("*.").append(ext));
 
@@ -255,3 +258,5 @@ void EditRomInfoDialog::SetBoxart(const QString& file)
     m_workingRomInfo->setBoxart(file);
     m_boxartText->SetText(file);
 }
+
+#include "moc_romedit.cpp"

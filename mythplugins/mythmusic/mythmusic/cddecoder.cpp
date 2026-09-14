@@ -4,9 +4,13 @@
 // C
 #include <cstdlib>
 #include <cstring>
-#include <unistd.h>
+#include <thread>
 
 // Qt
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QFile>
 #include <QIODevice>
 #include <QObject>
@@ -17,8 +21,8 @@
 #include <cdio/logging.h>
 
 // MythTV
-#include <libmyth/audio/audiooutput.h>
-#include <libmyth/mythcontext.h>
+#include <libmythtv/audio/audiooutput.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythmetadata/musicmetadata.h>
 
 extern "C" {
@@ -61,7 +65,7 @@ static CdIo_t * openCdio(const QString& name)
         cdio_log_set_handler(&logger);
     }
 
-    CdIo_t *cdio = cdio_open(name.toLatin1(), DRIVER_DEVICE);
+    CdIo_t *cdio = cdio_open(name.toLatin1().constData(), DRIVER_DEVICE);
     if (!cdio)
     {
         LOG(VB_MEDIA, LOG_INFO, QString("CdDecoder: cdio_open(%1) failed").
@@ -104,7 +108,7 @@ CdDecoder::~CdDecoder()
 void CdDecoder::setDevice(const QString &dev)
 {
     m_deviceName = dev;
-#ifdef WIN32
+#ifdef Q_OS_WINDOWS
     // libcdio needs the drive letter with no path
     if (m_deviceName.endsWith('\\'))
         m_deviceName.chop(1);
@@ -131,7 +135,7 @@ void CdDecoder::writeBlock()
             }
             break;
         }
-        ::usleep(output()->GetAudioBufferedTime().count()<<9);
+        std::this_thread::sleep_for(output()->GetAudioBufferedTime() / 2);
     }
 }
 
@@ -148,7 +152,9 @@ bool CdDecoder::initialize()
     if (m_inited)
         return true;
 
-    m_inited = m_userStop = m_finish = false;
+    m_inited = false;
+    m_userStop = false;
+    m_finish = false;
     m_freq = m_bitrate = 0L;
     m_stat = DecoderEvent::kError;
     m_chan = 0;
@@ -281,7 +287,9 @@ void CdDecoder::deinit()
     if (m_outputBuf)
         ::av_free(m_outputBuf), m_outputBuf = nullptr;
 
-    m_inited = m_userStop = m_finish = false;
+    m_inited = false;
+    m_userStop = false;
+    m_finish = false;
     m_freq = m_bitrate = 0L;
     m_stat = DecoderEvent::kFinished;
     m_chan = 0;
@@ -314,7 +322,7 @@ void CdDecoder::run()
         if (m_seekTime >= +0.)
         {
             m_curPos = m_start + static_cast< lsn_t >(
-                (m_seekTime * kSamplesPerSec) / CD_FRAMESAMPLES);
+                (m_seekTime * kSamplesPerSec) / static_cast<int>(CD_FRAMESAMPLES));
             if (m_paranoia)
             {
                 QMutexLocker lock(&getCdioMutex());
@@ -382,7 +390,7 @@ void CdDecoder::run()
             if (fill < (thresh << 6))
                 break;
             // Wait for half of the buffer to drain
-            ::usleep(output()->GetAudioBufferedTime().count()<<9);
+            std::this_thread::sleep_for(output()->GetAudioBufferedTime() / 2);
         }
 
         // write a block if there's sufficient space for it
@@ -395,7 +403,9 @@ void CdDecoder::run()
     }
 
     if (m_userStop)
+    {
         m_inited = false;
+    }
     else if (output())
     {
         // Drain our buffer
@@ -508,7 +518,9 @@ MusicMetadata *CdDecoder::getMetadata()
     track_t tracknum = 0;
 
     if (-1 == m_setTrackNum)
+    {
         tracknum = getURL().toUInt();
+    }
     else
     {
         tracknum = m_setTrackNum;
@@ -570,7 +582,7 @@ MusicMetadata *CdDecoder::getMetadata()
     const lsn_t start = cdio_get_track_lsn(cdio, tracknum);
     if (CDIO_INVALID_LSN != start && CDIO_INVALID_LSN != end)
     {
-        length = std::chrono::milliseconds(((end - start + 1) * 1000 + CDIO_CD_FRAMES_PER_SEC/2) /
+        length = std::chrono::milliseconds((((end - start + 1) * 1000) + CDIO_CD_FRAMES_PER_SEC/2) /
                                            CDIO_CD_FRAMES_PER_SEC);
     }
 

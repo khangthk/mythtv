@@ -5,22 +5,31 @@
 
 #include "surf3d.h"
 
+#ifndef __cpp_size_t_suffix
+#include <libmythbase/sizetliteral.h>
+#endif
+
 void grid3d_free(grid3d **grid)
 {
-    free ((*grid)->surf.vertex);
-    free ((*grid)->surf.svertex);
-    free (*grid);
+    (*grid)->surf.vertex.clear();
+    (*grid)->surf.svertex.clear();
+    delete *grid;
     *grid = nullptr;
 }
 
 grid3d *grid3d_new (int sizex, int defx, int sizez, int defz, v3d center) {
 	int x = defx;
 	int y = defz;
-	auto *g = (grid3d*)malloc (sizeof(grid3d));
+	auto *g = new grid3d;
 	surf3d *s = &(g->surf);
 	s->nbvertex = x*y;
-	s->vertex = (v3d*)malloc (sizeof(v3d)*x*y);
-	s->svertex = (v3d*)malloc(sizeof(v3d)*x*y);
+#ifdef __cpp_size_t_suffix
+	s->vertex.resize(1Z*x*y);
+	s->svertex.resize(1Z*x*y);
+#else
+	s->vertex.resize(1_Z*x*y);
+	s->svertex.resize(1_Z*x*y);
+#endif
 	s->center = center;
 	
 	g->defx=defx;
@@ -34,9 +43,9 @@ grid3d *grid3d_new (int sizex, int defx, int sizez, int defz, v3d center) {
 		x = defx;
 		while (x) {
 			--x;
-			s->vertex[x+(defx*y)].x = (x-defx/2.0F)*sizex/defx;
+			s->vertex[x+(defx*y)].x = (x-(defx/2.0F))*sizex/defx;
 			s->vertex[x+(defx*y)].y = 0;
-			s->vertex[x+(defx*y)].z = (y-defz/2.0F)*sizez/defz;
+			s->vertex[x+(defx*y)].z = (y-(defz/2.0F))*sizez/defz;
 		}
 	}
 	return g;
@@ -94,7 +103,7 @@ void surf3d_translate (surf3d *s) {
 	}
 }
 
-void grid3d_update (grid3d *g, float angle, const float *vals, float dist) {
+void grid3d_update (grid3d *g, float angle, const floatvec& vals, float dist) {
 	float cosa = NAN;
 	float sina = NAN;
 	surf3d *s = &(g->surf);
@@ -106,9 +115,9 @@ void grid3d_update (grid3d *g, float angle, const float *vals, float dist) {
 	SINCOS(angle,sina,cosa);
 
 	if (g->mode==0) {
-		if (vals)
+		if (static_cast<int>(vals.size()) >= g->defx)
 			for (int i=0;i<g->defx;i++)
-				s->vertex[i].y = s->vertex[i].y*0.2F + vals[i]*0.8F;
+				s->vertex[i].y = (s->vertex[i].y*0.2F) + (vals[i]*0.8F);
 
 		for (int i=g->defx;i<s->nbvertex;i++) {
 			s->vertex[i].y *= 0.255F;

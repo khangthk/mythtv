@@ -1,7 +1,6 @@
-#include <unistd.h> // for usleep()
-
 #include <algorithm>
 #include <limits> // workaround QTBUG-90395
+#include <thread>
 #include <utility>
 
 #include <QTcpSocket>
@@ -17,8 +16,7 @@
 #include "libmythbase/mythdirs.h"
 #include "libmythbase/serverpool.h"
 
-#include "libmyth/audio/audiooutput.h"
-#include "libmyth/audio/audiooutpututil.h"
+#include "libmythtv/audio/audiooutput.h"
 
 #include "mythraopdevice.h"
 #include "mythraopconnection.h"
@@ -57,20 +55,32 @@ static constexpr std::chrono::milliseconds AUDIOCARD_BUFFER { 500ms };
 // anything lower than 50ms on windows, isn't reliable
 static constexpr std::chrono::milliseconds AUDIO_BUFFER { 100ms };
 
-class RaopNetStream : public QTextStream
+class RaopNetStream
 {
 public:
-    explicit RaopNetStream(QIODevice *device) : QTextStream(device)
+    explicit RaopNetStream(QIODevice *device) : m_q(new QTextStream(device))
     {
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+        m_q->setCodec("UTF-8");
+#else
+        m_q->setEncoding(QStringConverter::Utf8);
+#endif
     };
+    ~RaopNetStream()
+    {
+        delete m_q;
+    }
     RaopNetStream &operator<<(const QString &str)
     {
         LOG(VB_PLAYBACK, LOG_DEBUG,
             LOC + QString("Sending(%1): ").arg(str.length()) + str.trimmed());
-        QTextStream *q = this;
-        *q << str;
+        *m_q << str;
         return *this;
     };
+    void flush() { m_q->flush(); }
+
+private:
+    QTextStream *m_q {nullptr};
 };
 
 MythRAOPConnection::MythRAOPConnection(QObject *parent, QTcpSocket *socket,
@@ -204,11 +214,6 @@ bool MythRAOPConnection::Init(void)
 {
     // connect up the request socket
     m_textStream = new RaopNetStream(m_socket);
-#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
-    m_textStream->setCodec("UTF-8");
-#else
-    m_textStream->setEncoding(QStringConverter::Utf8);
-#endif
     if (!connect(m_socket, &QIODevice::readyRead, this, &MythRAOPConnection::readClient))
     {
         LOG(VB_PLAYBACK, LOG_ERR, LOC + "Failed to connect client socket signal.");
@@ -363,7 +368,7 @@ void MythRAOPConnection::udpDataReady(QByteArray buf, const QHostAddress& /*peer
         delete decoded;
         return;
     }
-    AudioPacket frames { seq, decoded };
+    AudioPacket frames { .seq=seq, .data=decoded };
     m_audioQueue.insert(timestamp, frames);
     ProcessAudio();
 }
@@ -494,15 +499,17 @@ void MythRAOPConnection::ExpireResendRequests(std::chrono::milliseconds timestam
     if (m_resends.isEmpty())
         return;
 
-    QMutableMapIterator<uint16_t,std::chrono::milliseconds> it(m_resends);
-    while (it.hasNext())
+    for (auto it = m_resends.begin(); it != m_resends.end(); /* no inc */)
     {
-        it.next();
         if (it.value() < timestamp && m_streamingStarted)
         {
             LOG(VB_PLAYBACK, LOG_WARNING, LOC +
                 QString("Never received resend packet %1").arg(it.key()));
-            m_resends.remove(it.key());
+            it = m_resends.erase(it);
+        }
+        else
+        {
+            ++it;
         }
     }
 }
@@ -714,8 +721,7 @@ uint32_t MythRAOPConnection::decodeAudioPacket(uint8_t type,
     while (tmp_pkt->size > 0)
     {
         int data_size = 0;
-        int ret = AudioOutputUtil::DecodeAudio(ctx, samples,
-                                               data_size, tmp_pkt);
+        int ret = m_audio->DecodeAudio(ctx, samples, data_size, tmp_pkt);
         if (ret < 0)
         {
             av_free(samples);
@@ -728,7 +734,7 @@ uint32_t MythRAOPConnection::decodeAudioPacket(uint8_t type,
                 (ctx->ch_layout.nb_channels * av_get_bytes_per_sample(ctx->sample_fmt));
 
             frames_added += num_samples;
-            AudioData block {samples, data_size, num_samples};
+            AudioData block {.data=samples, .length=data_size, .frames=num_samples};
             dest->append(block);
         }
         tmp_pkt->data += ret;
@@ -772,61 +778,58 @@ void MythRAOPConnection::ProcessAudio()
     int i              = 0;
     std::chrono::milliseconds timestamp = 0ms;
 
-    QMapIterator<std::chrono::milliseconds,AudioPacket> packet_it(m_audioQueue);
-    while (packet_it.hasNext() && i <= max_packets)
+    for (auto packet_it = m_audioQueue.begin();
+         packet_it != m_audioQueue.end() && i <= max_packets;
+         ++packet_it)
     {
-        packet_it.next();
-
         timestamp = packet_it.key();
-        if (timestamp < rtp)
-        {
-            if (!m_audioStarted)
-            {
-                m_audio->Reset(); // clear audio card
-            }
-            AudioPacket frames = packet_it.value();
-
-            if (m_lastSequence != frames.seq)
-            {
-                LOG(VB_PLAYBACK, LOG_ERR, LOC +
-                    QString("Audio discontinuity seen. Played %1 (%3) expected %2")
-                    .arg(frames.seq).arg(m_lastSequence).arg(timestamp.count()));
-                m_lastSequence = frames.seq;
-            }
-            m_lastSequence++;
-
-            for (const auto & data : std::as_const(*frames.data))
-            {
-                int offset = 0;
-                int framecnt = 0;
-
-                if (m_adjustedLatency > 0ms)
-                {
-                        // calculate how many frames we have to drop to catch up
-                    offset = (m_adjustedLatency.count() * m_frameRate / 1000) *
-                        m_audio->GetBytesPerFrame();
-                    offset = std::min(offset, data.length);
-                    framecnt = offset / m_audio->GetBytesPerFrame();
-                    m_adjustedLatency -= framesToMs(framecnt+1);
-                    LOG(VB_PLAYBACK, LOG_DEBUG, LOC +
-                        QString("ProcessAudio: Dropping %1 frames to catch up "
-                                "(%2ms to go)")
-                        .arg(framecnt).arg(m_adjustedLatency.count()));
-                    timestamp += framesToMs(framecnt);
-                }
-                m_audio->AddData((char *)data.data + offset,
-                                 data.length - offset,
-                                 std::chrono::milliseconds(timestamp), framecnt);
-                timestamp += m_audio->LengthLastData();
-            }
-            i++;
-            m_audioStarted = true;
-        }
-        else
+        if (timestamp >= rtp)
         {
             // QMap is sorted, so no need to continue if not found
             break;
         }
+
+        if (!m_audioStarted)
+        {
+            m_audio->Reset(); // clear audio card
+        }
+        AudioPacket frames = packet_it.value();
+
+        if (m_lastSequence != frames.seq)
+        {
+            LOG(VB_PLAYBACK, LOG_ERR, LOC +
+                QString("Audio discontinuity seen. Played %1 (%3) expected %2")
+                .arg(frames.seq).arg(m_lastSequence).arg(timestamp.count()));
+            m_lastSequence = frames.seq;
+        }
+        m_lastSequence++;
+
+        for (const auto & data : std::as_const(*frames.data))
+        {
+            int offset = 0;
+            int framecnt = 0;
+
+            if (m_adjustedLatency > 0ms)
+            {
+                    // calculate how many frames we have to drop to catch up
+                offset = (m_adjustedLatency.count() * m_frameRate / 1000) *
+                    m_audio->GetBytesPerFrame();
+                offset = std::min(offset, data.length);
+                framecnt = offset / m_audio->GetBytesPerFrame();
+                m_adjustedLatency -= framesToMs(framecnt+1);
+                LOG(VB_PLAYBACK, LOG_DEBUG, LOC +
+                    QString("ProcessAudio: Dropping %1 frames to catch up "
+                            "(%2ms to go)")
+                    .arg(framecnt).arg(m_adjustedLatency.count()));
+                timestamp += framesToMs(framecnt);
+            }
+            m_audio->AddData((char *)data.data + offset,
+                             data.length - offset,
+                             std::chrono::milliseconds(timestamp), framecnt);
+            timestamp += m_audio->LengthLastData();
+        }
+        i++;
+        m_audioStarted = true;
     }
 
     ExpireAudio(timestamp);
@@ -840,22 +843,24 @@ void MythRAOPConnection::ProcessAudio()
 int MythRAOPConnection::ExpireAudio(std::chrono::milliseconds timestamp)
 {
     int res = 0;
-    QMutableMapIterator<std::chrono::milliseconds,AudioPacket> packet_it(m_audioQueue);
-    while (packet_it.hasNext())
+    for (auto packet_it = m_audioQueue.begin();
+         packet_it != m_audioQueue.end();
+         /* no inc */)
     {
-        packet_it.next();
-        if (packet_it.key() < timestamp)
+        if (packet_it.key() >= timestamp)
         {
-            AudioPacket frames = packet_it.value();
-            if (frames.data)
-            {
-                for (const auto & data : std::as_const(*frames.data))
-                    av_free(data.data);
-                delete frames.data;
-            }
-            m_audioQueue.remove(packet_it.key());
-            res++;
+            ++packet_it;
+            continue;
         }
+        AudioPacket frames = packet_it.value();
+        if (frames.data)
+        {
+            for (const auto & data : std::as_const(*frames.data))
+                av_free(data.data);
+            delete frames.data;
+        }
+        packet_it = m_audioQueue.erase(packet_it);
+        res++;
     }
     return res;
 }
@@ -917,21 +922,22 @@ void MythRAOPConnection::readClient(void)
         m_incomingSize = 0;
 
         QTextStream stream(data);
-        QString line;
-        do
+        QString line = stream.readLine();
+        while (!line.isEmpty())
         {
-            line = stream.readLine();
-            if (line.size() == 0)
-                break;
             LOG(VB_PLAYBACK, LOG_DEBUG, LOC + QString("Header(%1) = %2")
                 .arg(m_socket->peerAddress().toString(), line));
             m_incomingHeaders.append(line);
             if (line.contains("Content-Length:"))
             {
-                m_incomingSize = line.mid(line.indexOf(" ") + 1).toInt();
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+                m_incomingSize = line.midRef(line.indexOf(" ") + 1).toInt();
+#else
+                m_incomingSize = QStringView(line).mid(line.indexOf(" ") + 1).toInt();
+#endif
             }
+            line = stream.readLine();
         }
-        while (!line.isNull());
 
         if (m_incomingHeaders.empty())
             return;
@@ -1605,7 +1611,8 @@ bool MythRAOPConnection::LoadKey(void)
         return true;
 
     QString sName( "/RAOPKey.rsa" );
-    FILE *file = fopen(GetConfDir().toUtf8() + sName.toUtf8(), "rb");
+    QString sPath = GetConfDir() + sName;
+    FILE *file = fopen(sPath.toUtf8().constData(), "rb");
 
     if ( !file )
     {
@@ -1662,16 +1669,12 @@ QStringList MythRAOPConnection::splitLines(const QByteArray &lines)
     QStringList list;
     QTextStream stream(lines);
 
-    QString line;
-    do
+    QString line = stream.readLine();
+    while (!line.isEmpty())
     {
+        list.append(line);
         line = stream.readLine();
-        if (!line.isNull())
-        {
-            list.append(line);
-        }
     }
-    while (!line.isNull());
 
     return list;
 }
@@ -1776,6 +1779,7 @@ bool MythRAOPConnection::CreateDecoder(void)
             return false;
         }
         LOG(VB_PLAYBACK, LOG_DEBUG, LOC + "Opened ALAC decoder.");
+        m_codecContext->sample_rate = m_audioFormat[11]; // sampleRate
     }
 
     return true;
@@ -1801,21 +1805,10 @@ bool MythRAOPConnection::OpenAudioDevice(void)
     m_audio = AudioOutput::OpenAudio(device, passthru, FORMAT_S16, m_channels,
                                      AV_CODEC_ID_NONE, m_frameRate, AUDIOOUTPUT_MUSIC,
                                      m_allowVolumeControl, false);
-    if (!m_audio)
+    if (m_audio == nullptr || !m_audio->isConfigured())
     {
         LOG(VB_PLAYBACK, LOG_ERR, LOC +
             "Failed to open audio device. Going silent...");
-        CloseAudioDevice();
-        StartAudioTimer();
-        return false;
-    }
-
-    QString error = m_audio->GetError();
-    if (!error.isEmpty())
-    {
-        LOG(VB_PLAYBACK, LOG_ERR, LOC +
-            QString("Audio not initialised. Message was '%1'")
-            .arg(error));
         CloseAudioDevice();
         StartAudioTimer();
         return false;
@@ -1868,7 +1861,7 @@ std::chrono::milliseconds MythRAOPConnection::AudioCardLatency(void)
                      0ms,
                      frames);
     av_free(samples);
-    usleep(duration_cast<std::chrono::microseconds>(AUDIOCARD_BUFFER).count());
+    std::this_thread::sleep_for(AUDIOCARD_BUFFER);
     std::chrono::milliseconds audiots = m_audio->GetAudiotime();
     LOG(VB_PLAYBACK, LOG_DEBUG, LOC + QString("AudioCardLatency: ts=%1ms")
         .arg(audiots.count()));
@@ -1927,3 +1920,5 @@ void MythRAOPConnection::SendNotification(bool update)
     m_firstSend = true;
     delete n;
 }
+
+#include "moc_mythraopconnection.cpp"

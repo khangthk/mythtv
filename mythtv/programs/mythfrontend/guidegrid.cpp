@@ -16,14 +16,13 @@
 #include "libmythbase/mythevent.h"          // for MythEvent, etc
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythtypes.h"          // for InfoMap
-#include "libmythbase/programinfo.h"
-#include "libmythbase/programtypes.h"       // for RecStatus, etc
-#include "libmythbase/recordingtypes.h"     // for toString, etc
-#include "libmythbase/remoteutil.h"
 #include "libmythtv/cardutil.h"
 #include "libmythtv/channelinfo.h"
 #include "libmythtv/channelutil.h"
+#include "libmythtv/programinfo.h"
+#include "libmythtv/programtypes.h"
 #include "libmythtv/recordingrule.h"
+#include "libmythtv/recordingtypes.h"
 #include "libmythtv/tv.h"                   // for ::kState_WatchingLiveTV
 #include "libmythtv/tv_actions.h"           // for ACTION_CHANNELSEARCH, etc
 #include "libmythtv/tv_play.h"
@@ -504,8 +503,7 @@ GuideGrid::GuideGrid(MythScreenStack *parent,
 {
     connect(m_updateTimer, &QTimer::timeout, this, &GuideGrid::updateTimeout);
 
-    for (uint i = 0; i < MAX_DISPLAY_CHANS; i++)
-        m_programs.push_back(nullptr);
+    m_programs.resize(MAX_DISPLAY_CHANS, nullptr);
 
     m_originalStartTime = MythDate::current();
     if (startTime.isValid() &&
@@ -796,7 +794,7 @@ bool GuideGrid::keyPressEvent(QKeyEvent *event)
         {
             ProgramInfo *pginfo =
                 m_programInfos[m_currentRow][m_currentCol];
-            auto secsTillStart = (pginfo)
+            auto secsTillStart = pginfo
                 ? MythDate::secsInFuture(pginfo->GetScheduledStartTime()) : 0s;
             if (m_player && (m_player->GetState() == kState_WatchingLiveTV))
             {
@@ -967,7 +965,7 @@ bool GuideGrid::gestureEvent(MythGestureEvent *event)
                                         // instead of changing the channel.
                                         ProgramInfo *pginfo =
                                             m_programInfos[m_currentRow][m_currentCol];
-                                        auto secsTillStart = (pginfo)
+                                        auto secsTillStart = pginfo
                                             ? MythDate::secsInFuture(pginfo->GetScheduledStartTime()) : 0s;
                                         if (pginfo && (pginfo->GetTitle() != kUnknownTitle) &&
                                             (secsTillStart >= m_selectRecThreshold))
@@ -1097,7 +1095,7 @@ bool GuideGrid::gestureEvent(MythGestureEvent *event)
 
 static bool SelectionIsTunable(const ChannelInfoList &selection)
 {
-    return std::any_of(selection.cbegin(), selection.cend(),
+    return std::ranges::any_of(selection,
                        [selection](const auto & chan){ return TV::IsTunable(chan.m_chanId); } );
 }
 
@@ -1228,7 +1226,7 @@ ProgramList GuideGrid::GetProgramList(uint chanid) const
     bindings[":CHANID"]  = chanid;
 
     ProgramList dummy;
-    LoadFromProgram(proglist, querystr, bindings, dummy);
+    LoadFromProgram(proglist, querystr, bindings, dummy, ProgGroupBy::ChanNum);
 
     return proglist;
 }
@@ -1471,7 +1469,7 @@ int GuideGrid::FindChannel(uint chanid, const QString &channum,
                            bool exact) const
 {
     // first check chanid
-    uint i = (chanid) ? 0 : GetChannelCount();
+    uint i = chanid ? 0 : GetChannelCount();
     for (; i < GetChannelCount(); ++i)
     {
         if (m_channelInfos[i][0].m_chanId == chanid)
@@ -1479,7 +1477,7 @@ int GuideGrid::FindChannel(uint chanid, const QString &channum,
     }
 
     // then check for chanid in duplicates
-    i = (chanid) ? 0 : GetChannelCount();
+    i = chanid ? 0 : GetChannelCount();
     for (; i < GetChannelCount(); ++i)
     {
         for (size_t j = 1; j < m_channelInfos[i].size(); ++j)
@@ -1584,7 +1582,8 @@ ProgramList *GuideGrid::getProgramListFromProgram(int chanNum)
         bindings[":STARTLIMITTS"] = starttime.addDays(-1);
         bindings[":ENDTS"] = m_currentEndTime.addSecs(0 - m_currentEndTime.time().second());
 
-        LoadFromProgram(*proglist, querystr, bindings, m_recList);
+        LoadFromProgram(*proglist, querystr, bindings, m_recList,
+                        ProgGroupBy::ChanNum);
     }
 
     return proglist;
@@ -1652,7 +1651,8 @@ void GuideGrid::fillProgramRowInfos(int firstRow, bool useExistingData)
                    m_currentRow, m_currentCol, m_channelCount, m_timeCount,
                    m_verticalLayout, m_firstTime, m_lastTime);
     auto *updater = new GuideUpdateProgramRow(this, gs, proglists);
-    m_threadPool.start(new GuideHelper(this, updater), "GuideHelper");
+    if (updater)
+        m_threadPool.start(new GuideHelper(this, updater), "GuideHelper");
 }
 
 void GuideUpdateProgramRow::fillProgramRowInfosWith(int row,
@@ -1671,9 +1671,13 @@ void GuideUpdateProgramRow::fillProgramRowInfosWith(int row,
     QDateTime tnow = MythDate::current();
     int progPast = 0;
     if (tnow > m_currentEndTime)
+    {
         progPast = 100;
+    }
     else if (tnow < m_currentStartTime)
+    {
         progPast = 0;
+    }
     else
     {
         int played = m_currentStartTime.secsTo(tnow);
@@ -1686,6 +1690,7 @@ void GuideUpdateProgramRow::fillProgramRowInfosWith(int row,
 
     auto program = proglist->begin();
     std::vector<ProgramInfo*> unknownlist;
+    unknownlist.reserve(m_timeCount);
     bool unknown = false;
     ProgramInfo *proginfo = nullptr;
     for (int x = 0; x < m_timeCount; ++x)
@@ -1817,7 +1822,7 @@ void GuideUpdateProgramRow::fillProgramRowInfosWith(int row,
             {
                 tempRect = QRect((int)(row * ydifference),
                                  (int)(x * xdifference),
-                                 (int)(ydifference),
+                                 (int)ydifference,
                                  (int)(xdifference * pginfo->m_spread));
             }
             else
@@ -1908,7 +1913,7 @@ void GuideGrid::customEvent(QEvent *event)
     }
     else if (event->type() == DialogCompletionEvent::kEventType)
     {
-        auto *dce = (DialogCompletionEvent*)(event);
+        auto *dce = (DialogCompletionEvent*)event;
 
         QString resultid   = dce->GetId();
         QString resulttext = dce->GetResultText();
@@ -2034,6 +2039,17 @@ void GuideGrid::customEvent(QEvent *event)
 
                 if (m_changroupname)
                     m_changroupname->SetText(changrpname);
+
+                // Use the selected channel group as default, overriding the default
+                // channel group from the database, if the guide is not embedded
+                // in an active player.
+                if (!m_player)
+                {
+                    TV::SetActiveChannelGroupId(m_changrpid);
+                    LOG(VB_GENERAL, LOG_INFO, LOC +
+                        QString("Change active channel group to %1 %2")
+                            .arg(m_changrpid).arg(changrpname));
+                }
             }
         }
         else if (resultid == "jumptotime")
@@ -2717,3 +2733,5 @@ void GuideGrid::ShowJumpToTime(void)
         delete timedlg;
     }
 }
+
+#include "moc_guidegrid.cpp"

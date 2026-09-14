@@ -97,8 +97,7 @@ There are also a few simple \ref testing "testing shortcuts".
       and some old UI widgets are implemented by libmyth.
 
       This library depends on libav*, \ref libmythbase "libmythbase",
-      \ref libmythui "libmythui", \ref libmythupnp "libmythupnp"
-      and libmythfreesurround.
+      \ref libmythui "libmythui", and \ref libmythupnp "libmythupnp".
 
       Any changes to this library's ABI may trigger a %MythTV binary version
       change because the plugins depend on it.
@@ -120,9 +119,9 @@ There are also a few simple \ref testing "testing shortcuts".
       ProgramInfo) or to the protocol itself require the protocol version
       number to be incremented.
 
-  <dt>libavcodec/libavformat/libavutil/libpostproc/libswscale
+  <dt>libavcodec/libavformat/libavutil/libswscale
       <dd>These together form the FFmpeg A/V decoding library (aka avlib).
-      <a href="http://ffmpeg.mplayerhq.hu/documentation.html">
+      <a href="https://ffmpeg.org/documentation.html">
           Documented Externally</a>.
 
       These should be modified as little as possible, and any changes
@@ -152,16 +151,6 @@ There are also a few simple \ref testing "testing shortcuts".
 
   <dt>libmythfreemheg
       <dd>UK interactive %TV viewer.
-
-      This library does not depend on any of our libraries.
-
-  <dt>libmythfreesurround
-      <dd>Support for some multi-channel audio transforms.
-
-      This library does not depend on any of our libraries.
-
-  <dt>libmythnvctrl
-      <dd>Interface between X-windows and NVidia drivers.
 
       This library does not depend on any of our libraries.
 
@@ -542,8 +531,8 @@ locations. The following methods in MythContext allow programs and plugins
 to access these assets:
 <ol>
   <li>GetInstallPrefix() returns either the runtime env. var. $MYTHTVDIR
-      or the compile-time var. RUNPREFIX. If these are relative paths,
-      it is initialised relative to the application's location.
+      or uses QCoreApplication::applicationDirPath() to determine the install
+      location if $MYTHTVDIR is a relative path or empty.
       The value is used thus:
   <ul>
     <li>GetInstallPrefix() + /share/mythtv/ = GetShareDir(), GetFontsDir()</li>
@@ -562,7 +551,6 @@ to access these assets:
     <li>GetInstallPrefix() + /bin/mtd</li>
     <li>GetInstallPrefix() + LIBDIRNAME + /mythtv/ = GetLibraryDir()</li>
     <li>GetLibraryDir() + /plugins/ = GetPluginsDir()</li>
-    <li>GetLibraryDir() + /filters/ = GetFiltersDir()</li>
   </ul></li>
 
   <li>GetConfDir() returns the value of the runtime env. var. $MYTHCONFDIR,

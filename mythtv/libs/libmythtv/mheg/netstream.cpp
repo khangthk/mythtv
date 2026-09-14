@@ -26,6 +26,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QThread>
+#include <QTimeZone>
 #include <QUrl>
 #ifndef QT_NO_OPENSSL
 #include <QSslConfiguration>
@@ -221,10 +222,11 @@ bool NetStream::Request(const QUrl& url)
         QString fname = gCoreContext->GetSetting("MhegClientCert", "");
         if (!fname.isEmpty())
         {
+            QSslCertificate cert;
             QFile f1(QFile::exists(fname) ? fname : GetShareDir() + fname);
             if (f1.open(QIODevice::ReadOnly))
             {
-                QSslCertificate cert(&f1, QSsl::Pem);
+                cert = QSslCertificate(&f1, QSsl::Pem);
                 if (!cert.isNull())
                     ssl.setLocalCertificate(cert);
                 else
@@ -245,7 +247,8 @@ bool NetStream::Request(const QUrl& url)
                 QFile f2(QFile::exists(fname) ? fname : GetShareDir() + fname);
                 if (f2.open(QIODevice::ReadOnly))
                 {
-                    QSslKey key(&f2, QSsl::Rsa, QSsl::Pem, QSsl::PrivateKey,
+                    auto keyAlgo = cert.isNull() ? QSsl::Rsa : cert.publicKey().algorithm();
+                    QSslKey key(&f2, keyAlgo, QSsl::Pem, QSsl::PrivateKey,
                         gCoreContext->GetSetting("MhegClientKeyPass", "").toLatin1());
                     if (!key.isNull())
                         ssl.setPrivateKey(key);
@@ -778,7 +781,7 @@ void NAMThread::run()
     m_nam->setObjectName("NetStream NAM");
 
     // Setup cache
-    std::unique_ptr<QNetworkDiskCache> cache(new QNetworkDiskCache());
+    std::unique_ptr<QNetworkDiskCache> cache = std::make_unique<QNetworkDiskCache>();
 
     cache->setCacheDirectory(GetConfDir() + "/cache/netstream-" +
                              gCoreContext->GetHostName());
@@ -924,7 +927,7 @@ bool NAMThread::AbortRequest(NetStreamAbort *p)
 bool NAMThread::isAvailable()
 {
     auto interfaces = QNetworkInterface::allInterfaces();
-    return std::any_of(interfaces.begin(), interfaces.end(),
+    return std::ranges::any_of(interfaces,
 		       [](const QNetworkInterface& iface)
 			   {
                                auto f = iface.flags();
@@ -999,7 +1002,11 @@ QDateTime NAMThread::GetLastModified(const QUrl &url)
                     .arg(h.second.constData()));
                 continue;
             }
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
             d.setTimeSpec(Qt::UTC);
+#else
+            d.setTimeZone(QTimeZone(QTimeZone::UTC));
+#endif
             lastMod = d;
         }
     }
@@ -1009,4 +1016,4 @@ QDateTime NAMThread::GetLastModified(const QUrl &url)
     return lastMod;
 }
 
-/* End of file */
+#include "moc_netstream.cpp"

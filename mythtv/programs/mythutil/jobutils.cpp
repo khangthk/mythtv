@@ -19,9 +19,13 @@ static int QueueJob(const MythUtilCommandLineParser &cmdline)
     int jobType = JOB_NONE;
 
     if (cmdline.toString("queuejob") == "transcode")
+    {
         jobType = JOB_TRANSCODE;
+    }
     else if (cmdline.toString("queuejob") == "commflag")
+    {
         jobType = JOB_COMMFLAG;
+    }
     else if (cmdline.toString("queuejob") == "rebuild")
     {
         jobType = JOB_COMMFLAG;
@@ -69,14 +73,14 @@ static int QueueJob(const MythUtilCommandLineParser &cmdline)
             .arg(cmdline.toString("queuejob"))
             .arg(pginfo.GetChanID())
             .arg(pginfo.GetRecordingStartTime().toString());
-        std::cerr << tmp.toLocal8Bit().constData() << std::endl;
+        std::cerr << tmp.toLocal8Bit().constData() << '\n';
         return GENERIC_EXIT_OK;
     }
 
     QString tmp = QString("Error queueing job for chanid %1 @ %2")
         .arg(pginfo.GetChanID())
         .arg(pginfo.GetRecordingStartTime().toString());
-    std::cerr << tmp.toLocal8Bit().constData() << std::endl;
+    std::cerr << tmp.toLocal8Bit().constData() << '\n';
     return GENERIC_EXIT_DB_ERROR;
 }
 

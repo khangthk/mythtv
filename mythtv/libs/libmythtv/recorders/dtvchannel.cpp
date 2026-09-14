@@ -185,6 +185,8 @@ bool DTVChannel::SetChannelByString(const QString &channum)
     }
 
     // Fetch tuning data from the database.
+    QString name;
+    QString callsign;
     QString tvformat;
     QString modulation;
     QString freqtable;
@@ -201,7 +203,7 @@ bool DTVChannel::SetChannelByString(const QString &channum)
     uint netid = 0;
 
     if (!ChannelUtil::GetChannelData(
-        m_sourceId, chanid, channum,
+        m_sourceId, chanid, channum, name, callsign,
         tvformat, modulation, freqtable, freqid,
         finetune, frequency,
         si_std, mpeg_prog_num, atsc_major, atsc_minor, tsid, netid,
@@ -295,7 +297,7 @@ bool DTVChannel::SetChannelByString(const QString &channum)
             {
                 LOG(VB_GENERAL, LOG_DEBUG, loc +
                     QString("Initialize multiplex options m_tunerType:%1 mplexid:%2")
-                        .arg(m_tunerType).arg(mplexid));
+                        .arg(m_tunerType.toInt()).arg(mplexid));
 
                 // Try to fix any problems with the multiplex
                 CheckOptions(tuning);

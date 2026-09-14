@@ -1,8 +1,13 @@
 #ifndef MYTHRENDER_D3D9_H
 #define MYTHRENDER_D3D9_H
 
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QMap>
 
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/compat.h"
 #include <d3d9.h>
 
@@ -10,8 +15,8 @@
 #include "mythuiexp.h"
 #include "mythrender_base.h"
 
-#ifdef USING_DXVA2
-#if defined (_WIN32)
+#if CONFIG_DXVA2
+#if defined (Q_OS_WINDOWS)
 #define CINTERFACE
 #define COBJMACROS
 #endif

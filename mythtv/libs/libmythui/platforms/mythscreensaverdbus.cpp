@@ -1,4 +1,5 @@
 // Qt
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusReply>
@@ -83,7 +84,6 @@ class ScreenSaverDBusPrivate
                 QList<QVariant> replylist = msg.arguments();
                 const QVariant& reply = replylist.first();
                 m_cookie = reply.toUInt();
-                m_inhibited = true;
                 LOG(VB_GENERAL, LOG_INFO, LOC +
                     QString("Successfully inhibited screensaver via %1. cookie %2. nom nom")
                     .arg(m_serviceUsed).arg(m_cookie));
@@ -112,7 +112,6 @@ class ScreenSaverDBusPrivate
             if (m_cookie != 0) {
                 m_interface->call(QDBus::NoBlock, m_unInhibit , m_cookie);
                 m_cookie = 0;
-                m_inhibited = false;
                 LOG(VB_GENERAL, LOG_INFO, LOC + QString("Screensaver uninhibited via %1")
                     .arg(m_serviceUsed));
             }
@@ -122,7 +121,6 @@ class ScreenSaverDBusPrivate
     bool isValid() const { return m_interface ? m_interface->isValid() : false; };
 
   protected:
-    bool            m_inhibited  {false};
     uint32_t        m_cookie     {0};
     QDBusConnection *m_bus       {nullptr};
     QDBusInterface  *m_interface {nullptr};
@@ -189,6 +187,7 @@ void MythScreenSaverDBus::Reset()
 
 bool MythScreenSaverDBus::Asleep()
 {
-    return std::any_of(m_dbusPrivateInterfaces.cbegin(), m_dbusPrivateInterfaces.cend(),
-                       [](auto * interface){ return interface->m_inhibited; } );
+    return false;
 }
+
+#include "moc_mythscreensaverdbus.cpp"

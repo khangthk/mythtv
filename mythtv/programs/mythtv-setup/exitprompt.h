@@ -1,3 +1,6 @@
+#ifndef MYTHTV_SETUP_EXITPROMPT_H
+#define MYTHTV_SETUP_EXITPROMPT_H
+
 #include <QObject>
 
 enum exit_actions : std::uint8_t {
@@ -13,8 +16,10 @@ class ExitPrompter : public QObject
 
   public:
     ExitPrompter(void);
+    ExitPrompter(const ExitPrompter &) = delete;
     ~ExitPrompter(void) override;
 
+  protected:
     void customEvent(QEvent *event) override; // QObject
     
   public slots:
@@ -23,8 +28,7 @@ class ExitPrompter : public QObject
     static void quit(void);
     
   private:
-    ExitPrompter(const ExitPrompter &);
-
-  private:
     struct ExitPrompterPrivate *m_d {nullptr};
 };
+
+#endif // MYTHTV_SETUP_EXITPROMPT_H

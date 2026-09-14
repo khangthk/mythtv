@@ -44,11 +44,13 @@ pd_yuv2gbrp_y_start:       times 8 dd  (1 << 9)
 pd_yuv2gbrp_uv_start:      times 8 dd  ((1 << 9) - (128 << 19))
 pd_yuv2gbrp_a_start:       times 8 dd  (1 << 18)
 pd_yuv2gbrp16_offset:      times 8 dd  0x10000  ;(1 << 16)
-pd_yuv2gbrp16_round13:     times 8 dd  0x02000  ;(1 << 13)
+pd_yuv2gbrp16_round13:     times 8 dd  0xE0002000  ;(1 << 13) - (1 << 29)
 pd_yuv2gbrp16_a_offset:    times 8 dd  0x20002000
 pd_yuv2gbrp16_upper30:     times 8 dd  0x3FFFFFFF ;(1<<30) - 1
 pd_yuv2gbrp16_upper27:     times 8 dd  0x07FFFFFF ;(1<<27) - 1
+pd_yuv2gbrp16_upper16:     times 8 dd  0x0000FFFF ;(1<<16) - 1
 pd_yuv2gbrp16_upperC:      times 8 dd  0xC0000000
+pd_yuv2gbrp_debias:        times 8 dd  0x00008000 ;(1 << 29 - 14)
 pb_pack_shuffle8:       db  0,  4,  8, 12, \
                            -1, -1, -1, -1, \
                            -1, -1, -1, -1, \
@@ -295,7 +297,7 @@ cglobal yuv2planeX_%1, %3, 8, %2, filter, fltsize, src, dst, w, dither, offset
     test          dstq, 15
     jnz .unaligned
     yuv2planeX_mainloop %1, a
-    REP_RET
+    RET
 .unaligned:
     yuv2planeX_mainloop %1, u
 %endif ; mmsize == 8/16
@@ -305,10 +307,10 @@ cglobal yuv2planeX_%1, %3, 8, %2, filter, fltsize, src, dst, w, dither, offset
     ADD             rsp, pad
     RET
 %else ; x86-64
-    REP_RET
+    RET
 %endif ; x86-32/64
 %else ; %1 == 9/10/16
-    REP_RET
+    RET
 %endif ; %1 == 8/9/10/16
 %endmacro
 
@@ -431,10 +433,10 @@ cglobal yuv2plane1_%1, %3, %3, %2, src, dst, w, dither, offset
     test          dstq, 15
     jnz .unaligned
     yuv2plane1_mainloop %1, a
-    REP_RET
+    RET
 .unaligned:
     yuv2plane1_mainloop %1, u
-    REP_RET
+    RET
 %endmacro
 
 INIT_XMM sse2
@@ -570,7 +572,7 @@ yuv2nv12cX_fn yuv2nv21
 
 ;-----------------------------------------------------------------------------
 ; planar grb yuv2anyX functions
-; void ff_yuv2<gbr_format>_full_X_<opt>(SwsContext *c, const int16_t *lumFilter,
+; void ff_yuv2<gbr_format>_full_X_<opt>(SwsInternal *c, const int16_t *lumFilter,
 ;                                       const int16_t **lumSrcx, int lumFilterSize,
 ;                                       const int16_t *chrFilter, const int16_t **chrUSrcx,
 ;                                       const int16_t **chrVSrcx, int chrFilterSize,
@@ -579,8 +581,8 @@ yuv2nv12cX_fn yuv2nv21
 ;-----------------------------------------------------------------------------
 
 %if ARCH_X86_64
-struc SwsContext
-    .padding:           resb 40292 ; offsetof(SwsContext, yuv2rgb_y_offset)
+struc SwsInternal
+    .padding:           resb 40348 ; offsetof(SwsInternal, yuv2rgb_y_offset)
     .yuv2rgb_y_offset:  resd 1
     .yuv2rgb_y_coeff:   resd 1
     .yuv2rgb_v2r_coeff: resd 1
@@ -793,12 +795,12 @@ endstruc
 %endif
 
 cglobal yuv2%1_full_X, 12, 14, 16, ptr, lumFilter, lumSrcx, lumFilterSize, chrFilter, chrUSrcx, chrVSrcx, chrFilterSize, alpSrcx, dest, dstW, y, x, j
-    VBROADCASTSS m10, dword [ptrq + SwsContext.yuv2rgb_y_offset]
-    VBROADCASTSS m11, dword [ptrq + SwsContext.yuv2rgb_y_coeff]
-    VBROADCASTSS m12, dword [ptrq + SwsContext.yuv2rgb_v2r_coeff]
-    VBROADCASTSS m13, dword [ptrq + SwsContext.yuv2rgb_v2g_coeff]
-    VBROADCASTSS m14, dword [ptrq + SwsContext.yuv2rgb_u2g_coeff]
-    VBROADCASTSS m15, dword [ptrq + SwsContext.yuv2rgb_u2b_coeff]
+    VBROADCASTSS m10, dword [ptrq + SwsInternal.yuv2rgb_y_offset]
+    VBROADCASTSS m11, dword [ptrq + SwsInternal.yuv2rgb_y_coeff]
+    VBROADCASTSS m12, dword [ptrq + SwsInternal.yuv2rgb_v2r_coeff]
+    VBROADCASTSS m13, dword [ptrq + SwsInternal.yuv2rgb_v2g_coeff]
+    VBROADCASTSS m14, dword [ptrq + SwsInternal.yuv2rgb_u2g_coeff]
+    VBROADCASTSS m15, dword [ptrq + SwsInternal.yuv2rgb_u2b_coeff]
 
 %if DEPTH >= 16
     movu m9, [pd_yuv2gbrp16_start]
@@ -883,13 +885,25 @@ cglobal yuv2%1_full_X, 12, 14, 16, ptr, lumFilter, lumSrcx, lumFilterSize, chrFi
         paddd G, Y
         paddd B, Y
 
+%if  DEPTH < 16
         CLIPP2 R, 30
         CLIPP2 G, 30
         CLIPP2 B, 30
+%endif
 
         psrad R, RGB_SHIFT
         psrad G, RGB_SHIFT
         psrad B, RGB_SHIFT
+
+%if  DEPTH >= 16
+        paddd R, [pd_yuv2gbrp_debias]
+        paddd G, [pd_yuv2gbrp_debias]
+        paddd B, [pd_yuv2gbrp_debias]
+
+        CLIPP2 R, 16
+        CLIPP2 G, 16
+        CLIPP2 B, 16
+%endif
 
 %if FLOAT
         cvtdq2ps R, R

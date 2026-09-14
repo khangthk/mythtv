@@ -2,8 +2,8 @@
 #define FILTERS_H
 
 #include <cmath>
+#include <cstdint>
 
-#include "goomconfig.h"
 #include "graphic.h"
 
 struct ZoomFilterData
@@ -25,19 +25,20 @@ struct ZoomFilterData
 	char    noisify;		/* ajoute un bruit a la transformation */
 };
 
+enum FILTER_MODE : uint8_t {
+    NORMAL_MODE       = 0,
+    WAVE_MODE         = 1,
+    CRYSTAL_BALL_MODE = 2,
+    SCRUNCH_MODE      = 3,
+    AMULETTE_MODE     = 4,
+    WATER_MODE        = 5,
+    HYPERCOS1_MODE    = 6,
+    HYPERCOS2_MODE    = 7,
+    YONLY_MODE        = 8,
+    SPEEDWAY_MODE     = 9,
+};
 
-#define NORMAL_MODE 0
-#define WAVE_MODE 1
-#define CRYSTAL_BALL_MODE 2
-#define SCRUNCH_MODE 3
-#define AMULETTE_MODE 4
-#define WATER_MODE 5
-#define HYPERCOS1_MODE 6
-#define HYPERCOS2_MODE 7
-#define YONLY_MODE 8
-#define SPEEDWAY_MODE 9
-
-void    pointFilter (guint32 * pix1, Color c, float t1, float t2, float t3, float t4, guint32 cycle);
+void    pointFilter (uint32_t * pix1, Color c, float t1, float t2, float t3, float t4, uint32_t cycle);
 
 /* filtre de zoom :
  * le contenu de pix1 est copie dans pix2.
@@ -45,9 +46,6 @@ void    pointFilter (guint32 * pix1, Color c, float t1, float t2, float t3, floa
  * resx,resy : taille des buffers.
  */
 
-void    zoomFilterFastRGB (guint32 * pix1, guint32 * pix2, ZoomFilterData * zf, guint32 resx, guint32 resy, int switchIncr, float switchMult);
-
-#define SIN_MUL 1
-#define SIN_ADD 2
+void    zoomFilterFastRGB (uint32_t * pix1, uint32_t * pix2, ZoomFilterData * zf, uint32_t resx, uint32_t resy, int switchIncr, float switchMult);
 
 #endif

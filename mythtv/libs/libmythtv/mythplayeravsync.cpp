@@ -1,5 +1,4 @@
-// Qt
-#include <QThread>
+#include <thread>
 
 // MythTV
 #include "libmythbase/mythlogging.h"
@@ -30,7 +29,7 @@ void MythPlayerAVSync::WaitForFrame(std::chrono::microseconds FrameDue)
     auto unow = std::chrono::microseconds(m_avTimer.nsecsElapsed() / 1000);
     auto delay = FrameDue - unow;
     if (delay > 0us)
-        QThread::usleep(delay.count());
+        std::this_thread::sleep_for(delay);
 }
 
 void MythPlayerAVSync::ResetAVSyncForLiveTV(AudioPlayer* Audio)
@@ -165,7 +164,7 @@ std::chrono::microseconds MythPlayerAVSync::AVSync(AudioPlayer *Audio, MythVideo
                 audio_adjustment = 0ms;
             }
             int sign = audio_adjustment < 0ms ? -1 : 1;
-            float fix_amount_ms = (m_lastFix * s_sync_fc + (1 - s_sync_fc) * audio_adjustment.count()) * sign * s_av_control_gain;
+            float fix_amount_ms = ((m_lastFix * s_sync_fc) + ((1 - s_sync_fc) * audio_adjustment.count())) * sign * s_av_control_gain;
             m_lastFix = fix_amount_ms * sign;
             m_rtcBase -= microsecondsFromFloat(1000 * fix_amount_ms * sign / PlaySpeed);
 

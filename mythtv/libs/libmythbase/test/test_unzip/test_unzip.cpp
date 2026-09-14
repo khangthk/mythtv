@@ -61,11 +61,11 @@ void TestUnzip::test_text_file(void)
 
     auto orig = QFile(QStringLiteral(TEST_SOURCE_DIR) +
                       "/data/ipsum_lorem_p1.txt");
-    orig.open(QIODevice::ReadOnly);
+    QCOMPARE(orig.open(QIODevice::ReadOnly), true);
     auto origData = orig.readAll();
 
     auto unzipped = QFile(gTmpDir->path() + "/ipsum_lorem_p1.txt");
-    unzipped.open(QIODevice::ReadOnly);
+    QCOMPARE(unzipped.open(QIODevice::ReadOnly), true);
     auto unzippedData = unzipped.readAll();
     QCOMPARE(origData, unzippedData);
 }
@@ -85,13 +85,15 @@ void TestUnzip::test_theme_file(void)
 
     auto orig = QFile(QStringLiteral(TEST_SOURCE_DIR) +
                       "/data/willi_themeinfo.xml");
-    orig.open(QIODevice::ReadOnly);
+    QCOMPARE(orig.open(QIODevice::ReadOnly), true);
     auto origData = orig.readAll();
 
     auto unzipped = QFile(gTmpDir->path() + "/trunk/Willi/themeinfo.xml");
-    unzipped.open(QIODevice::ReadOnly);
+    QCOMPARE(unzipped.open(QIODevice::ReadOnly), true);
     auto unzippedData = unzipped.readAll();
     QCOMPARE(origData, unzippedData);
 }
 
 QTEST_APPLESS_MAIN(TestUnzip)
+
+#include "moc_test_unzip.cpp"

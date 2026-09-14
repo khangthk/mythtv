@@ -1,18 +1,28 @@
-import { AfterViewInit, Component, OnInit, ViewChild } from '@angular/core';
-import { NgForm } from '@angular/forms';
+import { AfterViewInit, Component, Input, OnInit, ViewChild } from '@angular/core';
+import { NgForm, FormsModule } from '@angular/forms';
 
-import { MythService } from 'src/app/services/myth.service';
-import { SetupService } from 'src/app/services/setup.service';
+import { MythService } from '../../../../services/myth.service';
+import { SetupService } from '../../../../services/setup.service';
+import { TranslatePipe } from '@ngx-translate/core';
+import { ButtonModule } from 'primeng/button';
+import { MessageModule } from 'primeng/message';
+
+import { CheckboxModule } from 'primeng/checkbox';
+import { SharedModule } from 'primeng/api';
+import { CardModule } from 'primeng/card';
+import { SettingsComponent } from '../general-settings.component';
 
 @Component({
     selector: 'app-jobqueue-global',
     templateUrl: './jobqueue-global.component.html',
-    styleUrls: ['./jobqueue-global.component.css']
+    styleUrls: ['./jobqueue-global.component.css'],
+    imports: [FormsModule, CardModule, SharedModule, CheckboxModule, MessageModule, ButtonModule, TranslatePipe]
 })
 export class JobqueueGlobalComponent implements OnInit, AfterViewInit {
 
-    @ViewChild("jobqglobal")
-    currentForm!: NgForm;
+    @ViewChild("jobqglobal") currentForm!: NgForm;
+    @Input() parent!: SettingsComponent;
+    @Input() tabIndex!: number;
 
     successCount = 0;
     errorCount = 0;
@@ -28,10 +38,14 @@ export class JobqueueGlobalComponent implements OnInit, AfterViewInit {
     }
 
     ngOnInit(): void {
+        this.parent.children[this.tabIndex] = this;
+    }
+
+    dirty() {
+        return this.currentForm.dirty;
     }
 
     ngAfterViewInit() {
-        this.setupService.setCurrentForm(this.currentForm);
     }
 
     getJobQGlobal() {
@@ -85,6 +99,13 @@ export class JobqueueGlobalComponent implements OnInit, AfterViewInit {
                 this.currentForm.form.markAsDirty();
         },
     };
+
+    markPristine() {
+        setTimeout(() => {
+            this.currentForm.form.markAsPristine();
+            this.parent.showDirty();
+        }, 100);
+    }
 
     saveForm() {
         this.successCount = 0;

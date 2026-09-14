@@ -36,10 +36,17 @@
 
 // Qt
 #include <QtGlobal>
+#include <QChar>     // Fix Qt6 GCC SFINAE warning
+#include <QBitArray> // Fix Qt6 GCC SFINAE warning
 #include <QtEndian>
 #include <QDateTime>
+#if QT_VERSION < QT_VERSION_CHECK(6,11,0)
 #include <QSequentialIterable>
+#else
+#include <QMetaSequence>
+#endif
 #include <QTextStream>
+#include <QTimeZone>
 #include <QBuffer>
 
 // MythTV
@@ -216,7 +223,11 @@ void MythBinaryPList::DictToXML(const QVariant& Data, QXmlStreamWriter& Xml)
 void MythBinaryPList::ArrayToXML(const QVariant& Data, QXmlStreamWriter& Xml)
 {
     Xml.writeStartElement("array");
+#if QT_VERSION < QT_VERSION_CHECK(6,11,0)
     auto list = Data.value<QSequentialIterable>();
+#else
+    auto list = Data.value<QMetaSequence::Iterable>();
+#endif
     for (const auto & item : std::as_const(list))
         ToXML(item, Xml);
     Xml.writeEndElement();
@@ -376,6 +387,7 @@ QList<QVariant> MythBinaryPList::ParseBinaryArray(uint8_t* Data)
     if (!count)
         return result;
 
+    result.reserve(count);
     for (uint64_t i = 0; i < count; i++, Data += m_parmSize)
     {
         uint64_t obj = GetBinaryUInt(Data, m_parmSize);
@@ -450,7 +462,12 @@ QVariant MythBinaryPList::ParseBinaryDate(uint8_t* Data)
         return result;
 
     auto sec = static_cast<uint64_t>(convert_float<double>(Data));
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     result = QDateTime::fromSecsSinceEpoch(CORE_DATA_EPOCH + sec, Qt::UTC);
+#else
+    result = QDateTime::fromSecsSinceEpoch(CORE_DATA_EPOCH + sec,
+                                           QTimeZone(QTimeZone::UTC));
+#endif
 
     LOG(VB_GENERAL, LOG_DEBUG, LOC + QString("Date: %1").arg(result.toString(Qt::ISODate)));
     return {result};

@@ -1,4 +1,8 @@
 // MythTV
+#include "libmythbase/mythconfig.h"
+#include "libmythbase/mythcorecontext.h"
+#include "libmythbase/mythlogging.h"
+
 #include "captions/subtitlescreen.h"
 #include "livetvchain.h"
 #include "mheg/interactivetv.h"
@@ -47,7 +51,6 @@ MythPlayerCaptionsUI::MythPlayerCaptionsUI(MythMainWindow* MainWindow, TV* Tv, P
 
     // Signalled from the decoder
     connect(this, &MythPlayerCaptionsUI::EnableSubtitles, this, [this](bool Enable) { this->SetCaptionsEnabled(Enable, false); });
-    connect(this, &MythPlayerCaptionsUI::SignalTracksChanged, this, &MythPlayerCaptionsUI::TracksChanged);
 
     // Signalled from the base class
     connect(this, &MythPlayerCaptionsUI::RequestResetCaptions, this, &MythPlayerCaptionsUI::ResetCaptions);
@@ -251,7 +254,7 @@ void MythPlayerCaptionsUI::EnableCaptions(uint Mode, bool UpdateOSD)
 /*! \brief This tries to re-enable captions/subtitles if the user
  * wants them and one of the captions/subtitles tracks has changed.
  */
-void MythPlayerCaptionsUI::TracksChanged(uint TrackType)
+void MythPlayerCaptionsUI::tracksChanged(uint TrackType)
 {
     if (m_textDesired && (TrackType >= kTrackTypeSubtitle) && (TrackType <= kTrackTypeTeletextCaptions))
         SetCaptionsEnabled(true, false);
@@ -311,7 +314,6 @@ void MythPlayerCaptionsUI::SetCaptionsEnabled(bool Enable, bool UpdateOSD)
             EnableCaptions(mode, UpdateOSD);
         }
     }
-    ResetCaptions();
 }
 
 QStringList MythPlayerCaptionsUI::GetTracks(uint Type)
@@ -524,7 +526,7 @@ void MythPlayerCaptionsUI::HandleTeletextAction(const QString& Action, bool &Han
 
 InteractiveTV* MythPlayerCaptionsUI::GetInteractiveTV()
 {
-#ifdef USING_MHEG
+#if CONFIG_MHEG
     bool update = false;
     {
         QMutexLocker lock1(&m_osdLock);
@@ -552,7 +554,7 @@ InteractiveTV* MythPlayerCaptionsUI::GetInteractiveTV()
 void MythPlayerCaptionsUI::ITVHandleAction([[maybe_unused]] const QString &Action,
                                            [[maybe_unused]] bool& Handled)
 {
-#ifdef USING_MHEG
+#if CONFIG_MHEG
     if (!GetInteractiveTV())
     {
         Handled = false;
@@ -569,7 +571,7 @@ void MythPlayerCaptionsUI::ITVRestart([[maybe_unused]] uint Chanid,
                                       [[maybe_unused]] uint Cardid,
                                       [[maybe_unused]] bool IsLiveTV)
 {
-#ifdef USING_MHEG
+#if CONFIG_MHEG
     if (!GetInteractiveTV())
         return;
 
@@ -663,3 +665,5 @@ void MythPlayerCaptionsUI::StreamPlay(bool Playing)
     else
         Pause();
 }
+
+#include "moc_mythplayercaptionsui.cpp"

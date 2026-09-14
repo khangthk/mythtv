@@ -1,7 +1,8 @@
 // MythTV
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythui/mythmainwindow.h"
-#ifdef USING_OPENGL
+#if CONFIG_OPENGL
 #include "libmythui/opengl/mythrenderopengl.h"
 #endif
 #include "videovisualgoom.h"
@@ -21,13 +22,13 @@ VideoVisualGoom::VideoVisualGoom(AudioPlayer* Audio, MythRender* Render, bool HD
     int width  = (sz.width() > max_width)   ? max_width  : sz.width();
     int height = (sz.height() > max_height) ? max_height : sz.height();
     m_area = QRect(0, 0, width, height);
-    goom_init(static_cast<guint32>(width), static_cast<guint32>(height), 0);
+    goom_init(static_cast<uint32_t>(width), static_cast<uint32_t>(height), 0);
     LOG(VB_GENERAL, LOG_INFO, QString("Initialised Goom (%1x%2)").arg(width).arg(height));
 }
 
 VideoVisualGoom::~VideoVisualGoom()
 {
-#ifdef USING_OPENGL
+#if CONFIG_OPENGL
     if (m_glSurface && m_render && (m_render->Type() == kRenderOpenGL))
     {
         auto * glrender = dynamic_cast<MythRenderOpenGL*>(m_render);
@@ -46,7 +47,6 @@ void VideoVisualGoom::Draw(const QRect Area, MythPainter* /*Painter*/, QPaintDev
         return;
 
     QMutexLocker lock(mutex());
-    unsigned int* last = m_buffer;
     VisualNode* node = GetNode();
     if (node)
     {
@@ -64,7 +64,8 @@ void VideoVisualGoom::Draw(const QRect Area, MythPainter* /*Painter*/, QPaintDev
         m_buffer = goom_update(data, 0);
     }
 
-#ifdef USING_OPENGL
+#if CONFIG_OPENGL
+    unsigned int* last = m_buffer;
     if ((m_render->Type() == kRenderOpenGL))
     {
         auto * glrender = dynamic_cast<MythRenderOpenGL*>(m_render);

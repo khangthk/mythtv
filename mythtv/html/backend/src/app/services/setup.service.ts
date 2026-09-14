@@ -29,7 +29,7 @@ export class SetupService {
     m_HostAddressData: HostAddress = {
         successCount: 0,
         errorCount: 0,
-        thisHostName:  this.m_hostName,
+        thisHostName: this.m_hostName,
         BackendServerPort: 6543,
         BackendStatusPort: 6544,
         SecurityPin: '0000',
@@ -56,8 +56,8 @@ export class SetupService {
         return this.m_HostAddressData;
     }
 
-    getHostSettings () {
-        this.mythService.GetSetting({ HostName: this.m_hostName, Key: "BackendServerPort", Default:"6543" })
+    getHostSettings() {
+        this.mythService.GetSetting({ HostName: this.m_hostName, Key: "BackendServerPort", Default: "6543" })
             .subscribe({
                 next: data => this.m_HostAddressData.BackendServerPort = Number(data.String),
                 error: () => this.m_HostAddressData.errorCount++
@@ -67,7 +67,7 @@ export class SetupService {
                 next: data => this.m_HostAddressData.BackendStatusPort = Number(data.String),
                 error: () => this.m_HostAddressData.errorCount++
             });
-        this.mythService.GetSetting({ HostName: this.m_hostName, Key: "SecurityPin", Default: "0000"})
+        this.mythService.GetSetting({ HostName: this.m_hostName, Key: "SecurityPin", Default: "0000" })
             .subscribe({
                 next: data => this.m_HostAddressData.SecurityPin = data.String,
                 error: () => this.m_HostAddressData.errorCount++
@@ -176,6 +176,17 @@ export class SetupService {
             Value: this.m_HostAddressData.MasterServerName
         }).subscribe(this.HostAddressObs);
 
+        if (this.m_HostAddressData.MasterServerName == this.m_HostAddressData.thisHostName) {
+            // Update deprecated settings for apps that still use them
+            this.mythService.PutSetting({
+                HostName: "_GLOBAL_", Key: "MasterServerIP",
+                Value: this.m_HostAddressData.BackendServerAddr
+            }).subscribe(this.HostAddressObs);
+            this.mythService.PutSetting({
+                HostName: "_GLOBAL_", Key: "MasterServerPort",
+                Value: String(this.m_HostAddressData.BackendServerPort)
+            }).subscribe(this.HostAddressObs);
+        }
     }
 
     m_LocaleData!: Locale;
@@ -262,7 +273,7 @@ export class SetupService {
         }
         for (let ix = 0; ix < 4; ix++) {
             let num = ix + 1;
-            this.translate.get('settings.services.job_default', { num: num })
+            this.translate.stream('settings.services.job_default', { num: num })
                 .subscribe(data => this.m_JobQCommands.UserJobDesc[ix] = data);
             this.mythService.GetSetting({ HostName: '_GLOBAL_', Key: "UserJobDesc" + num, Default: "" })
                 .subscribe({
@@ -314,16 +325,6 @@ export class SetupService {
                 Value: this.m_JobQCommands.UserJob[ix]
             }).subscribe(this.JobQCommandsObs);
         }
-    }
-
-    currentForm: NgForm | null = null;
-
-    getCurrentForm(): NgForm | null {
-        return this.currentForm;
-    }
-
-    setCurrentForm(form: NgForm | null) {
-        this.currentForm = form;
     }
 
     // This is here to be shared among tabs on an accordian

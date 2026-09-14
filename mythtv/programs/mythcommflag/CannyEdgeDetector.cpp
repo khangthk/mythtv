@@ -2,8 +2,11 @@
 #include <cmath>
 
 // MythTV headers
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythlogging.h"
+#ifndef __cpp_size_t_suffix
 #include "libmythbase/sizetliteral.h"
+#endif
 #include "libmythtv/mythframe.h"          // VideoFrame
 #include "libmythtv/mythplayer.h"
 
@@ -30,7 +33,7 @@ CannyEdgeDetector::CannyEdgeDetector(void)
     const double    TWO_SIGMA2 = 2 * sigma * sigma;
 
     /* The SGM computations require that mask_radius >= 2. */
-    m_maskRadius = std::max(2, (int)roundf(TRUNCATION * sigma));
+    m_maskRadius = std::max(2, (int)std::round(TRUNCATION * sigma));
     int mask_width = (2 * m_maskRadius) + 1;
 
     /* Compute Gaussian mask. */
@@ -63,14 +66,13 @@ CannyEdgeDetector::~CannyEdgeDetector(void)
 int
 CannyEdgeDetector::resetBuffers(int newwidth, int newheight)
 {
-    if (m_ewidth == newwidth && m_eheight == newheight)
-        return 0;
-
     if (m_sgm) {
         /*
          * Sentinel value to determine whether or not stuff has already been
          * allocated.
          */
+        if (m_ewidth == newwidth && m_eheight == newheight)
+            return 0;
         av_freep(reinterpret_cast<void*>(&m_s1.data[0]));
         av_freep(reinterpret_cast<void*>(&m_s2.data[0]));
         av_freep(reinterpret_cast<void*>(&m_convolved.data[0]));
@@ -83,8 +85,19 @@ CannyEdgeDetector::resetBuffers(int newwidth, int newheight)
     const int   padded_width = newwidth + (2 * m_maskRadius);
     const int   padded_height = newheight + (2 * m_maskRadius);
 
+    // Automatically clean up allocations at function exit
+    auto cleanup_fn = [&](CannyEdgeDetector * /*x*/) {
+        if (m_convolved.data[0])
+            av_freep(reinterpret_cast<void*>(&m_convolved.data[0]));
+        if (m_s2.data[0])
+            av_freep(reinterpret_cast<void*>(&m_s2.data[0]));
+        if (m_s1.data[0])
+            av_freep(reinterpret_cast<void*>(&m_s1.data[0]));
+    };
+    std::unique_ptr<CannyEdgeDetector, decltype(cleanup_fn)> cleanup { this, cleanup_fn };
+
     if (av_image_alloc(m_s1.data, m_s1.linesize,
-        padded_width, padded_height, AV_PIX_FMT_GRAY8, IMAGE_ALIGN))
+        padded_width, padded_height, AV_PIX_FMT_GRAY8, IMAGE_ALIGN) < 0)
     {
         LOG(VB_COMMFLAG, LOG_ERR, "CannyEdgeDetector::resetBuffers "
                                   "av_image_alloc s1 failed");
@@ -92,44 +105,42 @@ CannyEdgeDetector::resetBuffers(int newwidth, int newheight)
     }
 
     if (av_image_alloc(m_s2.data, m_s2.linesize,
-        padded_width, padded_height, AV_PIX_FMT_GRAY8, IMAGE_ALIGN))
+        padded_width, padded_height, AV_PIX_FMT_GRAY8, IMAGE_ALIGN) < 0)
     {
         LOG(VB_COMMFLAG, LOG_ERR, "CannyEdgeDetector::resetBuffers "
                                   "av_image_alloc s2 failed");
-        goto free_s1;
+        return -1;
     }
 
     if (av_image_alloc(m_convolved.data, m_convolved.linesize,
-        padded_width, padded_height, AV_PIX_FMT_GRAY8, IMAGE_ALIGN))
+        padded_width, padded_height, AV_PIX_FMT_GRAY8, IMAGE_ALIGN) < 0)
     {
         LOG(VB_COMMFLAG, LOG_ERR, "CannyEdgeDetector::resetBuffers "
                                   "av_image_alloc convolved failed");
-        goto free_s2;
+        return -1;
     }
 
     if (av_image_alloc(m_edges.data, m_edges.linesize,
-        newwidth, newheight, AV_PIX_FMT_GRAY8, IMAGE_ALIGN))
+        newwidth, newheight, AV_PIX_FMT_GRAY8, IMAGE_ALIGN) < 0)
     {
         LOG(VB_COMMFLAG, LOG_ERR, "CannyEdgeDetector::resetBuffers "
                                   "av_image_alloc edges failed");
-        goto free_convolved;
+        return -1;
     }
 
+#ifdef __cpp_size_t_suffix
+    m_sgm = new unsigned int[1UZ * padded_width * padded_height];
+    m_sgmSorted = new unsigned int[1UZ * newwidth * newheight];
+#else
     m_sgm = new unsigned int[1_UZ * padded_width * padded_height];
     m_sgmSorted = new unsigned int[1_UZ * newwidth * newheight];
+#endif
 
     m_ewidth = newwidth;
     m_eheight = newheight;
 
+    (void)cleanup.release(); // Don't release allocated memory.
     return 0;
-
-free_convolved:
-    av_freep(reinterpret_cast<void*>(&m_convolved.data[0]));
-free_s2:
-    av_freep(reinterpret_cast<void*>(&m_s2.data[0]));
-free_s1:
-    av_freep(reinterpret_cast<void*>(&m_s1.data[0]));
-    return -1;
 }
 
 int

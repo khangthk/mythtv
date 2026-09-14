@@ -10,6 +10,7 @@
 #include <QString>
 
 // MythTV headers
+#include "libmythbase/mythlogging.h"
 #include "mpegstreamdata.h"
 #include "mpegtables.h"
 
@@ -71,7 +72,7 @@ void MPEGStreamData::SetDesiredProgram(int p)
 
     LOG(VB_RECORD, LOG_INFO, LOC + QString("SetDesiredProgram(%2)").arg(p));
 
-    for (uint i = (p) ? 0 : pats.size(); i < pats.size() && !pid; i++)
+    for (uint i = p ? 0 : pats.size(); i < pats.size() && !pid; i++)
     {
         pat = pats[i];
         pid = pats[i]->FindPID(p);
@@ -419,6 +420,7 @@ static desc_list_t extract_atsc_desc(const tvct_vec_t &tvct,
     desc_list_t desc;
 
     std::vector<const VirtualChannelTable*> vct;
+    vct.reserve(tvct.size() + cvct.size());
 
     for (const auto *i : tvct)
         vct.push_back(i);
@@ -502,10 +504,18 @@ bool MPEGStreamData::CreatePMTSingleProgram(const ProgramMapTable &pmt)
     std::vector<uint> pids;
     std::vector<uint> types;
     std::vector<desc_list_t> pdesc;
+    pids.reserve(pmt.StreamCount());
+    types.reserve(pmt.StreamCount());
+    pdesc.reserve(pmt.StreamCount());
 
     std::vector<uint> videoPIDs;
     std::vector<uint> audioPIDs;
     std::vector<uint> dataPIDs;
+    // Guessing two audio streams per video stream.  Hopefully
+    // slightly oversized so only one memory allocation occurs.
+    videoPIDs.reserve(pmt.StreamCount()/3);
+    audioPIDs.reserve(pmt.StreamCount()/2);
+    dataPIDs.reserve(pmt.StreamCount()/3);
 
     for (uint i = 0; i < pmt.StreamCount(); i++)
     {
@@ -853,99 +863,101 @@ void MPEGStreamData::UpdateTimeOffset(uint64_t _si_utc_time)
 
 }
 
-// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
-#define DONE_WITH_PSIP_PACKET() { delete psip; \
-    if (morePSIPTables) goto HAS_ANOTHER_PSIP; else return; }
-
 /** \fn MPEGStreamData::HandleTSTables(const TSPacket*)
  *  \brief Assembles PSIP packets and processes them.
  */
 void MPEGStreamData::HandleTSTables(const TSPacket* tspacket)
 {
-    bool morePSIPTables = false;
-  HAS_ANOTHER_PSIP:
-    // Assemble PSIP
-    PSIPTable *psip = AssemblePSIP(tspacket, morePSIPTables);
-    if (!psip)
-       return;
-
-    // drop stuffing packets
-    if ((TableID::ST       == psip->TableID()) ||
-        (TableID::STUFFING == psip->TableID()))
+    PSIPTable *psip = nullptr;
+    bool morePSIPTables = true;
+    while (morePSIPTables)
     {
-        LOG(VB_RECORD, LOG_DEBUG, LOC + "Dropping Stuffing table");
-        DONE_WITH_PSIP_PACKET();
-    }
+        // Delete PSIP from previous iteration.
+        delete psip;
 
-    // Don't do validation on tables without CRC
-    if (!psip->HasCRC())
-    {
+        // Assemble PSIP
+        psip = AssemblePSIP(tspacket, morePSIPTables);
+        if (!psip)
+           return;
+
+        // drop stuffing packets
+        if ((TableID::ST       == psip->TableID()) ||
+            (TableID::STUFFING == psip->TableID()))
+        {
+            LOG(VB_RECORD, LOG_DEBUG, LOC + "Dropping Stuffing table");
+            continue;
+        }
+
+        // Don't do validation on tables without CRC
+        if (!psip->HasCRC())
+        {
+            HandleTables(tspacket->PID(), *psip);
+            continue;
+        }
+
+        // Validate PSIP
+        // but don't validate PMT/PAT if our driver has the PMT/PAT CRC bug.
+        bool buggy = m_haveCrcBug &&
+            ((TableID::PMT == psip->TableID()) ||
+             (TableID::PAT == psip->TableID()));
+        if (!buggy && !psip->IsGood())
+        {
+            LOG(VB_RECORD, LOG_ERR, LOC +
+                QString("PSIP packet failed CRC check. pid(0x%1) type(0x%2)")
+                    .arg(tspacket->PID(),0,16).arg(psip->TableID(),0,16));
+            continue;
+        }
+
+        if (TableID::MGT <= psip->TableID() && psip->TableID() <= TableID::STT &&
+            !psip->IsCurrent())
+        { // we don't cache the next table, for now
+            LOG(VB_RECORD, LOG_DEBUG, LOC + QString("Table not current 0x%1")
+                .arg(psip->TableID(),2,16,QChar('0')));
+            continue;
+        }
+
+        if (tspacket->Scrambled())
+        { // scrambled! ATSC, DVB require tables not to be scrambled
+            LOG(VB_RECORD, LOG_ERR, LOC +
+                "PSIP packet is scrambled, not ATSC/DVB compliant");
+            continue;
+        }
+
+        if (!psip->VerifyPSIP(!m_haveCrcBug))
+        {
+            LOG(VB_RECORD, LOG_ERR, LOC + QString("PSIP table 0x%1 is invalid")
+                .arg(psip->TableID(),2,16,QChar('0')));
+            continue;
+        }
+
+        // Don't decode redundant packets,
+        // but if it is a desired PAT or PMT emit a "heartbeat" signal.
+        if (MPEGStreamData::IsRedundant(tspacket->PID(), *psip))
+        {
+            if (TableID::PAT == psip->TableID())
+            {
+                QMutexLocker locker(&m_listenerLock);
+                ProgramAssociationTable *pat_sp = PATSingleProgram();
+                for (auto & listener : m_mpegSpListeners)
+                    listener->HandleSingleProgramPAT(pat_sp, false);
+            }
+            if (TableID::PMT == psip->TableID() &&
+                tspacket->PID() == m_pidPmtSingleProgram)
+            {
+                QMutexLocker locker(&m_listenerLock);
+                ProgramMapTable *pmt_sp = PMTSingleProgram();
+                for (auto & listener : m_mpegSpListeners)
+                    listener->HandleSingleProgramPMT(pmt_sp, false);
+            }
+            continue; // already parsed this table, toss it.
+        }
+
         HandleTables(tspacket->PID(), *psip);
-        DONE_WITH_PSIP_PACKET();
     }
 
-    // Validate PSIP
-    // but don't validate PMT/PAT if our driver has the PMT/PAT CRC bug.
-    bool buggy = m_haveCrcBug &&
-        ((TableID::PMT == psip->TableID()) ||
-         (TableID::PAT == psip->TableID()));
-    if (!buggy && !psip->IsGood())
-    {
-        LOG(VB_RECORD, LOG_ERR, LOC +
-            QString("PSIP packet failed CRC check. pid(0x%1) type(0x%2)")
-                .arg(tspacket->PID(),0,16).arg(psip->TableID(),0,16));
-        DONE_WITH_PSIP_PACKET();
-    }
-
-    if (TableID::MGT <= psip->TableID() && psip->TableID() <= TableID::STT &&
-        !psip->IsCurrent())
-    { // we don't cache the next table, for now
-        LOG(VB_RECORD, LOG_DEBUG, LOC + QString("Table not current 0x%1")
-            .arg(psip->TableID(),2,16,QChar('0')));
-        DONE_WITH_PSIP_PACKET();
-    }
-
-    if (tspacket->Scrambled())
-    { // scrambled! ATSC, DVB require tables not to be scrambled
-        LOG(VB_RECORD, LOG_ERR, LOC +
-            "PSIP packet is scrambled, not ATSC/DVB compliant");
-        DONE_WITH_PSIP_PACKET();
-    }
-
-    if (!psip->VerifyPSIP(!m_haveCrcBug))
-    {
-        LOG(VB_RECORD, LOG_ERR, LOC + QString("PSIP table 0x%1 is invalid")
-            .arg(psip->TableID(),2,16,QChar('0')));
-        DONE_WITH_PSIP_PACKET();
-    }
-
-    // Don't decode redundant packets,
-    // but if it is a desired PAT or PMT emit a "heartbeat" signal.
-    if (MPEGStreamData::IsRedundant(tspacket->PID(), *psip))
-    {
-        if (TableID::PAT == psip->TableID())
-        {
-            QMutexLocker locker(&m_listenerLock);
-            ProgramAssociationTable *pat_sp = PATSingleProgram();
-            for (auto & listener : m_mpegSpListeners)
-                listener->HandleSingleProgramPAT(pat_sp, false);
-        }
-        if (TableID::PMT == psip->TableID() &&
-            tspacket->PID() == m_pidPmtSingleProgram)
-        {
-            QMutexLocker locker(&m_listenerLock);
-            ProgramMapTable *pmt_sp = PMTSingleProgram();
-            for (auto & listener : m_mpegSpListeners)
-                listener->HandleSingleProgramPMT(pmt_sp, false);
-        }
-        DONE_WITH_PSIP_PACKET(); // already parsed this table, toss it.
-    }
-
-    HandleTables(tspacket->PID(), *psip);
-
-    DONE_WITH_PSIP_PACKET();
+    // Delete PSIP from final iteration.
+    delete psip;
 }
-#undef DONE_WITH_PSIP_PACKET
 
 int MPEGStreamData::ProcessData(const unsigned char *buffer, int len)
 {
@@ -1048,6 +1060,8 @@ bool MPEGStreamData::ProcessTSPacket(const TSPacket& tspacket)
 
     if (IsVideoPID(tspacket.PID()))
     {
+        QMutexLocker locker(&m_listenerLock);
+
         for (auto & listener : m_tsAvListeners)
             listener->ProcessVideoTSPacket(tspacket);
 
@@ -1056,6 +1070,8 @@ bool MPEGStreamData::ProcessTSPacket(const TSPacket& tspacket)
 
     if (IsAudioPID(tspacket.PID()))
     {
+        QMutexLocker locker(&m_listenerLock);
+
         for (auto & listener : m_tsAvListeners)
             listener->ProcessAudioTSPacket(tspacket);
 
@@ -1064,6 +1080,8 @@ bool MPEGStreamData::ProcessTSPacket(const TSPacket& tspacket)
 
     if (IsWritingPID(tspacket.PID()))
     {
+        QMutexLocker locker(&m_listenerLock);
+
         for (auto & listener : m_tsWritingListeners)
             listener->ProcessTSPacket(tspacket);
     }
@@ -1175,7 +1193,9 @@ void MPEGStreamData::SavePartialPSIP(uint pid, PSIPTable* packet)
 {
     pid_psip_map_t::iterator it = m_partialPsipPacketCache.find(pid);
     if (it == m_partialPsipPacketCache.end())
+    {
         m_partialPsipPacketCache[pid] = packet;
+    }
     else
     {
         PSIPTable *old = *it;
@@ -1233,7 +1253,7 @@ bool MPEGStreamData::HasCachedAnyPAT(uint tsid) const
     QMutexLocker locker(&m_cacheLock);
 
     for (uint i = 0; i <= 255; i++)
-        if (m_cachedPats.find((tsid << 8) | i) != m_cachedPats.end())
+        if (m_cachedPats.contains((tsid << 8) | i))
             return true;
 
     return false;
@@ -1269,7 +1289,7 @@ bool MPEGStreamData::HasCachedAnyCAT(uint tsid) const
     QMutexLocker locker(&m_cacheLock);
 
     for (uint i = 0; i <= 255; i++)
-        if (m_cachedCats.find((tsid << 8) | i) != m_cachedCats.end())
+        if (m_cachedCats.contains((tsid << 8) | i))
             return true;
 
     return false;
@@ -1305,7 +1325,7 @@ bool MPEGStreamData::HasCachedAnyPMT(uint pnum) const
     QMutexLocker locker(&m_cacheLock);
 
     for (uint i = 0; i <= 255; i++)
-        if (m_cachedPmts.find((pnum << 8) | i) != m_cachedPmts.end())
+        if (m_cachedPmts.contains((pnum << 8) | i))
             return true;
 
     return false;
@@ -1358,6 +1378,7 @@ pat_vec_t MPEGStreamData::GetCachedPATs(uint tsid) const
     QMutexLocker locker(&m_cacheLock);
     pat_vec_t pats;
 
+    pats.reserve(256);
     for (uint i=0; i < 256; i++)
     {
         pat_const_ptr_t pat = GetCachedPAT(tsid, i);
@@ -1373,6 +1394,7 @@ pat_vec_t MPEGStreamData::GetCachedPATs(void) const
     QMutexLocker locker(&m_cacheLock);
     pat_vec_t pats;
 
+    pats.reserve(m_cachedPats.size());
     for (auto *pat : std::as_const(m_cachedPats))
     {
         IncrementRefCnt(pat);
@@ -1400,6 +1422,7 @@ cat_vec_t MPEGStreamData::GetCachedCATs(uint tsid) const
     QMutexLocker locker(&m_cacheLock);
     cat_vec_t cats;
 
+    cats.reserve(256);
     for (uint i=0; i < 256; i++)
     {
         cat_const_ptr_t cat = GetCachedCAT(tsid, i);
@@ -1415,6 +1438,7 @@ cat_vec_t MPEGStreamData::GetCachedCATs(void) const
     QMutexLocker locker(&m_cacheLock);
     cat_vec_t cats;
 
+    cats.reserve(m_cachedCats.size());
     for (auto *cat : std::as_const(m_cachedCats))
     {
         IncrementRefCnt(cat);
@@ -1443,6 +1467,7 @@ pmt_vec_t MPEGStreamData::GetCachedPMTs(void) const
     QMutexLocker locker(&m_cacheLock);
     std::vector<const ProgramMapTable*> pmts;
 
+    pmts.reserve(m_cachedPmts.size());
     for (auto *pmt : std::as_const(m_cachedPmts))
     {
         IncrementRefCnt(pmt);
@@ -1773,7 +1798,7 @@ void MPEGStreamData::AddEncryptionTestPID(uint pnum, uint pid, bool isvideo)
 
     AddListeningPID(pid);
 
-    m_encryptionPidToInfo[pid] = CryptInfo((isvideo) ? 10000 : 500, 8);
+    m_encryptionPidToInfo[pid] = CryptInfo(isvideo ? 10000 : 500, 8);
 
     m_encryptionPidToPnums[pid].push_back(pnum);
     m_encryptionPnumToPids[pnum].push_back(pid);

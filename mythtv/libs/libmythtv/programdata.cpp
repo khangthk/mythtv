@@ -479,7 +479,7 @@ uint DBEvent::GetOverlappingPrograms(
             query.value(7).toUInt(),
             query.value(8).toUInt(),
             query.value(9).toUInt(),
-            query.value(19).toDouble(),
+            query.value(19).toFloat(),
             query.value(10).toString(),
             query.value(11).toString(),
             query.value(18).toUInt(),
@@ -584,9 +584,13 @@ int DBEvent::GetMatch(const std::vector<DBEvent> &programs, int &bestmatch) cons
          * we don't know which one starts first */
         int overlap = 0;
         if (m_starttime < programs[i].m_starttime)
+        {
             overlap = programs[i].m_starttime.secsTo(m_endtime);
+        }
         else if (m_starttime > programs[i].m_starttime)
+        {
             overlap = m_starttime.secsTo(programs[i].m_endtime);
+        }
         else
         {
             if (m_endtime <= programs[i].m_endtime)
@@ -884,7 +888,7 @@ uint DBEvent::UpdateDB(
     query.bindValue(":SERIESID",    denullify(lseriesId));
     query.bindValue(":PROGRAMID",   denullify(lprogramId));
     query.bindValue(":PREVSHOWN",   lpreviouslyshown);
-    query.bindValue(":INETREF",     linetref);
+    query.bindValue(":INETREF",     denullify(linetref));
 
     if (!query.exec())
     {
@@ -1194,7 +1198,7 @@ uint DBEvent::InsertDB(MSqlQuery &query, uint chanid,
     query.bindValue(":SEASON",      m_season);
     query.bindValue(":EPISODE",     m_episode);
     query.bindValue(":TOTALEPISODES", m_totalepisodes);
-    query.bindValue(":INETREF",     m_inetref);
+    query.bindValue(":INETREF",     denullify(m_inetref));
 
     if (!query.exec())
     {
@@ -1360,13 +1364,13 @@ uint ProgInfo::InsertDB(MSqlQuery &query, uint chanid,
     query.bindValue(":PROGRAMID",   denullify(m_programId));
     query.bindValue(":PREVSHOWN",   m_previouslyshown);
     query.bindValue(":STARS",       m_stars);
-    query.bindValue(":SHOWTYPE",    m_showtype);
-    query.bindValue(":TITLEPRON",   m_title_pronounce);
-    query.bindValue(":COLORCODE",   m_colorcode);
+    query.bindValue(":SHOWTYPE",    denullify(m_showtype));
+    query.bindValue(":TITLEPRON",   denullify(m_title_pronounce));
+    query.bindValue(":COLORCODE",   denullify(m_colorcode));
     query.bindValue(":SEASON",      m_season);
     query.bindValue(":EPISODE",     m_episode);
     query.bindValue(":TOTALEPISODES", m_totalepisodes);
-    query.bindValue(":INETREF",     m_inetref);
+    query.bindValue(":INETREF",     denullify(m_inetref));
 
     if (!query.exec())
     {
@@ -1457,7 +1461,7 @@ bool ProgramData::ClearDataBySource(
     bool ok = true;
     auto cleardata = [&](uint chanid)
         { ok &= ClearDataByChannel(chanid, from, to, use_channel_time_offset); };
-    std::for_each(chanids.cbegin(), chanids.cend(), cleardata);
+    std::ranges::for_each(chanids, cleardata);
     return ok;
 }
 
@@ -1468,6 +1472,8 @@ static bool start_time_less_than(const DBEvent *a, const DBEvent *b)
 
 void ProgramData::FixProgramList(QList<ProgInfo*> &fixlist)
 {
+    // QList doesn't always play well with std::ranges
+    // NOLINTNEXTLINE(modernize-use-ranges)
     std::stable_sort(fixlist.begin(), fixlist.end(), start_time_less_than);
 
     QList<ProgInfo*>::iterator it = fixlist.begin();
@@ -1744,22 +1750,22 @@ bool ProgramData::IsUnchanged(
     query.bindValue(":STARS1",     pi.m_stars);
     query.bindValue(":STARS2",     pi.m_stars);
     query.bindValue(":PREVIOUSLYSHOWN", pi.m_previouslyshown);
-    query.bindValue(":TITLE_PRONOUNCE", pi.m_title_pronounce);
+    query.bindValue(":TITLE_PRONOUNCE", denullify(pi.m_title_pronounce));
     query.bindValue(":AUDIOPROP",  pi.m_audioProps);
     query.bindValue(":VIDEOPROP",  pi.m_videoProps);
     query.bindValue(":SUBTYPES",   pi.m_subtitleType);
     query.bindValue(":PARTNUMBER", pi.m_partnumber);
     query.bindValue(":PARTTOTAL",  pi.m_parttotal);
     query.bindValue(":SERIESID",   denullify(pi.m_seriesId));
-    query.bindValue(":SHOWTYPE",   pi.m_showtype);
-    query.bindValue(":COLORCODE",  pi.m_colorcode);
+    query.bindValue(":SHOWTYPE",   denullify(pi.m_showtype));
+    query.bindValue(":COLORCODE",  denullify(pi.m_colorcode));
     query.bindValue(":SYNDICATEDEPISODENUMBER",
                     denullify(pi.m_syndicatedepisodenumber));
     query.bindValue(":PROGRAMID",  denullify(pi.m_programId));
     query.bindValue(":SEASON",     pi.m_season);
     query.bindValue(":EPISODE",    pi.m_episode);
     query.bindValue(":TOTALEPISODES", pi.m_totalepisodes);
-    query.bindValue(":INETREF",    pi.m_inetref);
+    query.bindValue(":INETREF",    denullify(pi.m_inetref));
 
     if (query.exec() && query.next())
         return query.value(0).toUInt() > 0;
@@ -1786,10 +1792,7 @@ bool ProgramData::DeleteOverlaps(
         if (!query.exec())
             return false;
 
-        if (!query.next())
-            return true;
-
-        do
+        while (query.next())
         {
             LOG(VB_XMLTV, LOG_DEBUG,
                 QString("Removing existing program: %1 - %2 %3 %4")
@@ -1797,7 +1800,13 @@ bool ProgramData::DeleteOverlaps(
                      MythDate::as_utc(query.value(2).toDateTime()).toString(Qt::ISODate),
                      pi.m_channel,
                      query.value(0).toString()));
-        } while (query.next());
+        }
+
+        if (query.at() == QSql::BeforeFirstRow)
+        {
+            // Successful query, no results
+            return true;
+        }
     }
 
     if (!ClearDataByChannel(chanid, pi.m_starttime, pi.m_endtime, false))

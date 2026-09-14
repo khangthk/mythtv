@@ -1,5 +1,4 @@
 // MythTV
-#include "mythlogging.h"
 #include "http/mythhttpservices.h"
 #include "http/mythhttpmetaservice.h"
 
@@ -23,3 +22,5 @@ QStringList MythHTTPServices::GetServiceList()
 {
     return m_serviceList;
 }
+
+#include "moc_mythhttpservices.cpp"

@@ -1,22 +1,31 @@
-/*
- * Copyright (c) 2022 Scott Theisen
- *
- * This file is part of MythTV.
- *
- * MythTV is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- *
- * MythTV is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with MythTV; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- */
+// SPDX-License-Identifier: Unlicense
+// Created by Scott Theisen, 2022-2024
+/* The Unlicense
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <https://unlicense.org>
+*/
 
 /**
  * @file
@@ -29,11 +38,8 @@
 
 #include <algorithm>
 #include <array>
-#include <cstdint>
-
-#if __has_include(<bit>) // C++20
 #include <bit>
-#endif
+#include <cstdint>
 
 class BitReader
 {
@@ -162,29 +168,7 @@ class BitReader
     int get_ue_golomb(unsigned max_length);
     static unsigned clz(uint32_t v)
     {
-#if defined(__cpp_lib_bitops) && __cpp_lib_bitops >= 201907L // C++20 <bit>
         return std::countl_zero(v);
-#else
-        // based on public domain log2_floor
-        // http://graphics.stanford.edu/~seander/bithacks.html#IntegerLogDeBruijn
-        if (v == 0)
-        {
-            return 32;
-        }
-        static constexpr std::array<int,32> MultiplyDeBruijnBitPosition =
-        {
-             0,  9,  1, 10, 13, 21,  2, 29, 11, 14, 16, 18, 22, 25,  3, 30,
-             8, 12, 20, 28, 15, 17, 24,  7, 19, 27, 23,  6, 26,  5,  4, 31
-        };
-
-        v |= v >> 1; // first round down to one less than a power of 2 
-        v |= v >> 2;
-        v |= v >> 4;
-        v |= v >> 8;
-        v |= v >> 16;
-
-        return 31 - MultiplyDeBruijnBitPosition[static_cast<uint32_t>(v * 0x07C4ACDDU) >> 27];
-#endif
     }
 
     static constexpr uint64_t get_upper_bits(uint64_t val, unsigned bits)

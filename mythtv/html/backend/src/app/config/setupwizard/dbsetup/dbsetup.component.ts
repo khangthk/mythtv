@@ -4,13 +4,23 @@ import { ConfigService } from '../../../services/config.service';
 import { MythService } from '../../../services/myth.service';
 import { WizardData } from '../../../services/interfaces/wizarddata.interface';
 import { SetupWizardService } from '../../../services/setupwizard.service';
-import { MessageService } from 'primeng/api';
-import { Database, TestDBSettingsRequest } from 'src/app/services/interfaces/myth.interface';
-import { TranslateService } from '@ngx-translate/core';
-import { NgForm } from '@angular/forms';
+import { MessageService, SharedModule } from 'primeng/api';
+import { Database, TestDBSettingsRequest } from '../../../services/interfaces/myth.interface';
+import { TranslateService, TranslatePipe } from '@ngx-translate/core';
+import { NgForm, FormsModule } from '@angular/forms';
 import { Observable, of } from 'rxjs';
-import { SetupService } from 'src/app/services/setup.service';
+import { SetupService } from '../../../services/setup.service';
 import { Clipboard } from '@angular/cdk/clipboard';
+import { TooltipModule } from 'primeng/tooltip';
+import { RippleModule } from 'primeng/ripple';
+import { RadioButtonModule } from 'primeng/radiobutton';
+import { MessageModule } from 'primeng/message';
+import { ButtonModule } from 'primeng/button';
+import { InputNumberModule } from 'primeng/inputnumber';
+import { CheckboxModule } from 'primeng/checkbox';
+import { NgClass } from '@angular/common';
+import { CardModule } from 'primeng/card';
+import { ToastModule } from 'primeng/toast';
 
 @Component({
     selector: 'app-dbsetup',
@@ -18,6 +28,21 @@ import { Clipboard } from '@angular/cdk/clipboard';
     styleUrls: ['./dbsetup.component.css'],
     providers: [MessageService],
     encapsulation: ViewEncapsulation.None,
+    imports: [
+        ToastModule,
+        FormsModule,
+        CardModule,
+        SharedModule,
+        NgClass,
+        CheckboxModule,
+        InputNumberModule,
+        ButtonModule,
+        MessageModule,
+        RadioButtonModule,
+        RippleModule,
+        TooltipModule,
+        TranslatePipe
+    ]
 })
 export class DbsetupComponent implements OnInit {
 
@@ -25,7 +50,6 @@ export class DbsetupComponent implements OnInit {
 
     m_wizardData!: WizardData;
     database!: Database;
-    // testDbName = '';
 
     successCount = 0;
     errorCount = 0;
@@ -33,8 +57,10 @@ export class DbsetupComponent implements OnInit {
     connectionFail = false;
     commandlist = '';
     mySqlCommand = 'sudo mysql -u root < setup.sql'
-    tzCommand = 'mysql_tzinfo_to_sql /usr/share/zoneinfo | sudo mysql -u root mysql'
-    dbtype = "MySQL";
+    mySqlTzCommand = 'mysql_tzinfo_to_sql /usr/share/zoneinfo | sudo mysql -u root mysql'
+    mariaDBtzCommand = 'mariadb-tzinfo-to-sql /usr/share/zoneinfo | sudo mysql -u root mysql'
+    tzCommand = ''
+    dbtype = 'MySQL';
 
     msg_testconnection = 'setupwizard.testConnection';
     msg_connectionsuccess = 'setupwizard.connectionsuccess';
@@ -50,10 +76,10 @@ export class DbsetupComponent implements OnInit {
         private messageService: MessageService,
         public setupService: SetupService,
         private clipboard: Clipboard) {
-        this.translate.get(this.msg_testconnection).subscribe(data => this.msg_testconnection = data);
-        this.translate.get(this.msg_connectionsuccess).subscribe(data => this.msg_connectionsuccess = data);
-        this.translate.get(this.msg_connectionfail).subscribe(data => this.msg_connectionfail = data);
-        this.translate.get(this.warningText).subscribe(data => this.warningText = data);
+        this.translate.stream(this.msg_testconnection).subscribe(data => this.msg_testconnection = data);
+        this.translate.stream(this.msg_connectionsuccess).subscribe(data => this.msg_connectionsuccess = data);
+        this.translate.stream(this.msg_connectionfail).subscribe(data => this.msg_connectionfail = data);
+        this.translate.stream(this.warningText).subscribe(data => this.warningText = data);
     }
 
     ngOnInit(): void {
@@ -69,10 +95,11 @@ export class DbsetupComponent implements OnInit {
         },
             () => this.errorCount++,
         )
+        this.setCommandList();
     }
 
     copyToclipboard(value: string): void {
-        this.clipboard.copy(value);
+        this.clipboard.copy(value.replace(/<br>/g, '\n'));
     }
 
     saveObserver = {
@@ -106,10 +133,9 @@ export class DbsetupComponent implements OnInit {
             DBName: this.database.Name,
             dbPort: this.database.Port
         }
-        // this.testDbName = this.database.Name;
-        this.commandlist = '';
         this.mythService.TestDBSettings(params).subscribe(result => {
             if (result.bool) {
+                this.m_wizardData.DatabaseStatus.DatabaseStatus.Connected = true;
                 if (doSave) {
                     this.configService.SetDatabaseCredentials(this.database)
                         .subscribe(this.saveObserver);
@@ -127,13 +153,17 @@ export class DbsetupComponent implements OnInit {
 
     setCommandList() {
         let pwType = '';
-        if (this.dbtype == 'MySQL')
-            pwType = 'WITH mysql_native_password';
+        if (this.dbtype == 'MySQL') {
+            // pwType = 'WITH mysql_native_password';
+            this.tzCommand = this.mySqlTzCommand;
+        }
+        else
+            this.tzCommand = this.mariaDBtzCommand;
         this.commandlist =
-            `CREATE DATABASE IF NOT EXISTS ${this.database.Name};\n` +
-            `CREATE USER IF NOT EXISTS '${this.database.UserName}'@'localhost' IDENTIFIED ${pwType} by '${this.database.Password}';\n` +
-            `CREATE USER IF NOT EXISTS '${this.database.UserName}'@'%' IDENTIFIED ${pwType} by '${this.database.Password}';\n` +
-            `GRANT ALL ON ${this.database.Name}.* TO '${this.database.UserName}'@'localhost';\n` +
+            `CREATE DATABASE IF NOT EXISTS ${this.database.Name};<br>` +
+            `CREATE USER IF NOT EXISTS '${this.database.UserName}'@'localhost' IDENTIFIED ${pwType} by '${this.database.Password}';<br>` +
+            `CREATE USER IF NOT EXISTS '${this.database.UserName}'@'%' IDENTIFIED ${pwType} by '${this.database.Password}';<br>` +
+            `GRANT ALL ON ${this.database.Name}.* TO '${this.database.UserName}'@'localhost';<br>` +
             `GRANT ALL ON ${this.database.Name}.* TO '${this.database.UserName}'@'%';`
     }
 

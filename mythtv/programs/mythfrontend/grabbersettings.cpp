@@ -8,6 +8,7 @@
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdbcon.h"
 #include "libmythbase/mythdirs.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythbase/mythsystemlegacy.h"
 #include "libmythmetadata/metadatacommon.h"
 #include "libmythui/mythprogressdialog.h"
@@ -152,3 +153,5 @@ bool GrabberSettings::keyPressEvent(QKeyEvent *event)
 
     return MythScreenType::keyPressEvent(event);
 }
+
+#include "moc_grabbersettings.cpp"

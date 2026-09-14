@@ -7,13 +7,15 @@
 #include <iostream>
 #include <libgen.h>
 #include <sys/stat.h>
-#include <sys/time.h>     // for setpriority
 #include <sys/types.h>
 #include <unistd.h>
 
 // Qt
 #include <QtGlobal>
-#ifndef _WIN32
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
+#ifndef Q_OS_WINDOWS
 #include <QCoreApplication>
 #else
 #include <QApplication>
@@ -25,26 +27,23 @@
 
 // MythTV
 #include "libmyth/mythcontext.h"
-#include "libmythbase/cleanupguard.h"
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/compat.h"
 #include "libmythbase/exitcodes.h"
-#include "libmythbase/mythcorecontext.h"
+#include "libmythbase/mythappname.h"
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythversion.h"
-#include "libmythbase/programinfo.h"
-#include "libmythbase/signalhandling.h"
 #include "libmythbase/storagegroup.h"
 #include "libmythtv/dbcheck.h"
 #include "libmythtv/mythsystemevent.h"
 #include "libmythtv/previewgenerator.h"
+#include "libmythtv/programinfo.h"
 
 //MythPreviewGen
 #include "mythpreviewgen_commandlineparser.h"
 
 #define LOC      QString("MythPreviewGen: ")
-#define LOC_WARN QString("MythPreviewGen, Warning: ")
-#define LOC_ERR  QString("MythPreviewGen, Error: ")
 
 #ifdef Q_OS_MACOS
 // 10.6 uses some file handles for its new Grand Central Dispatch thingy
@@ -53,25 +52,11 @@ static constexpr long UNUSED_FILENO { 5 };
 static constexpr long UNUSED_FILENO { 3 };
 #endif
 
-namespace
-{
-    void cleanup()
-    {
-        delete gContext;
-        gContext = nullptr;
-        SignalHandler::Done();
-    }
-}
-
 int preview_helper(uint chanid, QDateTime starttime,
                    long long previewFrameNumber, std::chrono::seconds previewSeconds,
                    const QSize previewSize,
                    const QString &infile, const QString &outfile)
 {
-    // Lower scheduling priority, to avoid problems with recordings.
-    if (setpriority(PRIO_PROCESS, 0, 9))
-        LOG(VB_GENERAL, LOG_ERR, "Setting priority failed." + ENO);
-
     if (!QFileInfo(infile).isReadable() && ((chanid == 0U) || !starttime.isValid()))
         ProgramInfo::QueryKeyFromPathname(infile, chanid, starttime);
 
@@ -124,7 +109,7 @@ int preview_helper(uint chanid, QDateTime starttime,
 
     delete pginfo;
 
-    return (ok) ? GENERIC_EXIT_OK : GENERIC_EXIT_NOT_OK;
+    return ok ? GENERIC_EXIT_OK : GENERIC_EXIT_NOT_OK;
 }
 
 int main(int argc, char **argv)
@@ -148,7 +133,7 @@ int main(int argc, char **argv)
         return GENERIC_EXIT_OK;
     }
 
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
 #if HAVE_CLOSE_RANGE
     close_range(UNUSED_FILENO, sysconf(_SC_OPEN_MAX) - 1, 0);
 #else
@@ -170,9 +155,9 @@ int main(int argc, char **argv)
     if ((!cmdline.toBool("chanid") || !cmdline.toBool("starttime")) &&
         !cmdline.toBool("inputfile"))
     {
-        std::cerr << "--generate-preview must be accompanied by either " <<std::endl
-                  << "\nboth --chanid and --starttime parameters, " << std::endl
-                  << "\nor the --infile parameter." << std::endl;
+        std::cerr << "--generate-preview must be accompanied by either\n"
+                  << "\nboth --chanid and --starttime parameters,\n"
+                  << "\nor the --infile parameter.\n";
         return GENERIC_EXIT_INVALID_CMDLINE;
     }
 
@@ -181,18 +166,11 @@ int main(int argc, char **argv)
     // Don't listen to console input
     close(0);
 
-    CleanupGuard callCleanup(cleanup);
-
-#ifndef _WIN32
-    SignalHandler::Init();
-#endif
-
     if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
         LOG(VB_GENERAL, LOG_WARNING, LOC + "Unable to ignore SIGPIPE");
 
-    gContext = new MythContext(MYTH_BINARY_VERSION);
-
-    if (!gContext->Init(false))
+    MythContext context {MYTH_BINARY_VERSION};
+    if (!context.Init(false))
     {
         LOG(VB_GENERAL, LOG_ERR, "Failed to init MythContext.");
         return GENERIC_EXIT_NO_MYTHCONTEXT;

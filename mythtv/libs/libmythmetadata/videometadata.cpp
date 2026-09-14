@@ -6,7 +6,6 @@
 #include <QFileInfo>
 #include <QRegularExpression>
 
-#include "libmyth/mythcontext.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythdb.h"
@@ -14,10 +13,8 @@
 #include "libmythbase/mythmiscutil.h"// for FileHash
 #include "libmythbase/mythsorthelper.h"
 #include "libmythbase/remotefile.h"
-#include "libmythbase/remoteutil.h"
 #include "libmythbase/storagegroup.h"
 #include "libmythbase/stringutil.h"
-#include "libmythbase/ternarycompare.h"
 
 #include "dbaccess.h"
 #include "globals.h"
@@ -395,18 +392,23 @@ class VideoMetadataImp
 /////////////////////////////
 /////////
 /////////////////////////////
+
+// For the spaceship operator, the c++ standard library explicitly
+// requires '0' and not nullptr.  NOLINTBEGIN(modernize-use-nullptr)
+
 /** \fn VideoMetadataImp::sortBefore(const VideoMetadataImp *)
  *  \brief Returns true if the object should appear before the argument.
  */
 bool VideoMetadataImp::sortBefore(const VideoMetadataImp *rhs) const
 {
-    int cmp = StringUtil::naturalCompare(m_sortTitle, rhs->m_sortTitle);
+    auto cmp = StringUtil::naturalCompare(m_sortTitle, rhs->m_sortTitle);
     if (cmp == 0)
         cmp = StringUtil::naturalCompare(m_sortFilename, rhs->m_sortFilename);
     if (cmp == 0)
-        cmp = ternary_compare(m_id, rhs->m_id);
+        cmp = m_id <=> rhs->m_id;
     return cmp < 0;
 }
+// NOLINTEND(modernize-use-nullptr)
 
 bool VideoMetadataImp::removeDir(const QString &dirName)
 {
@@ -443,7 +445,7 @@ bool VideoMetadataImp::DeleteFile()
 
     if (!m_host.isEmpty())
     {
-        QString url = generate_file_url("Videos", m_host, m_filename);
+        QString url = StorageGroup::generate_file_url("Videos", m_host, m_filename);
         isremoved = RemoteFile::DeleteFile(url);
     }
     else
@@ -890,7 +892,7 @@ void VideoMetadataImp::GetImageMap(InfoMap &imageMap) const
         && !GetCoverFile().isEmpty()
         && !IsDefaultCoverFile(GetCoverFile()))
     {
-        coverfile = generate_file_url(QStringLiteral(u"Coverart"), GetHost(),
+        coverfile = StorageGroup::generate_file_url(QStringLiteral(u"Coverart"), GetHost(),
                                       GetCoverFile());
     }
     else
@@ -905,7 +907,7 @@ void VideoMetadataImp::GetImageMap(InfoMap &imageMap) const
     if (IsHostSet() && !GetScreenshot().startsWith(u'/')
         && !GetScreenshot().isEmpty())
     {
-        screenshotfile = generate_file_url(QStringLiteral(u"Screenshots"),
+        screenshotfile = StorageGroup::generate_file_url(QStringLiteral(u"Screenshots"),
                                            GetHost(), GetScreenshot());
     }
     else
@@ -920,7 +922,7 @@ void VideoMetadataImp::GetImageMap(InfoMap &imageMap) const
     if (IsHostSet() && !GetBanner().startsWith(u'/')
         && !GetBanner().isEmpty())
     {
-        bannerfile = generate_file_url(QStringLiteral(u"Banners"), GetHost(),
+        bannerfile = StorageGroup::generate_file_url(QStringLiteral(u"Banners"), GetHost(),
                                        GetBanner());
     }
     else
@@ -935,7 +937,7 @@ void VideoMetadataImp::GetImageMap(InfoMap &imageMap) const
     if (IsHostSet() && !GetFanart().startsWith('/')
         && !GetFanart().isEmpty())
     {
-        fanartfile = generate_file_url(QStringLiteral(u"Fanart"), GetHost(),
+        fanartfile = StorageGroup::generate_file_url(QStringLiteral(u"Fanart"), GetHost(),
                                        GetFanart());
     }
     else
@@ -964,7 +966,7 @@ QString VideoMetadataImp::GetImage(const QString& name) const
             && !coverfile.startsWith(u'/')
             && !coverfile.isEmpty()
             && !IsDefaultCoverFile(coverfile))
-            return generate_file_url(QStringLiteral(u"Coverart"), GetHost(),
+            return StorageGroup::generate_file_url(QStringLiteral(u"Coverart"), GetHost(),
                                      coverfile);
         return coverfile;
     }
@@ -975,7 +977,7 @@ QString VideoMetadataImp::GetImage(const QString& name) const
         QString screenshot = GetScreenshot();
         if (IsHostSet() && !screenshot.startsWith(u'/')
             && !screenshot.isEmpty())
-            return generate_file_url(QStringLiteral(u"Screenshots"),
+            return StorageGroup::generate_file_url(QStringLiteral(u"Screenshots"),
                                      GetHost(), screenshot);
         return screenshot;
     }
@@ -986,7 +988,7 @@ QString VideoMetadataImp::GetImage(const QString& name) const
         QString bannerfile = GetBanner();
         if (IsHostSet() && !bannerfile.startsWith(u'/')
             && !bannerfile.isEmpty())
-            return generate_file_url(QStringLiteral(u"Banners"), GetHost(),
+            return StorageGroup::generate_file_url(QStringLiteral(u"Banners"), GetHost(),
                                      bannerfile);
         return bannerfile;
     }
@@ -997,7 +999,7 @@ QString VideoMetadataImp::GetImage(const QString& name) const
         QString fanartfile = GetFanart();
         if (IsHostSet() && !fanartfile.startsWith('/')
             && !fanartfile.isEmpty())
-            return generate_file_url(QStringLiteral(u"Fanart"), GetHost(),
+            return StorageGroup::generate_file_url(QStringLiteral(u"Fanart"), GetHost(),
                                      fanartfile);
         return fanartfile;
     }
@@ -1129,7 +1131,7 @@ QString VideoMetadata::VideoFileHash(const QString &file_name,
         return FileHash(fullname);
     }
 
-    QString url = generate_file_url("Videos", host, file_name);
+    QString url = StorageGroup::generate_file_url("Videos", host, file_name);
 
     return RemoteFile::GetFileHash(url);
 }
@@ -1210,8 +1212,8 @@ QString VideoMetadata::FilenameToMeta(const QString &file_name, int position)
         title = title.right(title.length() -
                      title.lastIndexOf('/') -1);
 
+        // Allow parentheses "()", but remove content inside other braces
         title = eatBraces(title, "[", "]");
-        title = eatBraces(title, "(", ")");
         title = eatBraces(title, "{", "}");
         return title.trimmed();
     }

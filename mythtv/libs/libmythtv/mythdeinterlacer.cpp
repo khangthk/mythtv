@@ -16,6 +16,9 @@ extern "C" {
 }
 
 #include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtProcessorDetection>
+#endif
 
 #ifdef Q_PROCESSOR_X86_64
 #   include <emmintrin.h>
@@ -395,7 +398,7 @@ bool MythDeinterlacer::SetUpCache(MythVideoFrame *Frame)
     if (!Frame)
         return false;
 
-    if (m_bobFrame && !((m_bobFrame->m_bufferSize == Frame->m_bufferSize)) && (m_bobFrame->m_width == Frame->m_width) &&
+    if (m_bobFrame && !(m_bobFrame->m_bufferSize == Frame->m_bufferSize) && (m_bobFrame->m_width == Frame->m_width) &&
                         (m_bobFrame->m_height == Frame->m_height) && (m_bobFrame->m_type == Frame->m_type))
     {
         delete m_bobFrame;
@@ -445,7 +448,7 @@ void MythDeinterlacer::OneField(MythVideoFrame *Frame, FrameScanType Scan)
 
     // Fake the frame height and stride to simulate a single field
     m_frame->height = Frame->m_height >> 1;
-    m_frame->interlaced_frame = 0;
+    m_frame->flags &= ~AV_FRAME_FLAG_INTERLACED;
     uint nbplanes = MythVideoFrame::GetNumPlanes(m_inputType);
     for (uint i = 0; i < nbplanes; i++)
     {
@@ -549,7 +552,7 @@ static inline void BlendSIMD16x4(unsigned char *Src, int Width, int FirstRow, in
         }
         for (int col = 0; col < Width; col += 16)
         {
-#if defined(Q_PROCESSOR_X86_64)
+#ifdef Q_PROCESSOR_X86_64
             __m128i mid = *reinterpret_cast<__m128i*>(&middle[col]);
             *reinterpret_cast<__m128i*>(&dest1[col]) =
                     _mm_avg_epu8(*reinterpret_cast<__m128i*>(&above[col]), mid);
@@ -604,7 +607,7 @@ static inline void BlendSIMD8x4(unsigned char *Src, int Width, int FirstRow, int
         }
         for (int col = 0; col < Width; col += 16)
         {
-#if defined(Q_PROCESSOR_X86_64)
+#ifdef Q_PROCESSOR_X86_64
             __m128i mid = *reinterpret_cast<__m128i*>(&middle[col]);
             *reinterpret_cast<__m128i*>(&dest1[col]) =
                     _mm_avg_epu16(*reinterpret_cast<__m128i*>(&above[col]), mid);

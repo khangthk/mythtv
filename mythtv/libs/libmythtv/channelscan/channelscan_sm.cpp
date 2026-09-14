@@ -27,14 +27,13 @@
  *
  */
 
-// C includes
-#include <unistd.h>
-
 // C++ includes
 #include <algorithm>
+#include <thread>
 #include <utility>
 
 // Qt includes
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QMutexLocker>
 #include <QObject>
 
@@ -42,6 +41,7 @@
 #include "libmythbase/mthread.h"
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythdbcon.h"
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythlogging.h"
 
 // MythTV includes - General
@@ -206,7 +206,7 @@ ChannelScanSM::ChannelScanSM(ScanMonitor *scan_monitor,
                             SignalMonitor::kDTVSigMon_WaitForNIT |
                             SignalMonitor::kDTVSigMon_WaitForSDT);
 
-#ifdef USING_DVB
+#if CONFIG_DVB
         auto *dvbchannel = dynamic_cast<DVBChannel*>(m_channel);
         if (dvbchannel && dvbchannel->GetRotor())
             dtvSigMon->AddFlags(SignalMonitor::kDVBSigMon_WaitForPos);
@@ -287,7 +287,7 @@ void ChannelScanSM::HandleAllGood(void)
             kChannelVisible /* visible   */,
             freqid);
 
-        msg = (ok) ?
+        msg = ok ?
             QObject::tr("Added Channel %1").arg(cur_chan) :
             QObject::tr("Failed to add channel %1").arg(cur_chan);
     }
@@ -384,7 +384,10 @@ void ChannelScanSM::HandlePAT(const ProgramAssociationTable *pat)
     LogLines(pat->toString());
 
     // Add pmts to list, so we can do MPEG scan properly.
-    ScanStreamData *sd = GetDTVSignalMonitor()->GetScanStreamData();
+    DTVSignalMonitor *monitor = GetDTVSignalMonitor();
+    if (nullptr == monitor)
+        return;
+    ScanStreamData *sd = monitor->GetScanStreamData();
     for (uint i = 0; i < pat->ProgramCount(); ++i)
     {
         sd->AddListeningPID(pat->ProgramPID(i));
@@ -470,24 +473,35 @@ void ChannelScanSM::HandleSDT(uint /*tsid*/, const ServiceDescriptionTable *sdt)
         sdt->OriginalNetworkID() == OriginalNetworkID::SES2 ||
         sdt->OriginalNetworkID() == OriginalNetworkID::BBC))
     {
-        GetDTVSignalMonitor()->GetScanStreamData()->
-                               SetFreesatAdditionalSI(true);
-        m_setOtherTables = true;
-        // The whole BAT & SDTo group comes round in 10s
-        m_otherTableTimeout = 10s;
-        // Delay processing the SDT until we've seen BATs and SDTos
-        m_otherTableTime = std::chrono::milliseconds(m_timer.elapsed()) + m_otherTableTimeout;
+        DTVSignalMonitor *monitor = GetDTVSignalMonitor();
+        if (nullptr != monitor)
+        {
+            ScanStreamData *stream = monitor->GetScanStreamData();
+            if (nullptr != stream)
+            {
+                stream->SetFreesatAdditionalSI(true);
+                m_setOtherTables = true;
+                // The whole BAT & SDTo group comes round in 10s
+                m_otherTableTimeout = 10s;
+                // Delay processing the SDT until we've seen BATs and SDTos
+                m_otherTableTime = std::chrono::milliseconds(m_timer.elapsed()) + m_otherTableTimeout;
 
-        LOG(VB_CHANSCAN, LOG_INFO, LOC +
-            QString("SDT has OriginalNetworkID %1, look for "
-                    "additional Freesat SI").arg(sdt->OriginalNetworkID()));
+                LOG(VB_CHANSCAN, LOG_INFO, LOC +
+                    QString("SDT has OriginalNetworkID %1, look for "
+                            "additional Freesat SI").arg(sdt->OriginalNetworkID()));
+            }
+        }
     }
 
     if (!m_timer.hasExpired(m_otherTableTime.count()))
     {
         // Set the version for the SDT so we see it again.
-        GetDTVSignalMonitor()->GetDVBStreamData()->
-            SetVersionSDT(sdt->TSID(), -1, 0);
+        DTVSignalMonitor *monitor = GetDTVSignalMonitor();
+        if (nullptr != monitor)
+        {
+            monitor->GetDVBStreamData()->
+                SetVersionSDT(sdt->TSID(), -1, 0);
+        }
     }
 
     uint id = sdt->OriginalNetworkID() << 16 | sdt->TSID();
@@ -627,7 +641,7 @@ bool ChannelScanSM::TestNextProgramEncryption(void)
         return false;
     }
 
-    do
+    while (true)
     {
         uint pnum = 0;
         QMap<uint, uint>::const_iterator it = m_currentEncryptionStatus.cbegin();
@@ -680,13 +694,17 @@ bool ChannelScanSM::TestNextProgramEncryption(void)
             m_scanMonitor->ScanAppendTextToLog(msg_tr);
             LOG(VB_CHANSCAN, LOG_INFO, LOC + msg);
 
-#ifdef USING_DVB
+#if CONFIG_DVB
             if (GetDVBChannel())
                 GetDVBChannel()->SetPMT(pmt);
-#endif // USING_DVB
+#endif // CONFIG_DVB
 
-            GetDTVSignalMonitor()->GetStreamData()->ResetDecryptionMonitoringState();
-            GetDTVSignalMonitor()->GetStreamData()->TestDecryption(pmt);
+            DTVSignalMonitor *monitor = GetDTVSignalMonitor();
+            if (nullptr != monitor)
+            {
+                monitor->GetStreamData()->ResetDecryptionMonitoringState();
+                monitor->GetStreamData()->TestDecryption(pmt);
+            }
 
             m_currentTestingDecryption = true;
             m_timer.start();
@@ -697,7 +715,7 @@ bool ChannelScanSM::TestNextProgramEncryption(void)
             QString("Can't monitor decryption of program %1 -- no pmt")
                 .arg(pnum));
 
-    } while (true);
+    }
 
     m_currentTestingDecryption = false;
     return false;
@@ -1083,8 +1101,8 @@ bool ChannelScanSM::UpdateChannelInfo(bool wait_until_complete)
 
             LOG(VB_CHANSCAN, LOG_DEBUG, LOC +
                 QString("%1(%2) m_inputName: %3 ").arg(__FUNCTION__).arg(__LINE__).arg(m_inputName) +
-                QString("tunerType:%1 %2 ").arg(m_scanDTVTunerType).arg(m_scanDTVTunerType.toString()) +
-                QString("m_modSys:%1 %2 ").arg(item.m_tuning.m_modSys).arg(item.m_tuning.m_modSys.toString()) +
+                QString("tunerType:%1 %2 ").arg(m_scanDTVTunerType.toInt()).arg(m_scanDTVTunerType.toString()) +
+                QString("m_modSys:%1 %2 ").arg(item.m_tuning.m_modSys.toInt()).arg(item.m_tuning.m_modSys.toString()) +
                 QString("m_dvbt2Tried:%1").arg(m_dvbt2Tried));
 
             m_channelList << ChannelListItem(m_current, m_currentInfo);
@@ -1099,11 +1117,11 @@ bool ChannelScanSM::UpdateChannelInfo(bool wait_until_complete)
         SignalMonitor *sm = GetSignalMonitor();
         if (HasTimedOut())
         {
-            msg_tr = (cchan_cnt) ?
+            msg_tr = cchan_cnt ?
                 QObject::tr("%1 possible channels").arg(cchan_cnt) :
                 QObject::tr("no channels");
             msg_tr = QString("%1, %2").arg(chan_tr, msg_tr);
-            msg = (cchan_cnt) ?
+            msg = cchan_cnt ?
                 QString("%1 possible channels").arg(cchan_cnt) :
                 QString("no channels");
             msg = QString("%1, %2").arg(chan_tr, msg);
@@ -1360,7 +1378,7 @@ ChannelScanSM::GetChannelList(transport_scan_items_it_t trans_info,
 
     uint    mplexid   = (*trans_info).m_mplexid;
     int     freqid    = (*trans_info).m_friendlyNum;
-    QString freqidStr = (freqid) ? QString::number(freqid) : QString("");
+    QString freqidStr = freqid ? QString::number(freqid) : QString("");
     QString iptv_channel = (*trans_info).m_iptvChannel;
 
     // channels.conf
@@ -1914,9 +1932,10 @@ DTVSignalMonitor* ChannelScanSM::GetDTVSignalMonitor(void)
     return dynamic_cast<DTVSignalMonitor*>(m_signalMonitor);
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 DVBSignalMonitor* ChannelScanSM::GetDVBSignalMonitor(void)
 {
-#ifdef USING_DVB
+#if CONFIG_DVB
     return dynamic_cast<DVBSignalMonitor*>(m_signalMonitor);
 #else
     return nullptr;
@@ -1933,36 +1952,40 @@ const DTVChannel *ChannelScanSM::GetDTVChannel(void) const
     return dynamic_cast<const DTVChannel*>(m_channel);
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 HDHRChannel *ChannelScanSM::GetHDHRChannel(void)
 {
-#ifdef USING_HDHOMERUN
+#if CONFIG_HDHOMERUN
     return dynamic_cast<HDHRChannel*>(m_channel);
 #else
     return nullptr;
 #endif
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 DVBChannel *ChannelScanSM::GetDVBChannel(void)
 {
-#ifdef USING_DVB
+#if CONFIG_DVB
     return dynamic_cast<DVBChannel*>(m_channel);
 #else
     return nullptr;
 #endif
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 const DVBChannel *ChannelScanSM::GetDVBChannel(void) const
 {
-#ifdef USING_DVB
+#if CONFIG_DVB
     return dynamic_cast<const DVBChannel*>(m_channel);
 #else
     return nullptr;
 #endif
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 V4LChannel *ChannelScanSM::GetV4LChannel(void)
 {
-#ifdef USING_V4L2
+#if CONFIG_V4L2
     return dynamic_cast<V4LChannel*>(m_channel);
 #else
     return nullptr;
@@ -2000,7 +2023,7 @@ void ChannelScanSM::run(void)
         if (m_scanning)
             HandleActiveScan();
 
-        usleep(10 * 1000);
+        std::this_thread::sleep_for(10ms);
     }
 
     LOG(VB_CHANSCAN, LOG_INFO, LOC + "run -- end");
@@ -2019,12 +2042,13 @@ bool ChannelScanSM::HasTimedOut(void)
     if (!m_waitingForTables)
         return true;
 
-#ifdef USING_DVB
+#if CONFIG_DVB
     // If the rotor is still moving, reset the timer and keep waiting
     DVBSignalMonitor *sigmon = GetDVBSignalMonitor();
     if (sigmon)
     {
-        const DiSEqCDevRotor *rotor = GetDVBChannel()->GetRotor();
+        const DiSEqCDevRotor *rotor =
+            GetDVBChannel() ? GetDVBChannel()->GetRotor() : nullptr;
         if (rotor)
         {
             bool was_moving = false;
@@ -2037,7 +2061,7 @@ bool ChannelScanSM::HasTimedOut(void)
             }
         }
     }
-#endif // USING_DVB
+#endif // CONFIG_DVB
 
     // have the tables have timed out?
     if (m_timer.hasExpired(m_channelTimeout.count()))
@@ -2167,7 +2191,7 @@ bool ChannelScanSM::Tune(const transport_scan_items_it_t transport)
 {
     const TransportScanItem &item = *transport;
 
-#ifdef USING_DVB
+#if CONFIG_DVB
     DVBSignalMonitor *monitor = GetDVBSignalMonitor();
     if (monitor)
     {
@@ -2175,7 +2199,7 @@ bool ChannelScanSM::Tune(const transport_scan_items_it_t transport)
         monitor->AddFlags(SignalMonitor::kDVBSigMon_WaitForPos);
         monitor->SetRotorTarget(1.0F);
     }
-#endif // USING_DVB
+#endif // CONFIG_DVB
 
     DTVChannel *channel = GetDTVChannel();
     if (!channel)
@@ -2553,7 +2577,7 @@ bool ChannelScanSM::AddToList(uint mplexid)
     DTVModulationSystem delsys;
     delsys.Parse(mod_sys);
     DTVTunerType tt = CardUtil::ConvertToTunerType(delsys);
-    QString fn = (tsid) ? QString("Transport ID %1").arg(tsid) :
+    QString fn = tsid ? QString("Transport ID %1").arg(tsid) :
         QString("Multiplex #%1").arg(mplexid);
 
     if (modulation == "8vsb")
@@ -2578,7 +2602,7 @@ bool ChannelScanSM::AddToList(uint mplexid)
 
     LOG(VB_CHANSCAN, LOG_DEBUG, LOC +
         QString("tunertype:%1 %2 sourceid:%3 sistandard:%4 fn:'%5' mplexid:%6")
-            .arg(tt).arg(tt.toString()).arg(sourceid).arg(sistandard, fn).arg(mplexid));
+            .arg(tt.toInt()).arg(tt.toString()).arg(sourceid).arg(sistandard, fn).arg(mplexid));
 
     if (item.m_tuning.FillFromDB(tt, mplexid))
     {

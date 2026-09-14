@@ -3,6 +3,7 @@
 #include <QtGlobal>
 #include <QCoreApplication>
 #include <QRegularExpression>
+#include <QTimeZone>
 
 #include "mythcorecontext.h"
 #include "mythdate.h"
@@ -27,7 +28,11 @@ QString current_iso_string(bool stripped)
 QDateTime as_utc(const QDateTime &old_dt)
 {
     QDateTime dt(old_dt);
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     dt.setTimeSpec(Qt::UTC);
+#else
+    dt.setTimeZone(QTimeZone(QTimeZone::UTC));
+#endif
     return dt;
 }
 
@@ -53,7 +58,11 @@ QDateTime fromString(const QString &dtstr)
 MBASE_PUBLIC QDateTime fromString(const QString &str, const QString &format)
 {
     QDateTime dt = QDateTime::fromString(str, format);
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     dt.setTimeSpec(Qt::UTC);
+#else
+    dt.setTimeZone(QTimeZone(QTimeZone::UTC));
+#endif
     return dt;
 }
 
@@ -273,7 +282,7 @@ QString formatTime(std::chrono::milliseconds msecs, QString fmt)
 #if QT_VERSION < QT_VERSION_CHECK(6,0,0)
         int width = std::min(3, match.capturedLength());
 #else
-        int width = std::min(3LL, match.capturedLength());
+        int width = std::min(static_cast<qsizetype>(3), match.capturedLength());
 #endif
         int value = (msecs % 1s).count() / divisor[width];
         QString text = StringUtil::intToPaddedString(value, width);

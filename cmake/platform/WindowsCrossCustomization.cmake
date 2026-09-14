@@ -12,6 +12,11 @@ if(NOT CMAKE_SYSTEM_NAME MATCHES "Windows" OR NOT CMAKE_CROSSCOMPILING)
 endif()
 
 #
+# There is no need for an extra install step when building for windows.
+#
+set(MYTH_USE_STAGING_DIR OFF)
+
+#
 # Validate variables
 #
 if(NOT DEFINED CMAKE_INSTALL_PREFIX OR CMAKE_INSTALL_PREFIX STREQUAL "")
@@ -57,7 +62,7 @@ list(JOIN PKG_CONFIG_PATH ":" PKG_CONFIG_PATH_STR)
 set(PLATFORM_COMPILE_ENV_FLAGS
     "CFLAGS=${CMAKE_C_FLAGS} -I${MINGW_SYSROOT}/include"
     "CXXFLAGS=${CMAKE_CXX_FLAGS} -I${MINGW_SYSROOT}/include"
-    LDFLAGS=${CMAKE_SHARED_LINKER_FLAGS}
+    "LDFLAGS=${CMAKE_SHARED_LINKER_FLAGS}"
     LIBS=-lssp
     PKG_CONFIG_LIBDIR=${PKG_CONFIG_LIBDIR}
     "PKG_CONFIG_PATH=${PKG_CONFIG_PATH_STR}")
@@ -71,7 +76,7 @@ set(PLATFORM_BUILD_AND_HOST "--build=${CMAKE_HOST_SYSTEM_PROCESSOR}"
 # Libbluray needs extra includes
 set(LIBBLURAY_COMPILE_ENV_FLAGS
     "CFLAGS=${CMAKE_C_FLAGS} -I${MINGW_SYSROOT}/include -I${CMAKE_INSTALL_FULL_INCLUDEDIR} -I${LIBS_INSTALL_PREFIX}/include"
-    LDFLAGS=${CMAKE_SHARED_LINKER_FLAGS}
+    "LDFLAGS=${CMAKE_SHARED_LINKER_FLAGS}"
     LIBS=-lssp
     PKG_CONFIG_LIBDIR=${PKG_CONFIG_LIBDIR}
     "PKG_CONFIG_PATH=${PKG_CONFIG_PATH_STR}")
@@ -123,7 +128,7 @@ set(QT6_PLATFORM_ARGS
 
 if(TOOLCHAIN_PREFIX MATCHES "mingw")
   # From settings.pro
-  add_compile_definitions(WIN32 USING_MINGW WIN32_LEAN_AND_MEAN NOMINMAX)
+  add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX)
 
   # Fix: redeclared without dllimport attribute after being referenced with dll
   # linkage
@@ -135,4 +140,7 @@ if(TOOLCHAIN_PREFIX MATCHES "mingw")
   if(NOT LIBS_INSTALL_PREFIX STREQUAL CMAKE_INSTALL_PREFIX)
     link_directories(${LIBS_INSTALL_PREFIX}/bin)
   endif()
+
+  # libdvdnav uses the dlopen functions and expects this to be set.
+  set(CMAKE_DL_LIBS dl)
 endif()

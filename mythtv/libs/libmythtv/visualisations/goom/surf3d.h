@@ -2,23 +2,26 @@
 #define SURF3D_H
 
 #include "v3d.h"
+#include <vector>
+
+using floatvec = std::vector<float>;
 
 struct surf3d {
-	v3d *vertex;
-	v3d *svertex;
-	int nbvertex;
+	std::vector<v3d> vertex;
+	std::vector<v3d> svertex;
+	int nbvertex {};
 
-	v3d center;
+	v3d center {};
 };
 
 struct grid3d {
 	surf3d surf;
 	
-	int defx;
-	int sizex;
-	int defz;
-	int sizez;
-	int mode;
+	int defx  {};
+	int sizex {};
+	int defz  {};
+	int sizez {};
+	int mode  {};
 };
 
 /* hi-level */
@@ -26,7 +29,7 @@ struct grid3d {
 /* works on grid3d */
 grid3d *grid3d_new (int sizex, int defx, int sizez, int defz, v3d center);
 void grid3d_free(grid3d **grid);
-void grid3d_update (grid3d *g, float angle, const float *vals, float dist);
+void grid3d_update (grid3d *g, float angle, const floatvec& vals, float dist);
 
 /* low level */
 void surf3d_draw (surf3d *s, int color, int dist, int *buf, int *back, int W,int H);

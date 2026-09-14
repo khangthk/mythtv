@@ -1,3 +1,5 @@
+#include "mainserver.h"
+
 // C++
 #include <algorithm>
 #include <cerrno>
@@ -12,25 +14,18 @@
 
 #include "libmythbase/mythconfig.h"
 
-#ifndef _WIN32
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
+#ifndef Q_OS_WINDOWS
 #include <sys/ioctl.h>
 #endif
 #if CONFIG_SYSTEMD_NOTIFY
 #include <systemd/sd-daemon.h>
 #endif
 
-#include <sys/stat.h>
-#ifdef __linux__
-#  include <sys/vfs.h>
-#else // if !__linux__
-#  include <sys/param.h>
-#  ifndef _WIN32
-#    include <sys/mount.h>
-#  endif // _WIN32
-#endif // !__linux__
-
 // Qt
-#include <QtGlobal>
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QFile>
@@ -47,12 +42,10 @@
 #include <QHostAddress>
 
 // MythTV
-#include "libmyth/mythcontext.h"
 #include "libmythbase/compat.h"
 #include "libmythbase/filesysteminfo.h"
 #include "libmythbase/mthread.h"
 #include "libmythbase/mythcorecontext.h"
-#include "libmythbase/mythcoreutil.h"
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythdirs.h"
 #include "libmythbase/mythdownloadmanager.h"
@@ -62,7 +55,6 @@
 #include "libmythbase/mythsystemlegacy.h"
 #include "libmythbase/mythtimezone.h"
 #include "libmythbase/mythversion.h"
-#include "libmythbase/programinfo.h"
 #include "libmythbase/remotefile.h"
 #include "libmythbase/serverpool.h"
 #include "libmythbase/storagegroup.h"
@@ -71,12 +63,14 @@
 #include "libmythmetadata/metaio.h"
 #include "libmythmetadata/musicmetadata.h"
 #include "libmythmetadata/videoutils.h"
+#include "libmythprotoserver/requesthandler/fileserverhandler.h"
 #include "libmythprotoserver/requesthandler/fileserverutil.h"
 #include "libmythtv/cardutil.h"
 #include "libmythtv/io/mythmediabuffer.h"
 #include "libmythtv/jobqueue.h"
 #include "libmythtv/mythsystemevent.h"
 #include "libmythtv/previewgeneratorqueue.h"
+#include "libmythtv/programinfo.h"
 #include "libmythtv/recordinginfo.h"
 #include "libmythtv/recordingrule.h"
 #include "libmythtv/scheduledrecording.h"
@@ -86,7 +80,6 @@
 // mythbackend headers
 #include "autoexpire.h"
 #include "backendcontext.h"
-#include "mainserver.h"
 #include "scheduler.h"
 
 /** Milliseconds to wait for an existing thread from
@@ -324,7 +317,7 @@ MainServer::MainServer(bool master, int port,
     {
         // Make sure we have a good, fsinfo cache before setting
         // mainServer in the scheduler.
-        QList<FileSystemInfo> m_fsInfos;
+        FileSystemInfoList m_fsInfos;
         GetFilesystemInfos(m_fsInfos, false);
         sched->SetMainServer(this);
     }
@@ -473,7 +466,7 @@ void MainServer::ProcessRequestWork(MythSocket *sock)
     if (pbs)
         pbs->IncrRef();
 
-    bool bIsControl = (pbs) ? false : m_controlSocketList.contains(sock);
+    bool bIsControl = pbs ? false : m_controlSocketList.contains(sock);
     m_sockListLock.unlock();
 
     QStringList listline;
@@ -1059,7 +1052,9 @@ void MainServer::ProcessRequestWork(MythSocket *sock)
     else if (command == "SHUTDOWN_NOW")
     {
         if (tokens.size() != 1)
+        {
             SendErrorResponse(pbs, "Bad SHUTDOWN_NOW query");
+        }
         else if (!m_ismaster)
         {
             QString halt_cmd;
@@ -1082,6 +1077,7 @@ void MainServer::ProcessRequestWork(MythSocket *sock)
     {
         const QString& message = listline[1];
         QStringList extra( listline[2] );
+        extra.reserve(listline.size() - 2);
         for (int i = 3; i < listline.size(); i++)
             extra << listline[i];
         MythEvent me(message, extra);
@@ -1177,6 +1173,7 @@ void MainServer::customEvent(QEvent *e)
             {
                 QByteArray data = file.readAll();
                 QStringList extra("OK");
+                extra.reserve(7 + std::max(0, me->ExtraDataCount()-4));
                 extra.push_back(QString::number(recordingID));
                 extra.push_back(msg);
                 extra.push_back(datetime);
@@ -1226,6 +1223,7 @@ void MainServer::customEvent(QEvent *e)
             const QString& msg       = me->ExtraData(2);
 
             QStringList extra("ERROR");
+            extra.reserve(3 + std::max(0, me->ExtraDataCount()-4));
             extra.push_back(pginfokey);
             extra.push_back(msg);
             for (uint i = 4 ; i < (uint) me->ExtraDataCount(); i++)
@@ -1555,6 +1553,7 @@ void MainServer::customEvent(QEvent *e)
     {
         // Make a local copy of the list, upping the refcount as we go..
         std::vector<PlaybackSock *> localPBSList;
+        localPBSList.reserve(m_playbackList.size());
         m_sockListLock.lockForRead();
         for (auto & pbs : m_playbackList)
         {
@@ -1776,7 +1775,7 @@ void MainServer::HandleAnnounce(QStringList &slist, QStringList commands,
         QWriteLocker lock(&m_sockListLock);
         if (!m_controlSocketList.remove(socket))
             return; // socket was disconnected
-        auto *pbs = new PlaybackSock(this, socket, commands[2], eventsMode);
+        auto *pbs = new PlaybackSock(socket, commands[2], eventsMode);
         m_playbackList.push_back(pbs);
         lock.unlock();
 
@@ -1823,8 +1822,7 @@ void MainServer::HandleAnnounce(QStringList &slist, QStringList commands,
         QWriteLocker lock(&m_sockListLock);
         if (!m_controlSocketList.remove(socket))
             return; // socket was disconnected
-        auto *pbs = new PlaybackSock(this, socket, commands[2],
-                                     kPBSEvents_Normal);
+        auto *pbs = new PlaybackSock(socket, commands[2], kPBSEvents_Normal);
         pbs->setAsMediaServer();
         pbs->setBlockShutdown(false);
         m_playbackList.push_back(pbs);
@@ -1848,8 +1846,7 @@ void MainServer::HandleAnnounce(QStringList &slist, QStringList commands,
         QWriteLocker lock(&m_sockListLock);
         if (!m_controlSocketList.remove(socket))
             return; // socket was disconnected
-        auto *pbs = new PlaybackSock(this, socket, commands[2],
-                                     kPBSEvents_None);
+        auto *pbs = new PlaybackSock(socket, commands[2], kPBSEvents_None);
         m_playbackList.push_back(pbs);
         lock.unlock();
 
@@ -2066,7 +2063,7 @@ void MainServer::HandleAnnounce(QStringList &slist, QStringList commands,
             for (const auto & file : std::as_const(checkfiles))
             {
                 if (dir.exists(file) &&
-                    ((file).endsWith(".srt") ||
+                    (file.endsWith(".srt") ||
                      QFileInfo(dir, file).size() >= kReadTestSize))
                 {
                     retlist<<file;
@@ -2529,7 +2526,9 @@ void MainServer::DeleteRecordedFiles(DeleteStruct *ds)
         bool deleteInDB = false;
 
         if (basename == QFileInfo(ds->m_filename).fileName())
+        {
             deleteInDB = true;
+        }
         else
         {
 //             LOG(VB_FILE, LOG_INFO, LOC +
@@ -2663,7 +2662,9 @@ int MainServer::DeleteFile(const QString &filename, bool followLinks,
     if (followLinks && finfo.isSymLink())
     {
         if (!finfo.exists() && deleteBrokenSymlinks)
+        {
             unlink(fname.constData());
+        }
         else
         {
             fd = OpenAndUnlink(linktext);
@@ -3494,7 +3495,7 @@ void MainServer::HandleQueryLoad(PlaybackSock *pbs)
 
     QStringList strlist;
 
-#if defined(_WIN32) || defined(Q_OS_ANDROID)
+#if defined(Q_OS_WINDOWS) || defined(Q_OS_ANDROID)
     strlist << "0" << "0" << "0";
 #else
     loadArray loads = getLoadAvgs();
@@ -3526,7 +3527,9 @@ void MainServer::HandleQueryUptime(PlaybackSock *pbs)
     std::chrono::seconds uptime = 0s;
 
     if (getUptime(uptime))
+    {
         strlist << QString::number(uptime.count());
+    }
     else
     {
         strlist << "ERROR";
@@ -3611,7 +3614,7 @@ void MainServer::HandleQueryCheckFile(QStringList &slist, PlaybackSock *pbs)
 
     if (recinfo.HasPathname() && (m_ismaster) &&
         (recinfo.GetHostname() != gCoreContext->GetHostName()) &&
-        (checkSlaves))
+        checkSlaves)
     {
         PlaybackSock *slave = GetMediaServerByHostname(recinfo.GetHostname());
 
@@ -3761,7 +3764,7 @@ void MainServer::HandleQueryFileExists(QStringList &slist, PlaybackSock *pbs)
             retlist << QString::number(fileinfo.st_gid);
             retlist << QString::number(fileinfo.st_rdev);
             retlist << QString::number(fileinfo.st_size);
-#ifdef _WIN32
+#ifdef Q_OS_WINDOWS
             retlist << "0"; // st_blksize
             retlist << "0"; // st_blocks
 #else
@@ -3818,7 +3821,9 @@ void MainServer::HandleGetPendingRecordings(PlaybackSock *pbs,
     if (m_sched)
     {
         if (tmptable.isEmpty())
+        {
             m_sched->GetAllPending(strList);
+        }
         else
         {
             auto *sched = new Scheduler(false, m_encoderList, tmptable, m_sched);
@@ -4049,6 +4054,7 @@ void MainServer::HandleQueryFindFile(QStringList &slist, PlaybackSock *pbs)
             }
 
             QStringList filteredFiles = files.filter(QRegularExpression(fi.fileName()));
+            fileList.reserve(filteredFiles.size());
             for (const QString& file : std::as_const(filteredFiles))
             {
                 fileList << MythCoreContext::GenMythURL(gCoreContext->GetHostName(),
@@ -4474,7 +4480,7 @@ void MainServer::HandleGetFreeInputInfo(PlaybackSock *pbs,
     }
 
     // Return the results in livetvorder.
-    stable_sort(freeinputs.begin(), freeinputs.end(), comp_livetvorder);
+    std::ranges::stable_sort(freeinputs, comp_livetvorder);
     QStringList strlist;
     for (auto & input : freeinputs)
     {
@@ -4940,7 +4946,7 @@ void MainServer::HandleSetChannelInfo(QStringList &slist, PlaybackSock *pbs)
     }
     TVRec::s_inputsLock.unlock();
 
-    retlist << ((ok) ? "1" : "0");
+    retlist << (ok ? "1" : "0");
     SendResponse(pbssock, retlist);
 }
 
@@ -5113,16 +5119,6 @@ void MainServer::HandleIsActiveBackendQuery(const QStringList &slist,
     SendResponse(pbs->getSocket(), retlist);
 }
 
-int MainServer::GetfsID(const QList<FileSystemInfo>::iterator& fsInfo)
-{
-    QString fskey = fsInfo->getHostname() + ":" + fsInfo->getPath();
-    QMutexLocker lock(&m_fsIDcacheLock);
-    if (!m_fsIDcache.contains(fskey))
-        m_fsIDcache[fskey] = m_fsIDcache.count();
-
-    return m_fsIDcache[fskey];
-}
-
 size_t MainServer::GetCurrentMaxBitrate(void)
 {
     size_t totalKBperMin = 0;
@@ -5153,103 +5149,11 @@ size_t MainServer::GetCurrentMaxBitrate(void)
 void MainServer::BackendQueryDiskSpace(QStringList &strlist, bool consolidated,
                                        bool allHosts)
 {
-    QString allHostList = gCoreContext->GetHostName();
-    int64_t totalKB = -1;
-    int64_t usedKB = -1;
-    QMap <QString, bool>foundDirs;
-    QString localStr = "1";
-    struct statfs statbuf {};
-    QStringList groups(StorageGroup::kSpecialGroups);
-    groups.removeAll("LiveTV");
-    QString specialGroups = groups.join("', '");
-    QString sql = QString("SELECT MIN(id),dirname "
-                            "FROM storagegroup "
-                           "WHERE hostname = :HOSTNAME "
-                             "AND groupname NOT IN ( '%1' ) "
-                           "GROUP BY dirname;").arg(specialGroups);
-    MSqlQuery query(MSqlQuery::InitCon());
-    query.prepare(sql);
-    query.bindValue(":HOSTNAME", gCoreContext->GetHostName());
-
-    if (query.exec())
-    {
-        // If we don't have any dirs of our own, fallback to list of Default
-        // dirs since that is what StorageGroup::Init() does.
-        if (!query.size())
-        {
-            query.prepare("SELECT MIN(id),dirname "
-                          "FROM storagegroup "
-                          "WHERE groupname = :GROUP "
-                          "GROUP BY dirname;");
-            query.bindValue(":GROUP", "Default");
-            if (!query.exec())
-                MythDB::DBError("BackendQueryDiskSpace", query);
-        }
-
-        QDir checkDir("");
-        QString dirID;
-        QString currentDir;
-        while (query.next())
-        {
-            dirID = query.value(0).toString();
-            /* The storagegroup.dirname column uses utf8_bin collation, so Qt
-             * uses QString::fromAscii() for toString(). Explicitly convert the
-             * value using QString::fromUtf8() to prevent corruption. */
-            currentDir = QString::fromUtf8(query.value(1)
-                                           .toByteArray().constData());
-            if (currentDir.endsWith("/"))
-                currentDir.remove(currentDir.length() - 1, 1);
-
-            checkDir.setPath(currentDir);
-            if (!foundDirs.contains(currentDir))
-            {
-                if (checkDir.exists())
-                {
-                    QByteArray cdir = currentDir.toLatin1();
-                    getDiskSpace(cdir.constData(), totalKB, usedKB);
-                    memset(&statbuf, 0, sizeof(statbuf));
-                    localStr = "1"; // Assume local
-                    int bSize = 0;
-
-                    if (statfs(currentDir.toLocal8Bit().constData(), &statbuf) == 0)
-                    {
-#ifdef Q_OS_DARWIN
-                        char *fstypename = statbuf.f_fstypename;
-                        if ((!strcmp(fstypename, "nfs")) ||   // NFS|FTP
-                            (!strcmp(fstypename, "afpfs")) || // ApplShr
-                            (!strcmp(fstypename, "smbfs")))   // SMB
-                            localStr = "0";
-#elif defined(__linux__)
-                        long fstype = statbuf.f_type;
-                        if ((fstype == 0x6969) ||             // NFS
-                            (fstype == 0x517B) ||             // SMB
-                            (fstype == (long)0xFF534D42))     // CIFS
-                            localStr = "0";
-#endif
-                        bSize = statbuf.f_bsize;
-                    }
-
-                    strlist << gCoreContext->GetHostName();
-                    strlist << currentDir;
-                    strlist << localStr;
-                    strlist << "-1"; // Ignore fsID
-                    strlist << dirID;
-                    strlist << QString::number(bSize);
-                    strlist << QString::number(totalKB);
-                    strlist << QString::number(usedKB);
-
-                    foundDirs[currentDir] = true;
-                }
-                else
-                {
-                    foundDirs[currentDir] = false;
-                }
-            }
-        }
-    }
-
+    FileSystemInfoList fsInfos = FileServerHandler::QueryFileSystems();
+    QString allHostList;
     if (allHosts)
     {
+        allHostList = gCoreContext->GetHostName();
         QMap <QString, bool> backendsCounted;
         std::list<PlaybackSock *> localPlaybackList;
 
@@ -5272,106 +5176,24 @@ void MainServer::BackendQueryDiskSpace(QStringList &strlist, bool consolidated,
         m_sockListLock.unlock();
 
         for (auto & pbs : localPlaybackList) {
-            pbs->GetDiskSpace(strlist);
+            fsInfos << pbs->GetDiskSpace(); // QUERY_FREE_SPACE
             pbs->DecrRef();
         }
     }
 
-    if (!consolidated)
-        return;
-
-    QList<FileSystemInfo> fsInfos;
-    QStringList::const_iterator it = strlist.cbegin();
-    while (it != strlist.cend())
+    if (consolidated)
     {
-        FileSystemInfo fsInfo;
+        // Consolidate hosts sharing storage
+        int64_t maxWriteFiveSec = GetCurrentMaxBitrate()/12 /*5 seconds*/;
+        maxWriteFiveSec = std::max((int64_t)2048, maxWriteFiveSec); // safety for NFS mounted dirs
 
-        fsInfo.setHostname(*(it++));
-        fsInfo.setPath(*(it++));
-        fsInfo.setLocal((*(it++)).toInt() > 0);
-        fsInfo.setFSysID(-1);
-        ++it;   // Without this, the strlist gets out of whack
-        fsInfo.setGroupID((*(it++)).toInt());
-        fsInfo.setBlockSize((*(it++)).toInt());
-        fsInfo.setTotalSpace((*(it++)).toLongLong());
-        fsInfo.setUsedSpace((*(it++)).toLongLong());
-        fsInfos.push_back(fsInfo);
-    }
-    strlist.clear();
-
-    // Consolidate hosts sharing storage
-    int64_t maxWriteFiveSec = GetCurrentMaxBitrate()/12 /*5 seconds*/;
-    maxWriteFiveSec = std::max((int64_t)2048, maxWriteFiveSec); // safety for NFS mounted dirs
-
-    for (auto it1 = fsInfos.begin(); it1 != fsInfos.end(); ++it1)
-    {
-        if (it1->getFSysID() == -1)
-        {
-            it1->setFSysID(GetfsID(it1));
-            it1->setPath(
-                it1->getHostname().section(".", 0, 0) + ":" + it1->getPath());
-        }
-
-        for (auto it2 = it1 + 1; it2 != fsInfos.end(); )
-        {
-            // our fuzzy comparison uses the maximum of the two block sizes
-            // or 32, whichever is greater
-            int bSize = std::max(32, std::max(it1->getBlockSize(), it2->getBlockSize()) / 1024);
-            int64_t diffSize = it1->getTotalSpace() - it2->getTotalSpace();
-            int64_t diffUsed = it1->getUsedSpace() - it2->getUsedSpace();
-            if (diffSize < 0)
-                diffSize = 0 - diffSize;
-            if (diffUsed < 0)
-                diffUsed = 0 - diffUsed;
-
-            if (it2->getFSysID() == -1 && (diffSize <= bSize) &&
-                (diffUsed <= maxWriteFiveSec))
-            {
-                if (!it1->getHostname().contains(it2->getHostname()))
-                    it1->setHostname(it1->getHostname() + "," + it2->getHostname());
-                it1->setPath(it1->getPath() + "," +
-                    it2->getHostname().section(".", 0, 0) + ":" + it2->getPath());
-                it2 = fsInfos.erase(it2);
-            }
-            else
-            {
-                it2++;
-            }
-        }
+        FileSystemInfoManager::Consolidate(fsInfos, true, maxWriteFiveSec, allHostList);
     }
 
-    // Passed the cleaned list back
-    totalKB = 0;
-    usedKB  = 0;
-    for (const auto & fsInfo : std::as_const(fsInfos))
-    {
-        strlist << fsInfo.getHostname();
-        strlist << fsInfo.getPath();
-        strlist << QString::number(static_cast<int>(fsInfo.isLocal()));
-        strlist << QString::number(fsInfo.getFSysID());
-        strlist << QString::number(fsInfo.getGroupID());
-        strlist << QString::number(fsInfo.getBlockSize());
-        strlist << QString::number(fsInfo.getTotalSpace());
-        strlist << QString::number(fsInfo.getUsedSpace());
-
-        totalKB += fsInfo.getTotalSpace();
-        usedKB  += fsInfo.getUsedSpace();
-    }
-
-    if (allHosts)
-    {
-        strlist << allHostList;
-        strlist << "TotalDiskSpace";
-        strlist << "0";
-        strlist << "-2";
-        strlist << "-2";
-        strlist << "0";
-        strlist << QString::number(totalKB);
-        strlist << QString::number(usedKB);
-    }
+    strlist = FileSystemInfoManager::ToStringList(fsInfos);
 }
 
-void MainServer::GetFilesystemInfos(QList<FileSystemInfo> &fsInfos,
+void MainServer::GetFilesystemInfos(FileSystemInfoList &fsInfos,
                                     bool useCache)
 {
     // Return cached information if requested.
@@ -5383,26 +5205,16 @@ void MainServer::GetFilesystemInfos(QList<FileSystemInfo> &fsInfos,
     }
 
     QStringList strlist;
-    FileSystemInfo fsInfo;
 
     fsInfos.clear();
 
     BackendQueryDiskSpace(strlist, false, true);
 
-    QStringList::const_iterator it = strlist.cbegin();
-    while (it != strlist.cend())
+    fsInfos = FileSystemInfoManager::FromStringList(strlist);
+    // clear fsid so it is regenerated in Consolidate()
+    for (auto & fsInfo : fsInfos)
     {
-        fsInfo.setHostname(*(it++));
-        fsInfo.setPath(*(it++));
-        fsInfo.setLocal((*(it++)).toInt() > 0);
         fsInfo.setFSysID(-1);
-        ++it;
-        fsInfo.setGroupID((*(it++)).toInt());
-        fsInfo.setBlockSize((*(it++)).toInt());
-        fsInfo.setTotalSpace((*(it++)).toLongLong());
-        fsInfo.setUsedSpace((*(it++)).toLongLong());
-        fsInfo.setWeight(0);
-        fsInfos.push_back(fsInfo);
     }
 
     LOG(VB_SCHEDULE | VB_FILE, LOG_DEBUG, LOC +
@@ -5411,40 +5223,39 @@ void MainServer::GetFilesystemInfos(QList<FileSystemInfo> &fsInfos,
     // safety for NFS mounted dirs
     maxWriteFiveSec = std::max((size_t)2048, maxWriteFiveSec);
 
-    FileSystemInfo::Consolidate(fsInfos, false, maxWriteFiveSec);
+    FileSystemInfoManager::Consolidate(fsInfos, false, maxWriteFiveSec);
 
-    QList<FileSystemInfo>::iterator it1;
     if (VERBOSE_LEVEL_CHECK(VB_FILE | VB_SCHEDULE, LOG_INFO))
     {
         LOG(VB_FILE | VB_SCHEDULE, LOG_INFO, LOC +
             "--- GetFilesystemInfos directory list start ---");
-        for (it1 = fsInfos.begin(); it1 != fsInfos.end(); ++it1)
+        for (const auto& fs1 : std::as_const(fsInfos))
         {
             QString msg =
                 QString("Dir: %1:%2")
-                    .arg(it1->getHostname(), it1->getPath());
+                    .arg(fs1.getHostname(), fs1.getPath());
             LOG(VB_FILE | VB_SCHEDULE, LOG_INFO, LOC + msg) ;
             LOG(VB_FILE | VB_SCHEDULE, LOG_INFO, LOC +
                 QString("     Location: %1")
-                .arg(it1->isLocal() ? "Local" : "Remote"));
+                .arg(fs1.isLocal() ? "Local" : "Remote"));
             LOG(VB_FILE | VB_SCHEDULE, LOG_INFO, LOC +
                 QString("     fsID    : %1")
-                .arg(it1->getFSysID()));
+                .arg(fs1.getFSysID()));
             LOG(VB_FILE | VB_SCHEDULE, LOG_INFO, LOC +
                 QString("     dirID   : %1")
-                .arg(it1->getGroupID()));
+                .arg(fs1.getGroupID()));
             LOG(VB_FILE | VB_SCHEDULE, LOG_INFO, LOC +
                 QString("     BlkSize : %1")
-                .arg(it1->getBlockSize()));
+                .arg(fs1.getBlockSize()));
             LOG(VB_FILE | VB_SCHEDULE, LOG_INFO, LOC +
                 QString("     TotalKB : %1")
-                .arg(it1->getTotalSpace()));
+                .arg(fs1.getTotalSpace()));
             LOG(VB_FILE | VB_SCHEDULE, LOG_INFO, LOC +
                 QString("     UsedKB  : %1")
-                .arg(it1->getUsedSpace()));
+                .arg(fs1.getUsedSpace()));
             LOG(VB_FILE | VB_SCHEDULE, LOG_INFO, LOC +
                 QString("     FreeKB  : %1")
-                .arg(it1->getFreeSpace()));
+                .arg(fs1.getFreeSpace()));
         }
         LOG(VB_FILE | VB_SCHEDULE, LOG_INFO, LOC +
             "--- GetFilesystemInfos directory list end ---");
@@ -5920,7 +5731,9 @@ void MainServer::HandleScanMusic(const QStringList &slist, PlaybackSock *pbs)
                       "FROM storagegroup "
                       "WHERE groupname = 'Music'";
         if (!query.exec(sql) || !query.isActive())
+        {
             MythDB::DBError("MainServer::HandleScanMusic get host list", query);
+        }
         else
         {
             while(query.next())
@@ -6297,9 +6110,11 @@ void MainServer::HandleMusicFindAlbumArt(const QStringList &slist, PlaybackSock 
     if (updateDatabase)
         images->dumpToDatabase();
 
+    strlist.reserve(2 + (6 * images->getImageCount()));
     strlist << "OK";
     strlist.append(QString("%1").arg(images->getImageCount()));
 
+    QStringList paramList;
     for (uint x = 0; x < images->getImageCount(); x++)
     {
         AlbumArtImage *image = images->getImageAt(x);
@@ -6313,9 +6128,10 @@ void MainServer::HandleMusicFindAlbumArt(const QStringList &slist, PlaybackSock 
         // if this is an embedded image update the cached image
         if (image->m_embedded)
         {
-            QStringList paramList;
-            paramList.append(QString("--songid='%1'").arg(mdata->ID()));
-            paramList.append(QString("--imagetype='%1'").arg(image->m_imageType));
+            paramList.clear();
+            paramList.reserve(2);
+            paramList.append(QString("--songid='%1'").arg(mdata->ID()));           // clazy:exclude=reserve-candidates
+            paramList.append(QString("--imagetype='%1'").arg(image->m_imageType)); // clazy:exclude=reserve-candidates
 
             QString command = GetAppBinDir() + "mythutil --extractimage " + paramList.join(" ");
             QScopedPointer<MythSystem> cmd(MythSystem::Create(command,
@@ -6510,7 +6326,9 @@ void MainServer::HandleMusicTagChangeImage(const QStringList &slist, PlaybackSoc
 
             // rename the old cached file to the new one
             if (image->m_filename != oldImage.m_filename && QFile::exists(oldImage.m_filename))
+            {
                 QFile::rename(oldImage.m_filename, image->m_filename);
+            }
             else
             {
                 // extract the image from the tag and cache it
@@ -6978,6 +6796,7 @@ void MainServer::HandleMusicGetLyricGrabbers(const QStringList &/*slist*/, Playb
         QString result = p.readAllStandardOutput();
 
         QDomDocument domDoc;
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
         QString errorMsg;
         int errorLine = 0;
         int errorColumn = 0;
@@ -6989,6 +6808,19 @@ void MainServer::HandleMusicGetLyricGrabbers(const QStringList &/*slist*/, Playb
                 QString("\n\t\t\tError at line: %1  column: %2 msg: %3").arg(errorLine).arg(errorColumn).arg(errorMsg));
             continue;
         }
+#else
+        auto parseResult = domDoc.setContent(result);
+        if (!parseResult)
+        {
+            LOG(VB_GENERAL, LOG_ERR,
+                QString("FindLyrics: Could not parse version from %1")
+                    .arg(scripts.at(x)) +
+                QString("\n\t\t\tError at line: %1  column: %2 msg: %3")
+                    .arg(parseResult.errorLine).arg(parseResult.errorColumn)
+                    .arg(parseResult.errorMessage));
+            continue;
+        }
+#endif
 
         QDomNodeList itemList = domDoc.elementsByTagName("grabber");
         QDomNode itemNode = itemList.item(0);
@@ -6998,6 +6830,7 @@ void MainServer::HandleMusicGetLyricGrabbers(const QStringList &/*slist*/, Playb
 
     grabbers.sort();
 
+    strlist.reserve(1 + grabbers.count());
     strlist << "OK";
 
     for (int x = 0; x < grabbers.count(); x++)
@@ -7270,6 +7103,7 @@ void MainServer::HandleMessage(QStringList &slist, PlaybackSock *pbs)
 
     const QString& message = slist[1];
     QStringList extra_data;
+    extra_data.reserve(slist.size() - 2);
     for (uint i = 2; i < (uint) slist.size(); i++)
         extra_data.push_back(slist[i]);
 
@@ -7443,12 +7277,12 @@ void MainServer::HandleGenPreviewPixmap(QStringList &slist, PlaybackSock *pbs)
     if (it != slist.cend())
     {
         width = (*it).toInt(&ok); ++it;
-        width = (ok) ? width : -1;
+        width = ok ? width : -1;
     }
     if (it != slist.cend())
     {
         height = (*it).toInt(&ok); ++it;
-        height = (ok) ? height : -1;
+        height = ok ? height : -1;
         has_extra_data = true;
     }
     QSize outputsize = QSize(width, height);
@@ -7688,7 +7522,7 @@ void MainServer::HandlePixmapGetIfModified(
                     strlist +=
                         QString("3: Failed to read preview file '%1'%2")
                         .arg(pginfo.GetPathname(),
-                             (open_ok) ? "" : " open failed");
+                             open_ok ? "" : " open failed");
                 }
             }
             else if (out_of_date && (max_file_size > 0))
@@ -7910,7 +7744,9 @@ void MainServer::connectionClosed(MythSocket *socket)
             // Since we may already be holding the scheduler lock
             // delay handling the disconnect until a little later. #9885
             if (!disconnectedSlaves.isEmpty())
+            {
                 SendSlaveDisconnectedEvent(disconnectedSlaves, needsReschedule);
+            }
             else
             {
                 // During idle periods customEvent() might never be called,
@@ -8008,7 +7844,7 @@ PlaybackSock *MainServer::GetMediaServerByHostname(const QString &hostname)
 /// Warning you must hold a sockListLock lock before calling this
 PlaybackSock *MainServer::GetPlaybackBySock(MythSocket *sock)
 {
-    auto it = std::find_if(m_playbackList.cbegin(), m_playbackList.cend(),
+    auto it = std::ranges::find_if(m_playbackList,
                            [sock](auto & pbs)
                                { return sock == pbs->getSocket(); });
     return (it != m_playbackList.cend()) ? *it : nullptr;
@@ -8262,7 +8098,7 @@ void MainServer::reconnectTimeout(void)
     }
     masterServerSock->SetReadyReadCallbackEnabled(true);
 
-    m_masterServer = new PlaybackSock(this, masterServerSock, server,
+    m_masterServer = new PlaybackSock(masterServerSock, server,
                                     kPBSEvents_Normal);
     m_sockListLock.lockForWrite();
     m_playbackList.push_back(m_masterServer);
@@ -8298,7 +8134,7 @@ bool MainServer::isClientConnected(bool onlyBlockingClients)
 
     m_sockListLock.unlock();
 
-    return (foundClient);
+    return foundClient;
 }
 
 /// Sends the Slavebackends the request to shut down using haltcmd
@@ -8440,4 +8276,4 @@ void MainServer::UpdateSystemdStatus (void)
 #endif
 }
 
-/* vim: set expandtab tabstop=4 shiftwidth=4: */
+#include "moc_mainserver.cpp"

@@ -5,16 +5,9 @@
  *  Distributed as part of MythTV under GPL v2 and later.
  */
 
-// POSIX headers
-#include <fcntl.h>
-#include <unistd.h>
-#ifndef _WIN32
-#include <sys/select.h>
-#include <sys/ioctl.h>
-#endif
+#include <thread>
 
 // Qt headers
-#include <QCoreApplication>
 #include <QRegularExpression>
 #include <QUrl>
 #include <QUrlQuery>
@@ -443,7 +436,7 @@ void CetonStreamHandler::ClearProgramNumber(void)
     {
         if (GetVar("mux", "ProgramNumber") == "0")
             return;
-        usleep(20ms);
+        std::this_thread::sleep_for(20ms);
     };
 
     LOG(VB_GENERAL, LOG_ERR, LOC + "Program number failed to clear");
@@ -462,7 +455,7 @@ uint CetonStreamHandler::GetProgramNumber(void) const
         if (prognum != 0)
             return prognum;
 
-        usleep(100ms);
+        std::this_thread::sleep_for(100ms);
     };
 
     LOG(VB_GENERAL, LOG_ERR, LOC +

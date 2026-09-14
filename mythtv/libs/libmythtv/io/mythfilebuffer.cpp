@@ -1,13 +1,16 @@
+#include <algorithm>
+#include <thread>
+
 // QT
 #include <QFileInfo>
 #include <QDir>
 
 // MythTV
-#include "libmyth/mythcontext.h"
 #include "libmythbase/compat.h"
 #include "libmythbase/mythconfig.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythbase/mythtimer.h"
 #include "libmythbase/remotefile.h"
 #include "libmythbase/threadedfilewriter.h"
@@ -25,7 +28,7 @@
 #include <fcntl.h>
 
 #if HAVE_POSIX_FADVISE < 1
-static int posix_fadvise(int, off_t, off_t, int) { return 0; }
+static int posix_fadvise(int /*fd*/, off_t /*offset*/, off_t /*size*/, int /*advice*/) { return 0; }
 static constexpr int8_t POSIX_FADV_SEQUENTIAL { 0 };
 static constexpr int8_t POSIX_FADV_WILLNEED { 0 };
 #endif
@@ -126,10 +129,9 @@ static bool CheckPermissions(const QString &Filename)
 
 static bool IsSubtitlePossible(const QString &Extension)
 {
-    auto it = std::find_if(kSubExtNoCheck.cbegin(), kSubExtNoCheck.cend(),
+    return std::ranges::none_of(std::as_const(kSubExtNoCheck),
                            [Extension] (const QString& ext) -> bool
                                {return ext.contains(Extension);});
-    return (it != nullptr);
 }
 
 static QString LocalSubtitleFilename(QFileInfo &FileInfo)
@@ -144,6 +146,7 @@ static QString LocalSubtitleFilename(QFileInfo &FileInfo)
         baseName = vidFileName.left(suffixPos);
 
     QStringList list;
+    list.reserve(kSubExt.size());
     {
         // The dir listing does not work if the filename has the
         // following chars "[]()" so we convert them to the wildcard '?'
@@ -206,12 +209,13 @@ bool MythFileBuffer::OpenFile(const QString &Filename, std::chrono::milliseconds
         openTimer.start();
 
         uint openAttempts = 0;
-        do
+        while ((openTimer.elapsed() < Retry) || (openAttempts == 0))
         {
             openAttempts++;
 
             m_fd2 = open(m_filename.toLocal8Bit().constData(),
-                       O_RDONLY|O_LARGEFILE|O_STREAMING|O_BINARY);
+                         // NOLINTNEXTLINE(misc-redundant-expression)
+                         O_RDONLY|O_LARGEFILE|O_STREAMING|O_BINARY);
 
             if (m_fd2 < 0)
             {
@@ -222,53 +226,49 @@ bool MythFileBuffer::OpenFile(const QString &Filename, std::chrono::milliseconds
                 }
 
                 lasterror = 1;
-                usleep(10ms);
+                std::this_thread::sleep_for(10ms);
+                continue;
             }
-            else
-            {
-                ssize_t ret = read(m_fd2, buf.data(), buf.size());
-                if (ret != kReadTestSize)
-                {
-                    lasterror = 2;
-                    close(m_fd2);
-                    m_fd2 = -1;
-                    if (ret == 0 && openAttempts > 5 && !gCoreContext->IsRegisteredFileForWrite(m_filename))
-                    {
-                        // file won't grow, abort early
-                        break;
-                    }
 
-                    if (m_oldfile)
-                        break; // if it's an old file it won't grow..
-                    usleep(10ms);
-                }
-                else
+            ssize_t ret = read(m_fd2, buf.data(), buf.size());
+            if (ret != kReadTestSize)
+            {
+                lasterror = 2;
+                close(m_fd2);
+                m_fd2 = -1;
+                if (ret == 0 && openAttempts > 5 && !gCoreContext->IsRegisteredFileForWrite(m_filename))
                 {
-                    if (0 == lseek(m_fd2, 0, SEEK_SET))
-                    {
-#ifndef _MSC_VER
-                        if (posix_fadvise(m_fd2, 0, 0, POSIX_FADV_SEQUENTIAL) != 0)
-                        {
-                            LOG(VB_FILE, LOG_DEBUG, LOC +
-                                QString("OpenFile(): fadvise sequential "
-                                        "failed: ") + ENO);
-                        }
-                        if (posix_fadvise(m_fd2, 0, static_cast<off_t>(128)*1024, POSIX_FADV_WILLNEED) != 0)
-                        {
-                            LOG(VB_FILE, LOG_DEBUG, LOC +
-                                QString("OpenFile(): fadvise willneed "
-                                        "failed: ") + ENO);
-                        }
-#endif
-                        lasterror = 0;
-                        break;
-                    }
-                    lasterror = 4;
-                    close(m_fd2);
-                    m_fd2 = -1;
+                    // file won't grow, abort early
+                    break;
                 }
+
+                if (m_oldfile)
+                    break; // if it's an old file it won't grow..
+                std::this_thread::sleep_for(10ms);
+                continue;
             }
-        } while (openTimer.elapsed() < Retry);
+
+            if (0 == lseek(m_fd2, 0, SEEK_SET))
+            {
+                if (posix_fadvise(m_fd2, 0, 0, POSIX_FADV_SEQUENTIAL) != 0)
+                {
+                    LOG(VB_FILE, LOG_DEBUG, LOC +
+                        QString("OpenFile(): fadvise sequential "
+                                "failed: ") + ENO);
+                }
+                if (posix_fadvise(m_fd2, 0, static_cast<off_t>(128)*1024, POSIX_FADV_WILLNEED) != 0)
+                {
+                    LOG(VB_FILE, LOG_DEBUG, LOC +
+                        QString("OpenFile(): fadvise willneed "
+                                "failed: ") + ENO);
+                }
+                lasterror = 0;
+                break;
+            }
+            lasterror = 4;
+            close(m_fd2);
+            m_fd2 = -1;
+        }
 
         switch (lasterror)
         {
@@ -328,6 +328,7 @@ bool MythFileBuffer::OpenFile(const QString &Filename, std::chrono::milliseconds
 
             if (IsSubtitlePossible(extension))
             {
+                auxFiles.reserve(kSubExt.size());
                 for (const auto & ext : kSubExt)
                     auxFiles += baseName + ext;
             }
@@ -505,7 +506,7 @@ int MythFileBuffer::SafeRead(int /*fd*/, void *Buffer, uint Size)
 
             zerocnt++;
 
-            // 0.36 second timeout for livetvchain with usleep(60000),
+            // 0.36 second timeout for livetvchain,
             // or 2.4 seconds if it's a new file less than 30 minutes old.
             if (zerocnt >= (m_liveTVChain ? 6 : 40))
             {
@@ -515,7 +516,7 @@ int MythFileBuffer::SafeRead(int /*fd*/, void *Buffer, uint Size)
         if (m_stopReads)
             break;
         if (tot < Size)
-            usleep(60ms);
+            std::this_thread::sleep_for(60ms);
     }
     return static_cast<int>(tot);
 }
@@ -661,11 +662,9 @@ long long MythFileBuffer::SeekInternal(long long Position, int Whence)
                 }
                 else
                 {
-                    ret = lseek64(m_fd2, m_internalReadPos, SEEK_SET);
-#ifndef _MSC_VER
+                    ret = lseek(m_fd2, m_internalReadPos, SEEK_SET);
                     if (posix_fadvise(m_fd2, m_internalReadPos, static_cast<off_t>(128)*1024, POSIX_FADV_WILLNEED) != 0)
                         LOG(VB_FILE, LOG_DEBUG, LOC + QString("Seek(): fadvise willneed failed: ") + ENO);
-#endif
                 }
                 LOG(VB_FILE, LOG_INFO, LOC + QString("Seek to %1 from ignore pos %2 returned %3")
                     .arg(m_internalReadPos).arg(m_ignoreReadPos).arg(ret));
@@ -747,8 +746,8 @@ long long MythFileBuffer::SeekInternal(long long Position, int Whence)
             errno = EINVAL;
             if (m_remotefile)
                 ret = m_remotefile->Seek(m_ignoreReadPos, SEEK_SET);
-            else
-                ret = lseek64(m_fd2, m_ignoreReadPos, SEEK_SET);
+            else if (m_fd2 >= 0)
+                ret = lseek(m_fd2, m_ignoreReadPos, SEEK_SET);
 
             if (ret < 0)
             {
@@ -764,7 +763,7 @@ long long MythFileBuffer::SeekInternal(long long Position, int Whence)
                 if (m_remotefile)
                     ret = m_remotefile->Seek(m_internalReadPos, SEEK_SET);
                 else
-                    ret = lseek64(m_fd2, m_internalReadPos, SEEK_SET);
+                    ret = lseek(m_fd2, m_internalReadPos, SEEK_SET);
                 if (ret < 0)
                 {
                     QString cmd2 = QString("Seek(%1, SEEK_SET) int ")
@@ -807,9 +806,9 @@ long long MythFileBuffer::SeekInternal(long long Position, int Whence)
         if (ret < 0)
             errno = EINVAL;
     }
-    else
+    else if (m_fd2 >= 0)
     {
-        ret = lseek64(m_fd2, Position, Whence);
+        ret = lseek(m_fd2, Position, Whence);
     }
 
     if (ret >= 0)

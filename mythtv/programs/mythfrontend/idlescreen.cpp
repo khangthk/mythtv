@@ -5,9 +5,10 @@
 #include <QTimer>
 
 // MythTV
-#include "libmyth/mythcontext.h"
+#include "libmythbase/mythcorecontext.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythbase/mythsystemlegacy.h"
-#include "libmythbase/programinfo.h"
+#include "libmythtv/programinfo.h"
 #include "libmythtv/tvremoteutil.h"
 #include "libmythui/mythmainwindow.h"
 #include "libmythui/mythuibuttonlist.h"
@@ -84,7 +85,9 @@ bool IdleScreen::CheckConnectionToServer(void)
     bool bRes = false;
 
     if (gCoreContext->IsConnectedToMaster())
+    {
         bRes = true;
+    }
     else
     {
         if (gCoreContext->SafeConnectToMasterServer(false))
@@ -296,3 +299,5 @@ void IdleScreen::customEvent(QEvent* event)
 
     MythUIType::customEvent(event);
 }
+
+#include "moc_idlescreen.cpp"

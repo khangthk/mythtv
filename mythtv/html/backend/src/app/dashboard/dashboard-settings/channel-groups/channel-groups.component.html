@@ -1,0 +1,142 @@
+@if (loaded) {
+<div class="block card w-full">
+    <p-table [value]="chanGroups" scrollHeight="flex" [scrollable]="true" sortField="Name"
+        styleClass="p-datatable-sm p-datatable-striped" [rowHover]="true" responsiveLayout="scroll">
+        <ng-template pTemplate="caption">
+            <p-button pRipple label="{{ 'dashboard.channelgroup.new' | translate }}" icon="pi pi-plus" class="mr-2"
+                severity="success" (click)="openNew()" />
+        </ng-template>
+        <ng-template pTemplate="header">
+            <tr>
+                <th>{{ 'dashboard.channelgroup.name_label' | translate }}</th>
+                <th style="width:  7%; white-space: nowrap;">
+                    <!-- These are disabled buttons to ensure the spacing of the heading
+            matches the spacing of the rows -->
+                    <button pButton pRipple icon="pi pi-pencil" class="p-button-text" disabled="true"></button>
+                    <button pButton pRipple icon="pi pi-trash" class="p-button-text p-button-danger"
+                        disabled="true"></button>
+                </th>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-group>
+            <tr>
+                <td>{{ group.Name }}</td>
+                <td class="pt-1 pb-0" style="white-space: nowrap;">
+                    <button pButton pRipple icon="pi pi-pencil" class="p-button-text" (click)="editGroup(group)"
+                        pTooltip="{{ 'dashboard.channelgroup.edit_label' | translate }}"
+                        tooltipPosition="left"></button>
+                    <button pButton pRipple icon="pi pi-trash" class="p-button-text p-button-danger"
+                        (click)="deleteRequest(group)"
+                        pTooltip="{{ 'dashboard.channelgroup.delete_label' | translate }}" [disabled]="!group.canDelete"
+                        tooltipPosition="left"></button>
+                </td>
+            </tr>
+        </ng-template>
+    </p-table>
+</div>
+}
+
+<form class="ml-4 mr-4" name="changrpform" #changrpform="ngForm">
+
+    <p-dialog header="{{ dialogHeader }}" [(visible)]="displayGroupDlg" [modal]="true"
+        [style]="{height: '75vw', width: '50vw'}" [closable]="false" [closeOnEscape]="false">
+
+        <div class="form-group field">
+            <label for="GroupName" class="label block">{{ 'dashboard.channelgroup.name_label' | translate }}</label>
+            <input pInputText id="GroupName" [(ngModel)]="group.Name" name="GroupName" #GroupName="ngModel"
+                class="mb-2 form-control w-full" [disabled]="!group.canRename || !group.canUpdate"
+                (change)="checkName()" />
+            <small class="block">
+                {{ 'dashboard.channelgroup.name_desc' | translate }}
+            </small>
+        </div>
+
+        <p-table [value]="allChannels" datakey="ChanId" scrollHeight="flex" [scrollable]="true"
+            styleClass="p-datatable-sm p-datatable-striped" [rowHover]="true" responsiveLayout="scroll">
+            <ng-template pTemplate="header">
+                <tr>
+                    <th style="width:  8%">{{ 'settings.chanedit.col_icon' | translate }}</th>
+                    <th style="width:  8%" pSortableColumn="ChanSeq">
+                        {{ 'settings.chanedit.col_channum' | translate }} <p-sortIcon field="ChanSeq"></p-sortIcon></th>
+                    <th style="width:  10%">{{ 'settings.chanedit.col_callsign' | translate }}</th>
+                    <th style="width:  23%">{{ 'settings.chanedit.col_name' | translate }}</th>
+                    <th style="width:  7%; white-space: nowrap;">
+                    </th>
+                </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-channel>
+                <tr>
+                    <td class="pt-1 pb-0">
+                        @if (channel.Icon) {
+                        <img src="{{'./Guide/GetChannelIcon?Filename=' + URLencode(channel.Icon)
+                            + authorization }}" height="32" width="42" style="background-color:#000000"
+                            onerror="this.height='0'">
+                        } @else {
+                        <img height="32" width="42">
+                        }
+                    </td>
+                    <td>{{ channel.ChanNum }}</td>
+                    <td>{{ channel.CallSign }}</td>
+                    <td>{{ channel.ChannelName }}</td>
+                    <td class="pt-1 pb-0" style="white-space: nowrap;">
+                        <p-checkbox [(ngModel)]="channel.selected" [binary]="true" [name]="'selected'+channel.ChanId"
+                            [disabled]="!group.canUpdate"></p-checkbox>
+                    </td>
+                </tr>
+            </ng-template>
+        </p-table>
+
+        <ng-template pTemplate="footer">
+            <div class="col-span-12" style="text-align: left;">
+                @if (successCount > 0 && errorCount == 0 && !changrpform.dirty) {
+                <p-message severity="success" text="{{ 'common.savesuccess' | translate }}"></p-message>
+                }
+                @if (errorCount > 0) {
+                <p-message severity="error" text="{{ 'common.networkfail' | translate }}"></p-message>
+                }
+            </div>
+            <p-button icon="pi pi-times-circle" (onClick)="closeDialog()" label="{{ 'common.close' | translate }}"
+                severity="warn">
+            </p-button>
+            <p-button icon="pi pi-save" (onClick)="saveGroup();" label="{{ 'common.save' | translate }}"
+                severity="success"
+                [disabled]="!group.canUpdate || !changrpform.dirty || group.Name.trim() == '' || dupName">
+            </p-button>
+        </ng-template>
+
+    </p-dialog>
+
+    <p-dialog header="{{ 'common.unsaved_heading' | translate }}" [(visible)]="displayUnsaved" [modal]="true">
+        <p>{{ 'common.unsaved_message' | translate }}</p>
+        <ng-template pTemplate="footer">
+            <p-button icon="pi pi-times-circle" (onClick)="closeDialog()" label="{{ 'common.nosave' | translate }}"
+                severity="danger">
+            </p-button>
+            <p-button icon="pi pi-check-circle" (onClick)="displayUnsaved=false"
+                label="{{ 'common.continue' | translate }}" severity="success">
+            </p-button>
+        </ng-template>
+    </p-dialog>
+
+    <p-dialog header="{{ 'dashboard.channelgroup.delete_label' | translate }}" [(visible)]="displayDelete"
+        [modal]="true" [draggable]="false" [resizable]="false">
+        <h2>{{ 'settings.common.ru_sure' | translate }}</h2>
+        <p>{{ 'dashboard.channelgroup.delete_details' |
+            translate: {Name: group.Name} }}</p>
+        <ng-template pTemplate="footer">
+            <div class="col-span-12" style="text-align: left;">
+                @if (errorCount > 0) {
+                <p-message severity="error" text="{{ 'common.networkfail' | translate }}"></p-message>
+                }
+            </div>
+            <p-button icon="pi pi-times-circle" (onClick)="displayDelete=false; changrpform.form.markAsPristine();"
+                label="{{ 'common.close' | translate }}" severity="warn">
+            </p-button>
+            <p-button icon="pi pi-check-circle" (onClick)="deleteGroup(group)" label="{{ 'common.delete' | translate }}"
+                severity="danger"></p-button>
+        </ng-template>
+    </p-dialog>
+
+
+
+</form>

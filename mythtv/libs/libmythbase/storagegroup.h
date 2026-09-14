@@ -52,7 +52,15 @@ class MBASE_PUBLIC StorageGroup
     static void ClearGroupToUseCache(void);
     static QString GetGroupToUse(
         const QString &host, const QString &sgroup);
+    static QString generate_file_url(const QString &storage_group,
+                                     const QString &host,
+                                     const QString &path);
 
+    static bool remoteGetFileList(const QString& host,
+                                  const QString& path,
+                                  QStringList* list,
+                                  QString sgroup,
+                                  bool fileNamesOnly = false);
   private:
     static void    StaticInit(void);
     static bool    m_staticInitDone;

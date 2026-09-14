@@ -1,7 +1,12 @@
 // -*- Mode: c++ -*-
 
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
+
 // System headers
-#ifdef _WIN32
+#ifdef Q_OS_WINDOWS
 #  include <ws2tcpip.h>
 #else
 # include <sys/types.h>
@@ -538,3 +543,5 @@ void IPTVStreamHandlerWriteHelper::SendRTCPReport(void)
                                           m_parent->m_rtspRtcpPort);
     m_previousLastSequenceNumber = m_lastSequenceNumber;
 }
+
+#include "moc_iptvstreamhandler.cpp"

@@ -1,12 +1,15 @@
 // Qt
+#include <QtGlobal>
 #include <QString>
 #include <QVariant>
 
 // MythTV
-#include "libmyth/mythcontext.h"
+#include "libmythbase/mythconfig.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/hardwareprofile.h"
 #include "libmythbase/mythdbcon.h"
 #include "libmythbase/mythdirs.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythbase/mythsystemlegacy.h"
 
 // MythFrontend
@@ -68,7 +71,7 @@ bool GeneralSetupWizard::Create()
     BuildFocusList();
     loadData();
 
-#ifndef __linux__
+#ifndef Q_OS_LINUX
 #ifndef CONFIG_BINDINGS_PYTHON
     // The hardware profiler only works on linux.
     // Make the widgets invisible on other platforms.
@@ -290,3 +293,5 @@ void GeneralSetupWizard::CreateBusyDialog(const QString& message)
     if (m_busyPopup->Create())
         m_popupStack->AddScreen(m_busyPopup);
 }
+
+#include "moc_setupwizard_general.cpp"

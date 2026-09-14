@@ -1,7 +1,7 @@
 
 // c++
 #include <cstdlib>
-#include <unistd.h>
+#include <thread>
 
 // qt
 #include <QApplication>
@@ -10,15 +10,14 @@
 #include <QTimer>
 
 // mythtv
-#include <libmyth/mythcontext.h>
 #include <libmythbase/mthread.h>
 #include <libmythbase/mythdate.h>
 #include <libmythbase/mythdb.h>
 #include <libmythbase/mythlogging.h>
 #include <libmythbase/mythtimer.h>
-#include <libmythbase/programinfo.h>
-#include <libmythbase/remoteutil.h>
 #include <libmythbase/stringutil.h>
+#include <libmythtv/programinfo.h>
+#include <libmythtv/programinforemoteutil.h>
 #include <libmythui/mythdialogbox.h>
 #include <libmythui/mythmainwindow.h>
 #include <libmythui/mythprogressdialog.h>
@@ -40,6 +39,7 @@ class GetRecordingListThread : public MThread
         start();
     }
 
+  protected:
     void run(void) override // MThread
     {
         RunProlog();
@@ -115,7 +115,9 @@ void RecordingSelector::Init(void)
             MythUIBusyDialog(message, popupStack, "recordingselectorbusydialog");
 
     if (busyPopup->Create())
+    {
         popupStack->AddScreen(busyPopup, false);
+    }
     else
     {
         delete busyPopup;
@@ -126,7 +128,7 @@ void RecordingSelector::Init(void)
     while (thread->isRunning())
     {
         QCoreApplication::processEvents();
-        usleep(2000);
+        std::this_thread::sleep_for(2ms);
     }
 
     if (!m_recordingList || m_recordingList->empty())
@@ -515,3 +517,5 @@ void RecordingSelector::updateSelectedList()
         }
     }
 }
+
+#include "moc_recordingselector.cpp"

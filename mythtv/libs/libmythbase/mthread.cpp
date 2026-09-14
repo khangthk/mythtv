@@ -56,38 +56,22 @@ bool is_current_thread(MThread &thread)
     return QThread::currentThread() == thread.qthread();
 }
 
-class DBPurgeHandler : public QObject
-{
-  public:
-    DBPurgeHandler()
-    {
-        m_purgeTimer = startTimer(5min);
-    }
-    void timerEvent(QTimerEvent *event) override // QObject
-    {
-        if (event->timerId() == m_purgeTimer)
-            GetMythDB()->GetDBManager()->PurgeIdleConnections(false);
-    }
-    int m_purgeTimer;
-};
-
 class MThreadInternal : public QThread
 {
-  public:
-    explicit MThreadInternal(MThread &parent) : m_parent(parent) {}
+    // Allow MThread::exec to directly call the inherited
+    // QThread::exec function (which is a protected function).
+    friend int MThread::exec(void);
+
+  protected:
     void run(void) override { m_parent.run(); } // QThread
 
+  public:
+    explicit MThreadInternal(MThread &parent) : m_parent(parent) {}
+
     void QThreadRun(void) { QThread::run(); }
-    int exec(void)
-    {
-        DBPurgeHandler ph;
-        return QThread::exec();
-    }
 
     static void SetTerminationEnabled(bool enabled = true)
     { QThread::setTerminationEnabled(enabled); }
-
-    static void USleep(std::chrono::microseconds time) { QThread::usleep(time.count()); }
 
   private:
     MThread &m_parent;
@@ -156,13 +140,13 @@ void MThread::Cleanup(void)
         return;
 
     // logging has been stopped so we need to use iostream...
-    std::cerr<<"Error: Not all threads were shut down properly: "<<std::endl;
+    std::cerr<<"Error: Not all threads were shut down properly:\n";
     for (auto *thread : std::as_const(badGuys))
     {
         std::cerr<<"Thread "<<qPrintable(thread->objectName())
-                 <<" is still running"<<std::endl;
+                 <<" is still running\n";
     }
-    std::cerr<<std::endl;
+    std::cerr<<'\n';
 
     static constexpr std::chrono::milliseconds kTimeout { 5s };
     MythTimer t;
@@ -330,11 +314,6 @@ int MThread::exec(void)
 void MThread::setTerminationEnabled(bool enabled)
 {
     MThreadInternal::SetTerminationEnabled(enabled);
-}
-
-void MThread::usleep(std::chrono::microseconds time)
-{
-    MThreadInternal::USleep(time);
 }
 
 /* vim: set expandtab tabstop=4 shiftwidth=4: */

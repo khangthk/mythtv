@@ -39,13 +39,12 @@ int ring_init (ringbuffer *rbuf, int size)
 {
 	if (size > 0){
 		rbuf->size = size;
-		rbuf->buffer = (uint8_t *) malloc(sizeof(uint8_t)*size);
-		if (rbuf->buffer == nullptr)
-                {
-			LOG(VB_GENERAL, LOG_ERR,
-			    "Not enough memory for ringbuffer");
-			return -1;
-		}
+                try {
+                    rbuf->buffer.resize(size);
+                } catch (const std::bad_alloc& e) {
+                    LOG(VB_GENERAL, LOG_ERR, "Not enough memory for ringbuffer");
+                    return -1;
+                }
 	} else {
 		LOG(VB_GENERAL, LOG_ERR, "Wrong size for ringbuffer");
 		return -1;
@@ -58,16 +57,16 @@ int ring_init (ringbuffer *rbuf, int size)
 int ring_reinit (ringbuffer *rbuf, int size)
 {
 	if (size > (int)(rbuf->size)) {
-		auto *tmpalloc = (uint8_t *) realloc(rbuf->buffer,
-							sizeof(uint8_t)*size);
-		if (! tmpalloc)
-			return -1;
-		rbuf->buffer = tmpalloc;
+                try {
+                    rbuf->buffer.resize(size);
+                } catch (const std::bad_alloc& e) {
+                    return -1;
+                }
 		if (rbuf->write_pos < rbuf->read_pos)
 		{
 			unsigned int delta = size - rbuf->size;
-			memmove(rbuf->buffer + rbuf->read_pos + delta,
-				rbuf->buffer + rbuf->read_pos,
+			memmove(rbuf->buffer.data() + rbuf->read_pos + delta,
+				rbuf->buffer.data() + rbuf->read_pos,
 				rbuf->size - rbuf->read_pos);
 			rbuf->read_pos += delta;
 		}
@@ -83,9 +82,8 @@ void ring_clear(ringbuffer *rbuf)
 
 
 
-void ring_destroy(ringbuffer *rbuf)
+void ring_destroy(ringbuffer */*rbuf*/)
 {
-	free(rbuf->buffer);
 }
 
 
@@ -106,17 +104,17 @@ int ring_write(ringbuffer *rbuf, uint8_t *data, int count)
 	}
 	
 	if (count >= rest){
-		memcpy (rbuf->buffer+pos, data, rest);
+		memcpy (rbuf->buffer.data()+pos, data, rest);
 		if (count - rest)
-			memcpy (rbuf->buffer, data+rest, count - rest);
+			memcpy (rbuf->buffer.data(), data+rest, count - rest);
 		rbuf->write_pos = count - rest;
 	} else {
-		memcpy (rbuf->buffer+pos, data, count);
+		memcpy (rbuf->buffer.data()+pos, data, count);
 		rbuf->write_pos += count;
 	}
 
 	if (DEBUG>1)
-		LOG(VB_GENERAL, LOG_ERR, QString("Buffer empty %1%%")
+		LOG(VB_GENERAL, LOG_ERR, QString("Buffer empty %1%")
 		    .arg(ring_free(rbuf)*100.0/rbuf->size, 0,'f',2,QChar('0')));
 	return count;
 }
@@ -140,11 +138,11 @@ int ring_peek(ringbuffer *rbuf, uint8_t *data, unsigned int count, uint32_t off)
 	}
 
 	if ( count < rest ){
-		memcpy(data, rbuf->buffer+pos, count);
+		memcpy(data, rbuf->buffer.data()+pos, count);
 	} else {
-		memcpy(data, rbuf->buffer+pos, rest);
+		memcpy(data, rbuf->buffer.data()+pos, rest);
 		if ( count - rest)
-			memcpy(data+rest, rbuf->buffer, count - rest);
+			memcpy(data+rest, rbuf->buffer.data(), count - rest);
 	}
 
 	return count;
@@ -179,11 +177,11 @@ int ring_poke(ringbuffer *rbuf, uint8_t *data, unsigned int count, uint32_t off)
 	}
 
 	if ( count < rest ){
-		memcpy(rbuf->buffer+pos, data, count);
+		memcpy(rbuf->buffer.data()+pos, data, count);
 	} else {
-		memcpy(rbuf->buffer+pos, data, rest);
+		memcpy(rbuf->buffer.data()+pos, data, rest);
 		if ( count - rest)
-			memcpy(rbuf->buffer, data+rest, count - rest);
+			memcpy(rbuf->buffer.data(), data+rest, count - rest);
 	}
 
 	return count;
@@ -217,17 +215,17 @@ int ring_read(ringbuffer *rbuf, uint8_t *data, int count)
 	}
 
 	if ( count < rest ){
-		memcpy(data, rbuf->buffer+pos, count);
+		memcpy(data, rbuf->buffer.data()+pos, count);
 		rbuf->read_pos += count;
 	} else {
-		memcpy(data, rbuf->buffer+pos, rest);
+		memcpy(data, rbuf->buffer.data()+pos, rest);
 		if ( count - rest)
-			memcpy(data+rest, rbuf->buffer, count - rest);
+			memcpy(data+rest, rbuf->buffer.data(), count - rest);
 		rbuf->read_pos = count - rest;
 	}
 
 	if (DEBUG>1)
-		LOG(VB_GENERAL, LOG_ERR, QString("Buffer empty %1%%")
+		LOG(VB_GENERAL, LOG_ERR, QString("Buffer empty %1%")
 		    .arg(ring_free(rbuf)*100.0/rbuf->size, 0,'f',2,QChar('0')));
 	return count;
 }
@@ -254,7 +252,7 @@ int ring_skip(ringbuffer *rbuf, int count)
 	}
 
 	if (DEBUG>1)
-	    LOG(VB_GENERAL, LOG_ERR, QString("Buffer empty %1%%")
+	    LOG(VB_GENERAL, LOG_ERR, QString("Buffer empty %1%")
 		.arg(ring_free(rbuf)*100.0/rbuf->size, 0,'f',2,QChar('0')));
 	return count;
 }
@@ -280,19 +278,19 @@ int ring_write_file(ringbuffer *rbuf, int fd, int count)
 	}
 	
 	if (count >= rest){
-		rr = read (fd, rbuf->buffer+pos, rest);
+		rr = read (fd, rbuf->buffer.data()+pos, rest);
 		if (rr == rest && count - rest)
-			rr += read (fd, rbuf->buffer, count - rest);
+			rr += read (fd, rbuf->buffer.data(), count - rest);
 		if (rr >=0)
 			rbuf->write_pos = (pos + rr) % rbuf->size;
 	} else {
-		rr = read (fd, rbuf->buffer+pos, count);
+		rr = read (fd, rbuf->buffer.data()+pos, count);
 		if (rr >=0)
 			rbuf->write_pos += rr;
 	}
 
 	if (DEBUG>1)
-	    LOG(VB_GENERAL, LOG_ERR, QString("Buffer empty %.2f%%")
+	    LOG(VB_GENERAL, LOG_ERR, QString("Buffer empty %1%")
 		.arg(ring_free(rbuf)*100.0/rbuf->size, 0,'f',2,QChar('0')));
 	return rr;
 }
@@ -319,20 +317,20 @@ int ring_read_file(ringbuffer *rbuf, int fd, int count)
 	}
 
 	if (count >= rest){
-		rr = write (fd, rbuf->buffer+pos, rest);
+		rr = write (fd, rbuf->buffer.data()+pos, rest);
 		if (rr == rest && count - rest)
-			rr += write (fd, rbuf->buffer, count - rest);
+			rr += write (fd, rbuf->buffer.data(), count - rest);
 		if (rr >=0)
 			rbuf->read_pos = (pos + rr) % rbuf->size;
 	} else {
-		rr = write (fd, rbuf->buffer+pos, count);
+		rr = write (fd, rbuf->buffer.data()+pos, count);
 		if (rr >=0)
 			rbuf->read_pos += rr;
 	}
 
 
 	if (DEBUG>1)
-		LOG(VB_GENERAL, LOG_ERR, QString("Buffer empty %1%%")
+		LOG(VB_GENERAL, LOG_ERR, QString("Buffer empty %1%")
 		    .arg(ring_free(rbuf)*100.0/rbuf->size, 0,'f',2,QChar('0')));
 	return rr;
 }
@@ -389,11 +387,11 @@ void ring_show(ringbuffer *rbuf, unsigned int count, uint32_t off)
 	}
 
 	if ( count < rest ){
-		show(rbuf->buffer+pos, count);
+		show(rbuf->buffer.data()+pos, count);
 	} else {
-		show(rbuf->buffer+pos, rest);
+		show(rbuf->buffer.data()+pos, rest);
 		if ( count - rest)
-			show(rbuf->buffer, count - rest);
+			show(rbuf->buffer.data(), count - rest);
 	}
 }
 
@@ -448,7 +446,8 @@ int dummy_delete(dummy_buffer *dbuf, uint64_t time)
 	int ex=0;
 	uint32_t dsize=0;
 
-	do {
+	while (ex == 0)
+	{
 		if (ring_peek(&dbuf->time_index,(uint8_t *) &rtime, 
 			      sizeof(uint64_t), 0)<0){
 			if (dsize) break;
@@ -463,7 +462,7 @@ int dummy_delete(dummy_buffer *dbuf, uint64_t time)
 		} else {
 			ex = 1;
 		}
-	} while (ex == 0);
+	}
 #if 0
 	LOG(VB_GENERAL, LOG_INFO, QString("delete %1 ").arg(dummy_space(dbuf)));
 #endif

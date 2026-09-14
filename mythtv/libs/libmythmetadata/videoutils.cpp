@@ -1,11 +1,15 @@
 
 #include "videoutils.h"
 
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QDir>
 #include <QCoreApplication>
 
 // mythtv
-#include "libmyth/mythcontext.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdirs.h"
 #include "libmythbase/mythsystemlegacy.h"
 #include "libmythbase/storagegroup.h"
@@ -54,7 +58,9 @@ void CheckedSet(MythUIType *container, const QString &itemName,
         MythUIType *uit = container->GetChild(itemName);
         auto *tt = dynamic_cast<MythUIText *>(uit);
         if (tt)
+        {
             CheckedSet(tt, value);
+        }
         else
         {
             auto *st = dynamic_cast<MythUIStateType *>(uit);
@@ -78,18 +84,20 @@ QStringList GetVideoDirsByHost(const QString& host)
     QStringList tmp;
 
     QStringList tmp2 = StorageGroup::getGroupDirs("Videos", host);
+    tmp.reserve(tmp2.size());
     for (const auto& dir : std::as_const(tmp2))
         tmp.append(dir);
 
     if (host.isEmpty())
     {
-#ifdef _WIN32
+#ifdef Q_OS_WINDOWS
         QString seperator = ";";
 #else
         QString seperator = ":";
 #endif
         QStringList tmp3 = gCoreContext->GetSetting("VideoStartupDir",
                     DEFAULT_VIDEOSTARTUP_DIR).split(seperator, Qt::SkipEmptyParts);
+        tmp.reserve(tmp.size() + tmp3.size());
         for (const auto& dir : std::as_const(tmp3))
         {
             bool matches = false;

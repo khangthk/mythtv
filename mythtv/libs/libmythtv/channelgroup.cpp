@@ -206,7 +206,9 @@ ChannelGroupList ChannelGroup::GetManualChannelGroups(bool includeEmpty)
     }
     query.prepare(qstr);
     if (!query.exec())
+    {
         MythDB::DBError("ChannelGroup::GetChannelGroups Favorites", query);
+    }
     else
     {
         if (query.next())
@@ -237,7 +239,9 @@ ChannelGroupList ChannelGroup::GetManualChannelGroups(bool includeEmpty)
     }
     query.prepare(qstr);
     if (!query.exec())
+    {
         MythDB::DBError("ChannelGroup::GetChannelGroups manual", query);
+    }
     else
     {
         while (query.next())
@@ -277,7 +281,9 @@ ChannelGroupList ChannelGroup::GetAutomaticChannelGroups(bool includeEmpty)
     }
     query.prepare(qstr);
     if (!query.exec())
+    {
         MythDB::DBError("ChannelGroup::GetChannelGroups Priority", query);
+    }
     else
     {
         if (query.next())
@@ -304,7 +310,9 @@ ChannelGroupList ChannelGroup::GetAutomaticChannelGroups(bool includeEmpty)
     }
     query.prepare(qstr);
     if (!query.exec())
+    {
         MythDB::DBError("ChannelGroup::GetChannelGroups videosources", query);
+    }
     else
     {
         while (query.next())
@@ -345,7 +353,7 @@ int ChannelGroup::GetNextChannelGroup(const ChannelGroupList &sorted, int grpid)
     if (grpid == -1)
       return sorted[0].m_grpId;
 
-    auto it = std::find(sorted.cbegin(), sorted.cend(), grpid);
+    auto it = std::ranges::find(sorted, grpid, &ChannelGroupItem::m_grpId);
 
     // If grpid is not in the list, return -1 for "All Channels"
     if (it == sorted.end())
@@ -362,7 +370,7 @@ int ChannelGroup::GetNextChannelGroup(const ChannelGroupList &sorted, int grpid)
 
 bool ChannelGroup::InChannelGroupList(const ChannelGroupList &groupList, int grpid)
 {
-    auto it = std::find(groupList.cbegin(), groupList.cend(), grpid);
+    auto it = std::ranges::find(groupList, grpid, &ChannelGroupItem::m_grpId);
     return it != groupList.end();
 }
 
@@ -413,7 +421,7 @@ int ChannelGroup::GetChannelGroupId(const QString& changroupname)
     return 0;
 }
 
-static void AddChannelGroup(const QString &groupName)
+int ChannelGroup::AddChannelGroup(const QString &groupName)
 {
     int groupId = ChannelGroup::GetChannelGroupId(groupName);
     if (groupId == 0)
@@ -426,10 +434,12 @@ static void AddChannelGroup(const QString &groupName)
 
         if (!query.exec())
             MythDB::DBError("AddChannelGroup", query);
+        groupId =  query.lastInsertId().toInt();
     }
+    return groupId;
 }
 
-static void RemoveChannelGroup(const QString &groupName)
+bool ChannelGroup::RemoveChannelGroup(const QString &groupName)
 {
     int groupId = ChannelGroup::GetChannelGroupId(groupName);
     if (groupId > 0)
@@ -455,7 +465,31 @@ static void RemoveChannelGroup(const QString &groupName)
     else
     {
         LOG(VB_GENERAL, LOG_DEBUG, QString("Channelgroup %1 not found").arg(groupName));
+        return false;
     }
+    return true;
+}
+
+bool ChannelGroup::UpdateChannelGroup(const QString & oldName, const QString & newName)
+{
+    // Check if new name already exists
+    int groupId = ChannelGroup::GetChannelGroupId(newName);
+    if (groupId > 0)
+        return false;
+
+    MSqlQuery query(MSqlQuery::InitCon());
+    QString qstr = "UPDATE channelgroupnames set name = :NEWNAME "
+                    " WHERE name = :OLDNAME ;";
+    query.prepare(qstr);
+    query.bindValue(":NEWNAME", newName);
+    query.bindValue(":OLDNAME", oldName);
+
+    if (!query.exec())
+    {
+        MythDB::DBError("ChannelGroup::UpdateChannelGroup fail", query);
+        return false;
+    }
+    return true;
 }
 
 // UpdateChannelGroups
@@ -536,7 +570,7 @@ void ChannelGroup::UpdateChannelGroups(void)
             if (query.numRowsAffected() > 0)
             {
                 LOG(VB_GENERAL, LOG_INFO, QString("Removed %1 channels from channelgroup %2")
-                    .arg(query.numRowsAffected()).arg(chgrp.m_grpId));
+                    .arg(query.numRowsAffected()).arg(chgrp.m_name));
             }
         }
     }

@@ -51,7 +51,7 @@ struct hdr_output_metadata {
 
 MythHDRPtr MythDRMHDR::Create(MythDisplay* MDisplay, const MythHDRDesc& Desc)
 {
-    auto * display = dynamic_cast<MythDisplayDRM*>(MDisplay);
+    auto * display = qobject_cast<MythDisplayDRM*>(MDisplay);
     if (!display)
         return nullptr;
 
@@ -112,7 +112,8 @@ void MythDRMHDR::SetHDRMetadata(HDRType Type, const MythHDRMetaPtr& Metadata)
     hdr_output_metadata drmmetadata =
     {
         HDMI_STATIC_METADATA_TYPE1,
-        { static_cast<__u8>(eotf), HDMI_STATIC_METADATA_TYPE1, {{0,0}}, {0,0}, 0, 0, 0, 0}
+        { static_cast<__u8>(eotf), HDMI_STATIC_METADATA_TYPE1,
+          {{.x=0, .y=0}}, {.x=0,.y=0}, 0, 0, 0, 0}
     };
 
     if (Metadata)

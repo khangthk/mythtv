@@ -1,6 +1,9 @@
 // Qt
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QDateTime>
 #include <QFileInfo>
+#include <QTimeZone>
+#include <algorithm>
 
 // MythTV
 #include "mythlogging.h"
@@ -43,7 +46,12 @@ MythHTTPMetaMethod::MythHTTPMetaMethod(int Index, QMetaMethod& Method, int Reque
     int returntype = Method.returnType();
 
     // Discard methods with an unsupported return type
-    if (std::any_of(s_invalidTypes.cbegin(), s_invalidTypes.cend(), [&returntype](int Type) { return Type == returntype; }))
+#ifdef __cpp_lib_ranges_contains
+    if (std::ranges::contains(s_invalidTypes, returntype))
+#else
+    if (std::ranges::any_of(s_invalidTypes,
+                            [&returntype](int Type) { return Type == returntype; }))
+#endif
     {
         LOG(VB_HTTP, LOG_ERR, LOC + QString("Method '%1' has unsupported return type '%2'").arg(Method.name().constData(), Method.typeName()));
         return;
@@ -99,7 +107,12 @@ MythHTTPMetaMethod::MythHTTPMetaMethod(int Index, QMetaMethod& Method, int Reque
 
         // Discard methods that use unsupported parameter types.
         // Note: slots only - these are supportable for signals
-        if (Slot && std::any_of(s_invalidParams.cbegin(), s_invalidParams.cend(), [&type](int Type) { return type == Type; }))
+#ifdef __cpp_lib_ranges_contains
+        if (Slot && std::ranges::contains(s_invalidParams, type))
+#else
+        if (Slot && std::ranges::any_of(s_invalidParams,
+                                        [&type](int Type) { return type == Type; }))
+#endif
         {
             LOG(VB_GENERAL, LOG_ERR, LOC + QString("Method '%1' has unsupported parameter type '%2' (%3)")
                 .arg(Method.name().constData(), types[i].constData()).arg(type));
@@ -157,11 +170,11 @@ void* MythHTTPMetaMethod::CreateParameter(void* Parameter, int Type, const QStri
 #endif
             if (metaobject)
             {
-                int enumindex = metaobject->indexOfEnumerator(enumname.toUtf8());
+                int enumindex = metaobject->indexOfEnumerator(enumname.toUtf8().constData());
                 if (enumindex >= 0)
                 {
                     QMetaEnum metaEnum = metaobject->enumerator(enumindex);
-                    value = metaEnum.keyToValue(Value.toUtf8());
+                    value = metaEnum.keyToValue(Value.toUtf8().constData());
                 }
             }
         }
@@ -200,7 +213,11 @@ void* MythHTTPMetaMethod::CreateParameter(void* Parameter, int Type, const QStri
         case QMetaType::QDateTime :
         {
             QDateTime dt = QDateTime::fromString(Value, Qt::ISODate);
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
             dt.setTimeSpec(Qt::UTC);
+#else
+            dt.setTimeZone(QTimeZone(QTimeZone::UTC));
+#endif
             *(static_cast<QDateTime*>(Parameter)) = dt;
             break;
         }

@@ -409,26 +409,7 @@ class MTV_PUBLIC TableID
 class MTV_PUBLIC PSIPTable : public PESPacket
 {
     /// Only handles single TS packet PES packets, for PMT/PAT tables basically
-    void InitPESPacket(TSPacket& tspacket)
-    {
-        if (tspacket.PayloadStart())
-            m_psiOffset = tspacket.AFCOffset() + tspacket.StartOfFieldPointer();
-        else
-        {
-            LOG(VB_GENERAL, LOG_ERR, "Started PESPacket, but !payloadStart()");
-            m_psiOffset = tspacket.AFCOffset();
-        }
-        m_pesData = tspacket.data() + m_psiOffset + 1;
-
-        m_badPacket = true;
-        // first check if Length() will return something useful and
-        // then check if the packet ends in the first TSPacket
-        if ((m_pesData - tspacket.data()) <= (188-3) &&
-            (m_pesData + Length() - tspacket.data()) <= (188-3))
-        {
-            m_badPacket = !VerifyCRC();
-        }
-    }
+    void InitPESPacket(TSPacket& tspacket);
 
   protected:
     // does not create it's own data
@@ -1061,7 +1042,7 @@ class MTV_PUBLIC SpliceInformationTable : public PSIPTable
     bool IsEncryptedPacket(void) const { return ( pesdata()[4] & 0x80 ) != 0; }
     void SetEncryptedPacket(bool val)
     {
-        pesdata()[4] = (pesdata()[4] & ~0x80) | ((val) ? 0x80 : 0);
+        pesdata()[4] = (pesdata()[4] & ~0x80) | (val ? 0x80 : 0);
     }
     // encryption_algorithm     6   4.1
     enum : std::uint8_t
@@ -1096,7 +1077,7 @@ class MTV_PUBLIC SpliceInformationTable : public PSIPTable
         pesdata()[5] = ((val>>24) & 0xff);
         pesdata()[6] = ((val>>16) & 0xff);
         pesdata()[7] = ((val>>8 ) & 0xff);
-        pesdata()[8] = ((val    ) & 0xff);
+        pesdata()[8] = ( val      & 0xff);
     }
     // cw_index (enc key)       8   9.0
     uint CodeWordIndex(void) const { return pesdata()[9]; }

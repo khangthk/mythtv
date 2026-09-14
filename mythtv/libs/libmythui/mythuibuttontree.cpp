@@ -470,10 +470,12 @@ void MythUIButtonTree::SwitchList(bool right)
     {
         if ((m_activeListID + 1 < m_visibleLists) &&
             (m_activeListID + 1 < (uint)m_buttonlists.count()))
+        {
             m_activeListID++;
+        }
         else if (m_currentNode && m_currentNode->visibleChildCount() > 0)
         {
-            m_currentDepth++;
+            ++m_currentDepth;
             doUpdate = true;
         }
         else
@@ -484,10 +486,12 @@ void MythUIButtonTree::SwitchList(bool right)
     else if (!right)
     {
         if (m_activeListID > 0)
-            m_activeListID--;
+        {
+            --m_activeListID;
+        }
         else if (m_currentDepth > 0)
         {
-            m_currentDepth--;
+            --m_currentDepth;
             doUpdate = true;
         }
         else
@@ -497,7 +501,9 @@ void MythUIButtonTree::SwitchList(bool right)
     }
 
     if (doUpdate)
+    {
         SetTreeState();
+    }
     else
     {
         if (m_activeList)
@@ -532,8 +538,7 @@ void MythUIButtonTree::handleSelect(MythUIButtonListItem *item)
     m_activeListID = name.section(' ', 2, 2).toInt();
     m_activeList = list;
 
-
-        auto *node = item->GetData().value<MythGenericTree *> ();
+    auto *node = item->GetData().value<MythGenericTree *> ();
     DoSetCurrentNode(node);
     SetTreeState();
 }
@@ -707,3 +712,5 @@ void MythUIButtonTree::CopyFrom(MythUIType *base)
 
     m_initialized = false;
 }
+
+#include "moc_mythuibuttontree.cpp"

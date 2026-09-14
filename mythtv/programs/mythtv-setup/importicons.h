@@ -33,13 +33,11 @@ class ImportIconsWizard : public MythScreenType
 
   public:
     ImportIconsWizard(MythScreenStack *parent, bool fRefresh,
-                      QString channelname = "");
+                      int sourceid = 0, QString channelname = "");
    ~ImportIconsWizard() override;
 
     bool Create(void) override; // MythScreenType
-    void Load(void) override; // MythScreenType
 //    bool keyPressEvent(QKeyEvent *) override; // MythScreenType
-    void customEvent(QEvent *event) override; // MythUIType
 
     struct SearchEntry               //! search entry results
     {
@@ -47,6 +45,10 @@ class ImportIconsWizard : public MythScreenType
         QString strName;             //!< the remote name
         QString strLogo;             //!< the actual logo
     };
+
+  protected:
+    void customEvent(QEvent *event) override; // MythUIType
+    void Load(void) override; // MythScreenType
 
   private:
 
@@ -146,13 +148,15 @@ class ImportIconsWizard : public MythScreenType
      */
     bool doLoad();
 
+  public slots:
+    void Close() override; // MythScreenType
+
   protected slots:
     void enableControls(ImportIconsWizard::dialogState state=STATE_NORMAL);         //!< enable/disable the controls
     void manualSearch();           //!< process the manual search
     void menuSelection(MythUIButtonListItem *item);//!< process the icon selection
     void skip();                   //!< skip this icon
     void askSubmit(const QString& strParam);
-    void Close() override; // MythScreenType
 
   private slots:
     void itemChanged(MythUIButtonListItem *item);
@@ -173,9 +177,10 @@ class ImportIconsWizard : public MythScreenType
     int m_nCount          {0};       //!< the current search point (0..m_nMaxCount)
     int m_missingMaxCount {0};       //!< the total number of missing icons
     int m_missingCount    {0};       //!< the current search point (0..m_missingCount)
+    int m_sourceId        {0};       //!< selected video source or 0 for all sources
 
                         //!< the default url
-    const QString m_url {"http://services.mythtv.org/channel-icon/"}; 
+    const QString m_url;
     QDir m_tmpDir;
 
     void startDialog();

@@ -1,13 +1,9 @@
 // -*- Mode: c++ -*-
+#include "v4l2encstreamhandler.h"
 
 // POSIX headers
-#include <fcntl.h>
-#include <unistd.h>
-#ifndef USING_MINGW
-#include <poll.h>
-//#include <sys/select.h>
-#include <sys/ioctl.h>
-#endif
+#include <fcntl.h> // open
+#include <unistd.h> // close, read
 
 #include <chrono> // for milliseconds
 #include <iostream>
@@ -19,12 +15,12 @@
 
 // MythTV headers
 #include "libmythbase/exitcodes.h"
+#include "libmythbase/mythlogging.h"
 
 #include "cardutil.h"
 #include "dtvsignalmonitor.h"
 #include "mpeg/mpegstreamdata.h"
 #include "mpeg/streamlisteners.h"
-#include "recorders/v4l2encstreamhandler.h"
 #include "recorders/v4lchannel.h"
 
 const std::array<const std::string,15> V4L2encStreamHandler::kStreamTypes
@@ -709,9 +705,13 @@ bool V4L2encStreamHandler::SetOption(const QString &opt, int value)
         return true;
 
     if (opt == "width")
+    {
         m_width = value;
+    }
     else if (opt == "height")
+    {
         m_height = value;
+    }
     else if (opt == "mpeg2bitratemode")
     {
         m_bitrateMode = value ? V4L2_MPEG_VIDEO_BITRATE_MODE_CBR :
@@ -744,7 +744,9 @@ bool V4L2encStreamHandler::SetOption(const QString &opt, int value)
     {
         int index = find_index(kAudioRateL1, value);
         if (index >= 0)
+        {
             m_audioBitrateL1 = index;
+        }
         else
         {
             LOG(VB_GENERAL, LOG_ERR, LOC + "Audiorate(L1): " +
@@ -756,7 +758,9 @@ bool V4L2encStreamHandler::SetOption(const QString &opt, int value)
     {
         int index = find_index(kAudioRateL2, value);
         if (index >= 0)
+        {
             m_audioBitrateL2 = index;
+        }
         else
         {
             LOG(VB_GENERAL, LOG_ERR, LOC + "Audiorate(L2): " +
@@ -768,7 +772,9 @@ bool V4L2encStreamHandler::SetOption(const QString &opt, int value)
     {
         int index = find_index(kAudioRateL3, value);
         if (index >= 0)
+        {
             m_audioBitrateL3 = index;
+        }
         else
         {
             LOG(VB_GENERAL, LOG_ERR, LOC + "Audiorate(L2): " +
@@ -837,7 +843,9 @@ bool V4L2encStreamHandler::SetOption(const QString &opt, const QString &value)
         return true;
 
     if (opt == "vbidevice")
+    {
         m_vbiDevice = value;
+    }
     else if (opt == "mpeg2streamtype")
     {
         for (size_t i = 0; i < kStreamTypes.size(); ++i)
@@ -892,11 +900,17 @@ bool V4L2encStreamHandler::SetOption(const QString &opt, const QString &value)
     else if (opt == "mpeg2audtype")
     {
         if (value == "Layer I")
+        {
             m_audioLayer = V4L2_MPEG_AUDIO_ENCODING_LAYER_1; // plus one?
+        }
         else if (value == "Layer II")
+        {
             m_audioLayer = V4L2_MPEG_AUDIO_ENCODING_LAYER_2;
+        }
         else if (value == "Layer III")
+        {
             m_audioLayer = V4L2_MPEG_AUDIO_ENCODING_LAYER_3;
+        }
         else
         {
             LOG(VB_GENERAL, LOG_ERR, LOC + "MPEG2 audio layer: " +

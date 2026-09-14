@@ -23,7 +23,7 @@ class QUdpSocket;
 
 using Params = QMap<QString, QString>;
 
-class CetonRTSP : QObject
+class CetonRTSP : public QObject
 {
     Q_OBJECT
 
@@ -43,16 +43,15 @@ class CetonRTSP : QObject
     void StopKeepAlive(void);
 
 protected:
+    void timerEvent(QTimerEvent *event) override; // QObject
     bool ProcessRequest(
         const QString &method, const QStringList *headers = nullptr,
                         bool use_control = false, bool waitforanswer = true,
                         const QString &alternative = QString());
 
   private:
-    static QStringList splitLines(const QByteArray &lines);
     QString readParameters(const QString &key, Params &parameters);
     QUrl GetBaseUrl(void);
-    void timerEvent(QTimerEvent *event) override; // QObject
 
     QTcpSocket    *m_socket          {nullptr};
     uint           m_sequenceNumber  {0};

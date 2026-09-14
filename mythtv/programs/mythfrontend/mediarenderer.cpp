@@ -10,19 +10,17 @@
 
 #include "libmythbase/mythconfig.h"
 
-#if CONFIG_QTSCRIPT
-#include <QScriptEngine>
-#endif
 #include <QTextStream>
 
 // MythTV
 #include "libmythbase/compat.h"
 #include "libmythbase/configuration.h"
 #include "libmythbase/mythdate.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythbase/mythversion.h"
-#include "libmythupnp/htmlserver.h"
-#include "libmythupnp/upnpsubscription.h"
-#include "libmythupnp/upnputil.h"
+#include "libmythupnp/httpserver.h"
+#include "libmythupnp/ssdp.h"
+#include "libmythupnp/upnpdevice.h"
 
 // MythFrontend
 #include "mediarenderer.h"
@@ -68,27 +66,7 @@ MediaRenderer::MediaRenderer()
     // Register any HttpServerExtensions...
     // ------------------------------------------------------------------
 
-    auto *pHtmlServer =
-                 new HtmlServerExtension(pHttpServer->GetSharePath() + "html",
-                                         "frontend_");
-    pHttpServer->RegisterExtension(pHtmlServer);
     pHttpServer->RegisterExtension(new FrontendServiceHost(pHttpServer->GetSharePath()));
-
-    // ------------------------------------------------------------------
-    // Register Service Types with Scripting Engine
-    //
-    // -=>NOTE: We need to know the actual type at compile time for this
-    //          to work, so it needs to be done here.  I'm still looking
-    //          into ways that we may encapsulate this in the service
-    //          classes. - dblain
-    // ------------------------------------------------------------------
-
-#if CONFIG_QTSCRIPT
-    QScriptEngine* pEngine = pHtmlServer->ScriptEngine();
-
-    pEngine->globalObject().setProperty("Frontend"   ,
-        pEngine->scriptValueFromQMetaObject< ScriptableFrontend    >() );
-#endif
 
     // ----------------------------------------------------------------------
     // Initialize UPnp Stack

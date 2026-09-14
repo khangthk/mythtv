@@ -5,9 +5,10 @@
 #include <QString>
 
 // MythTV
-#include "libmyth/mythcontext.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdbcon.h"
 #include "libmythbase/mythdirs.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythui/mythprogressdialog.h"
 
 // MythFrontend
@@ -151,3 +152,5 @@ void MetadataSettings::toggleTrailers()
 
     m_trailerSpin->SetVisible(checkstate != 0);
 }
+
+#include "moc_videometadatasettings.cpp"

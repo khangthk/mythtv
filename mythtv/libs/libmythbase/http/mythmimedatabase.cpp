@@ -4,6 +4,7 @@
 #include <QGlobalStatic>
 #include <QMimeDatabase>
 #include <QStandardPaths>
+#include <algorithm>
 
 // MythTV
 #include "mythlogging.h"
@@ -43,6 +44,7 @@ class MythMimeDatabasePriv
 
         LOG(VB_GENERAL, LOG_DEBUG, LOC +
             QString("Custom entries: %1").arg(s_types.size()));
+        m_mimes.reserve(s_types.size());
         // cppcheck-suppress unassignedVariable
         for (const auto & [name, suffix, magic, weight, inherits] : s_types)
             m_mimes.push_back({name, suffix, magic, weight, inherits});
@@ -55,9 +57,9 @@ class MythMimeDatabasePriv
 
     MythMimeType MimeTypeForName(const QString& Name) const
     {
-        auto found = std::find_if(m_mimes.cbegin(), m_mimes.cend(),
+        auto found = std::ranges::find_if(m_mimes,
             [&Name](const auto & Mime) { return Name.compare(Mime.Name(), Qt::CaseInsensitive) == 0; });
-        if (found != m_mimes.cend())
+        if (found != m_mimes.end())
             return *found;
         return MythMimeType {};
     }
@@ -130,7 +132,7 @@ class MythMimeDatabasePriv
     static MythMimeTypes ToMythMimeTypes(const QList<QMimeType>& Types)
     {
         MythMimeTypes result;
-        std::transform(Types.cbegin(), Types.cend(), std::back_inserter(result),
+        std::ranges::transform(std::as_const(Types), std::back_inserter(result),
                        [](const auto& Type) { return MythMimeType { Type }; });
         return result;
     }

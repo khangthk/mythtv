@@ -12,7 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <ctime>
+#include <thread>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -24,7 +24,6 @@
 #include <QStringList>
 
 // libmythbase headers
-#include "mythcorecontext.h"
 #include "mythlogging.h"
 #include "mythevent.h"
 #include "exitcodes.h"
@@ -100,7 +99,7 @@ void MythSystemLegacyIOHandler::run(void)
 
         while( run_system )
         {
-            usleep(10ms); // ~100x per second, for ~3MBps throughput
+            std::this_thread::sleep_for(10ms); // ~100x per second, for ~3MBps throughput
             m_pLock.lock();
             if( m_pMap.isEmpty() )
             {
@@ -205,7 +204,7 @@ void MythSystemLegacyIOHandler::Wait(HANDLE h)
     while (m_pMap.contains(h))
     {
         locker.unlock();
-        usleep(10ms);
+        std::this_thread::sleep_for(10ms);
         locker.relock();
     }
 }
@@ -253,7 +252,7 @@ void MythSystemLegacyManager::run(void)
         if( m_childCount == 0 )
         {
             m_mapLock.unlock();
-            usleep( 100ms );
+            std::this_thread::sleep_for(100ms);
             continue;
         }
 
@@ -459,7 +458,7 @@ void MythSystemLegacySignalManager::run(void)
     LOG(VB_GENERAL, LOG_INFO, "Starting process signal handler");
     while( run_system )
     {
-        usleep(50ms);
+        std::this_thread::sleep_for(50ms);
         while( run_system )
         {
             // handle cleanup and signalling for closed processes
@@ -791,6 +790,4 @@ void MythSystemLegacyWindows::JumpAbort(void)
     manager->jumpAbort();
 }
 
-/*
- * vim:ts=4:sw=4:ai:et:si:sts=4
- */
+#include "moc_mythsystemwindows.cpp"

@@ -13,10 +13,11 @@
 #include <QMap>
 
 // MythTV headers
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythlogging.h"
 
 #include "linuxfirewiredevice.h"
-#ifdef USING_OSX_FIREWIRE
+#if CONFIG_FIREWIRE_OSX
 #include "darwinfirewiredevice.h"
 #endif
 #include "mpeg/mpegtables.h"
@@ -38,8 +39,12 @@ void FirewireDevice::AddListener(TSDataListener *listener)
 {
     if (listener)
     {
-        auto it = find(m_listeners.begin(), m_listeners.end(), listener);
+#ifdef __cpp_lib_ranges_contains
+        if (!std::ranges::contains(m_listeners, listener))
+#else
+        auto it = std::ranges::find(m_listeners, listener);
         if (it == m_listeners.end())
+#endif
             m_listeners.push_back(listener);
     }
 
@@ -49,15 +54,12 @@ void FirewireDevice::AddListener(TSDataListener *listener)
 
 void FirewireDevice::RemoveListener(TSDataListener *listener)
 {
-    auto it = m_listeners.end();
-
-    do
+    auto it = std::ranges::find(m_listeners, listener);
+    while (it != m_listeners.end())
     {
-        it = find(m_listeners.begin(), m_listeners.end(), listener);
-        if (it != m_listeners.end())
-            it = m_listeners.erase(it);
+        it = m_listeners.erase(it);
+        it = find(it, m_listeners.end(), listener);
     }
-    while (it != m_listeners.end());
 
     LOG(VB_RECORD, LOG_INFO, LOC +
         QString("RemoveListener() %1").arg(m_listeners.size()));
@@ -73,9 +75,9 @@ bool FirewireDevice::SetPowerState(bool on)
     cmd.push_back(kAVCControlCommand);
     cmd.push_back(kAVCSubunitTypeUnit | kAVCSubunitIdIgnore);
     cmd.push_back(kAVCUnitPowerOpcode);
-    cmd.push_back((on) ? kAVCPowerStateOn : kAVCPowerStateOff);
+    cmd.push_back(on ? kAVCPowerStateOn : kAVCPowerStateOff);
 
-    QString cmdStr = (on) ? "on" : "off";
+    QString cmdStr = on ? "on" : "off";
     LOG(VB_RECORD, LOG_INFO, LOC + QString("Powering %1").arg(cmdStr));
 
     if (!SendAVCCommand(cmd, ret, -1))
@@ -364,9 +366,9 @@ std::vector<AVCInfo> FirewireDevice::GetSTBList(void)
 {
     std::vector<AVCInfo> list;
 
-#ifdef USING_LINUX_FIREWIRE
+#if CONFIG_FIREWIRE_LINUX
     list = LinuxFirewireDevice::GetSTBList();
-#elif defined(USING_OSX_FIREWIRE)
+#elif CONFIG_FIREWIRE_OSX
     list = DarwinFirewireDevice::GetSTBList();
 #endif
 

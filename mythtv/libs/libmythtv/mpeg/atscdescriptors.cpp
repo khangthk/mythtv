@@ -2,6 +2,7 @@
 // Copyright (c) 2003-2004, Daniel Thor Kristjansson
 
 #include <algorithm>
+#include <cstdint>
 
 #include "libmythbase/iso639.h"
 #include "libmythbase/mythlogging.h"
@@ -131,7 +132,7 @@ QString MultipleStringStructure::Uncompressed(
         (0x10==mode) ||
         (0x20<=mode && mode<=0x27) ||
         (0x30<=mode && mode<=0x33)) { // basic runlength encoding
-        int hb=mode<<8;
+        uint16_t hb = mode << 8;
         for (int j=0; j<len; j++)
         {
 #if 0
@@ -145,9 +146,8 @@ QString MultipleStringStructure::Uncompressed(
         // Standard Compression Scheme for Unicode (SCSU)
         str=QString("TODO SCSU encoding");
     } else if (mode==0x3f) { //  Unicode, UTF-16 Form
-        const auto* ustr = reinterpret_cast<const unsigned short*>(buf);
-        for (int j=0; j<(len>>1); j++)
-            str.append( QChar( (ustr[j]<<8) | (ustr[j]>>8) ) );
+        for (int j=0; j<len; j+=2)
+            str.append( QChar( (buf[j]<<8) | buf[j+1] ) );
     } else if (0x40<=mode && mode<=0x41) {
         str = QString("TODO Tawain Characters");
     } else if (0x48==mode) {

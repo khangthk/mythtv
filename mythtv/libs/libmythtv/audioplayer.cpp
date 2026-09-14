@@ -1,5 +1,9 @@
+// C++ headers
+#include <algorithm>
 
-#include "libmyth/audio/audiooutput.h"
+#include "libmythtv/audio/audiooutput.h"
+#include "libmythbase/mythcorecontext.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythui/mythnotificationcenter.h"
 
 #include "audioplayer.h"
@@ -23,27 +27,31 @@ AudioPlayer::~AudioPlayer()
     m_visuals.clear();
 }
 
-void AudioPlayer::addVisual(MythTV::Visual *vis)
+void AudioPlayer::addVisual(Visualization *vis)
 {
     if (!m_audioOutput)
         return;
 
     QMutexLocker lock(&m_lock);
-    auto it = std::find(m_visuals.begin(), m_visuals.end(), vis);
+#ifdef __cpp_lib_ranges_contains
+    if (!std::ranges::contains(m_visuals, vis))
+#else
+    auto it = std::ranges::find(m_visuals, vis);
     if (it == m_visuals.end())
+#endif
     {
         m_visuals.push_back(vis);
         m_audioOutput->addVisual(vis);
     }
 }
 
-void AudioPlayer::removeVisual(MythTV::Visual *vis)
+void AudioPlayer::removeVisual(Visualization *vis)
 {
     if (!m_audioOutput)
         return;
 
     QMutexLocker lock(&m_lock);
-    auto it = std::find(m_visuals.begin(), m_visuals.end(), vis);
+    auto it = std::ranges::find(m_visuals, vis);
     if (it != m_visuals.end())
     {
         m_visuals.erase(it);
@@ -125,13 +133,13 @@ QString AudioPlayer::ReinitAudio(void)
             aos.m_init = false;
 
         m_audioOutput = AudioOutput::OpenAudio(aos);
-        if (!m_audioOutput)
+        if (m_audioOutput == nullptr)
         {
             errMsg = tr("Unable to create AudioOutput.");
         }
-        else
+        else if (aos.m_init && !m_audioOutput->isConfigured())
         {
-            errMsg = m_audioOutput->GetError();
+            errMsg = tr("AudioOutput has not been successfully configured.");
         }
         AddVisuals();
     }
@@ -141,7 +149,10 @@ QString AudioPlayer::ReinitAudio(void)
                                      m_state.m_sampleRate, m_state.m_passthru, 0,
                                      m_state.m_codecProfile);
         m_audioOutput->Reconfigure(settings);
-        errMsg = m_audioOutput->GetError();
+        if (!m_audioOutput->isConfigured())
+        {
+            errMsg = tr("AudioOutput has not been successfully configured.");
+        }
         SetStretchFactor(m_stretchFactor);
     }
 
@@ -546,3 +557,5 @@ int AudioPlayer::DecodeAudio(AVCodecContext *ctx,
     }
     return m_audioOutput->DecodeAudio(ctx, buffer, data_size, pkt);
 }
+
+#include "moc_audioplayer.cpp"

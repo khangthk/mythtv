@@ -62,12 +62,14 @@ void MythUISpinBox::SetRange(int low, int high, int step, uint pageMultiple)
             {
                 if (temp.contains("%n"))
                 {
-                    text = QCoreApplication::translate("ThemeUI", temp.toUtf8(), nullptr,
-                                           qAbs(value));
+                    text = QCoreApplication::translate("ThemeUI",
+                                                       temp.toUtf8().constData(),
+                                                       nullptr, qAbs(value));
                 }
                 else
                 {
-                    text = QCoreApplication::translate("ThemeUI", temp.toUtf8());
+                    text = QCoreApplication::translate("ThemeUI",
+                                                       temp.toUtf8().constData());
                 }
             }
         }
@@ -117,7 +119,7 @@ void MythUISpinBox::AddSelection(int value, const QString &label)
         }
     }
 
-    new MythUIButtonListItem(this, label.isEmpty() ? QChar(value) : label,
+    new MythUIButtonListItem(this, label.isEmpty() ? QChar(value & 0xFFFF) : label,
                                     QVariant::fromValue(value), insertPos);
 }
 
@@ -357,3 +359,5 @@ void SpinBoxEntryDialog::okClicked(void)
     m_parentList->SetItemCurrent(m_selection);
     Close();
 }
+
+#include "moc_mythuispinbox.cpp"

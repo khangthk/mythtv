@@ -17,7 +17,7 @@
 #include <unistd.h>
 
 // MythTV
-#include <libmyth/mythcontext.h>
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythlogging.h>
 #include <libmythbase/mythpluginapi.h>
 #include <libmythbase/mythversion.h>
@@ -110,11 +110,17 @@ static void ZoneMinderCallback([[maybe_unused]] void *data, QString &selection)
     QString sel = selection.toLower();
 
     if (sel == "zm_console")
+    {
         runZMConsole();
+    }
     else if (sel == "zm_live_viewer")
+    {
         runZMLiveView();
+    }
     else if (sel == "zm_event_viewer")
+    {
         runZMEventView();
+    }
     else
     {
         // if we have found the mainmenu callback
@@ -148,7 +154,9 @@ static int runMenu(const QString& which_menu)
 
     // save the callback from the main menu
     if (mainMenu)
+    {
         mainMenu->getCallback(&m_callback, &m_callbackdata);
+    }
     else
     {
         m_callback = nullptr;

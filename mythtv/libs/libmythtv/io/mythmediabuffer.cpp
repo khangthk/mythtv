@@ -17,10 +17,9 @@
 #include <QReadLocker>
 
 // MythTV
-#include "libmyth/mythcontext.h"
 #include "libmythbase/compat.h"
 #include "libmythbase/mythcdrom.h"
-#include "libmythbase/mythconfig.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythmiscutil.h"
@@ -31,7 +30,7 @@
 #include "Bluray/mythbdbuffer.h"
 #include "DVD/mythdvdbuffer.h"
 #include "DVD/mythdvdstream.h"
-#include "HLS/httplivestreambuffer.h"
+#include "httplivestreambuffer.h"
 #include "io/mythfilebuffer.h"
 #include "io/mythmediabuffer.h"
 #include "io/mythstreamingbuffer.h"
@@ -218,7 +217,7 @@ MythBufferType MythMediaBuffer::GetType(void) const
  */
 MythMediaBuffer::~MythMediaBuffer(void)
 {
-    assert(!isRunning());
+    assert(!isRunning()); // NOLINT(misc-static-assert)
     wait();
 
     delete [] m_readAheadBuffer;
@@ -248,7 +247,7 @@ void MythMediaBuffer::Reset(bool Full, bool ToAdjust, bool ResetInternal)
     m_setSwitchToNext = false;
 
     m_writePos = 0;
-    m_readPos = (ToAdjust) ? (m_readPos - m_readAdjust) : 0;
+    m_readPos = ToAdjust ? (m_readPos - m_readAdjust) : 0;
 
     if (m_readPos != 0)
     {
@@ -374,7 +373,8 @@ void MythMediaBuffer::CalcReadAheadThresh(void)
     // loop without sleeping if the buffered data is less than this
     m_fillThreshold = 7 * m_bufferSize / 8;
 
-    estbitrate     = static_cast<uint>(std::max(abs(m_rawBitrate * m_playSpeed), 0.5F * m_rawBitrate));
+    estbitrate     = static_cast<uint>(std::max(std::fabs(m_rawBitrate * m_playSpeed),
+                                                0.5F * m_rawBitrate));
     estbitrate     = std::min(m_rawBitrate * 3, estbitrate);
     int const rbs = estbitrate_to_rbs(estbitrate);
 
@@ -423,7 +423,8 @@ bool MythMediaBuffer::IsNearEnd(double /*Framerate*/, uint Frames) const
     m_posLock.unlock();
 
     // telecom kilobytes (i.e. 1000 per k not 1024)
-    uint tmp = static_cast<uint>(std::max(abs(m_rawBitrate * m_playSpeed), 0.5F * m_rawBitrate));
+    uint tmp = static_cast<uint>(std::max(std::fabs(m_rawBitrate * m_playSpeed),
+                                          0.5F * m_rawBitrate));
     uint kbitspersec = std::min(m_rawBitrate * 3, tmp);
     if (kbitspersec == 0)
         return false;
@@ -1105,7 +1106,8 @@ void MythMediaBuffer::run(void)
         {
             // To give other threads a good chance to handle these
             // conditions, even if they are only requesting a read lock
-            // like us, yield (currently implemented with short usleep).
+            // like us, yield (currently implemented with short
+            // std::this_thread::sleep_for).
             m_generalWait.wakeAll();
             m_rwLock.unlock();
             std::this_thread::sleep_for(5ms);
@@ -1218,14 +1220,18 @@ int MythMediaBuffer::WaitForAvail(int Count, std::chrono::milliseconds  Timeout)
     if (available >= Count)
         return available;
 
-    Count = (m_ateof && available < Count) ? available : Count;
+    if (m_ateof)
+    {
+        m_wantToRead = 0;
+        return available;
+    }
 
-    if (m_liveTVChain && m_setSwitchToNext && (available < Count))
+    if (m_liveTVChain && m_setSwitchToNext)
         return available;
 
     // Make sure that if the read ahead thread is sleeping and
     // it should be reading that we start reading right away.
-    if ((available < Count) && !m_stopReads && !m_requestPause && !m_commsError && m_readAheadRunning)
+    if (!m_stopReads && !m_requestPause && !m_commsError && m_readAheadRunning)
         m_generalWait.wakeAll();
 
     MythTimer timer;
@@ -1275,7 +1281,7 @@ int MythMediaBuffer::ReadDirect(void *Buffer, int Count, bool Peek)
             if (m_remotefile)
                 cur_pos = m_remotefile->Seek(oldposition, SEEK_SET);
             else if (m_fd2 >= 0)
-                cur_pos = lseek64(m_fd2, oldposition, SEEK_SET);
+                cur_pos = lseek(m_fd2, oldposition, SEEK_SET);
             if (cur_pos < 0)
             {
                 LOG(VB_FILE, LOG_ERR, LOC + "Seek failed repositioning to previous position");
@@ -1573,14 +1579,19 @@ uint64_t MythMediaBuffer::UpdateDecoderRate(uint64_t Latest)
     if (Latest)
         m_decoderReads.insert(current, Latest);
     uint64_t total = 0;
-    QMutableMapIterator<std::chrono::milliseconds,uint64_t> it(m_decoderReads);
-    while (it.hasNext())
+    for (auto it = m_decoderReads.begin();
+         it != m_decoderReads.end();
+         /* no inc */)
     {
-        it.next();
         if (it.key() < expire || it.key() > current)
-            it.remove();
+        {
+            it = m_decoderReads.erase(it);
+        }
         else
+        {
             total += it.value();
+            ++it;
+        }
     }
 
     int size = m_decoderReads.size();
@@ -1604,14 +1615,19 @@ uint64_t MythMediaBuffer::UpdateStorageRate(uint64_t Latest)
     if (Latest)
         m_storageReads.insert(current, Latest);
     uint64_t total = 0;
-    QMutableMapIterator<std::chrono::milliseconds,uint64_t> it(m_storageReads);
-    while (it.hasNext())
+    for (auto it = m_storageReads.begin();
+         it != m_storageReads.end();
+         /* no inc */)
     {
-        it.next();
         if (it.key() < expire || it.key() > current)
-            it.remove();
+        {
+            it = m_storageReads.erase(it);
+        }
         else
+        {
             total += it.value();
+            ++it;
+        }
     }
 
     int size = m_storageReads.size();

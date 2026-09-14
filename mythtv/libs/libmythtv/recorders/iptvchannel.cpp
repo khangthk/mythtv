@@ -11,6 +11,7 @@
 #include <utility>
 
 // Qt headers
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QUrl>
 
 // MythTV headers
@@ -212,4 +213,4 @@ bool IPTVChannel::Tune(const IPTVTuningData &tuning, bool scanning)
     return true;
 }
 
-/* vim: set expandtab tabstop=4 shiftwidth=4: */
+#include "moc_iptvchannel.cpp"

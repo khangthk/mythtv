@@ -5,24 +5,32 @@
 #include "videovisualspectrum.h"
 
 // FFmpeg
+extern "C" {
+#include "libavutil/mem.h"
+#include "libavutil/tx.h"
+}
 static constexpr int k_FFT_sample_length { 512 };
 
 // Std
 #include <algorithm>
 
+#include "libmythbase/mythlogging.h"
+
 VideoVisualSpectrum::VideoVisualSpectrum(AudioPlayer* Audio, MythRender* Render)
   : VideoVisual(Audio, Render),
-    m_dftL(static_cast<FFTComplex*>(av_malloc(sizeof(FFTComplex) * k_FFT_sample_length))),
-    m_dftR(static_cast<FFTComplex*>(av_malloc(sizeof(FFTComplex) * k_FFT_sample_length))),
-    m_fftContextForward(av_fft_init(std::log2(k_FFT_sample_length), 0))
+    m_dftL(static_cast<AVComplexFloat*>(av_malloc(sizeof(AVComplexFloat) * k_FFT_sample_length))),
+    m_dftR(static_cast<AVComplexFloat*>(av_malloc(sizeof(AVComplexFloat) * k_FFT_sample_length)))
 {
+    // If av_tx_init() fails (returns < 0), the contexts will be nullptr and will crash later,
+    // but av_malloc() is not checked to succeed either.
+    av_tx_init(&m_fftContext , &m_fft , AV_TX_FLOAT_FFT, 0, k_FFT_sample_length, &kScale, AV_TX_INPLACE);
 }
 
 VideoVisualSpectrum::~VideoVisualSpectrum()
 {
     av_freep(reinterpret_cast<void*>(&m_dftL));
     av_freep(reinterpret_cast<void*>(&m_dftR));
-    av_fft_end(m_fftContextForward);
+    av_tx_uninit(&m_fftContext);
 }
 
 template<typename T> T sq(T a) { return a*a; };
@@ -47,23 +55,20 @@ void VideoVisualSpectrum::Draw(const QRect Area, MythPainter* Painter, QPaintDev
             i = static_cast<uint>(node->m_length);
             for (auto k = 0; k < node->m_length; k++)
             {
-                m_dftL[k] = (FFTComplex){ .re = (FFTSample)node->m_left[k], .im = 0 };
+                m_dftL[k] = (AVComplexFloat){ .re = static_cast<float>(node->m_left[k]), .im = 0 };
                 if (node->m_right)
-                    m_dftR[k] = (FFTComplex){ .re = (FFTSample)node->m_right[k], .im = 0 };
+                    m_dftR[k] = (AVComplexFloat){ .re = static_cast<float>(node->m_right[k]), .im = 0 };
             }
         }
     }
 
     for (auto k = i; k < k_FFT_sample_length; k++)
     {
-        m_dftL[k] = (FFTComplex){ .re = 0, .im = 0 };
-        m_dftL[k] = (FFTComplex){ .re = 0, .im = 0 };
+        m_dftL[k] = (AVComplexFloat){ .re = 0, .im = 0 };
+        m_dftR[k] = (AVComplexFloat){ .re = 0, .im = 0 };
     }
-    av_fft_permute(m_fftContextForward, m_dftL);
-    av_fft_calc(m_fftContextForward, m_dftL);
-
-    av_fft_permute(m_fftContextForward, m_dftR);
-    av_fft_calc(m_fftContextForward, m_dftR);
+    m_fft(m_fftContext, m_dftL, m_dftL, sizeof(AVComplexFloat));
+    m_fft(m_fftContext, m_dftR, m_dftR, sizeof(AVComplexFloat));
 
     double falloff = std::clamp(((static_cast<double>(SetLastUpdate().count())) / 40.0) * m_falloff, 0.0, 2048.0);
     for (int l = 0, r = m_scale.range(); l < m_scale.range(); l++, r++)
@@ -111,7 +116,7 @@ void VideoVisualSpectrum::Draw(const QRect Area, MythPainter* Painter, QPaintDev
 
 void VideoVisualSpectrum::prepare()
 {
-    std::fill(m_magnitudes.begin(), m_magnitudes.end(), 0.0);
+    std::ranges::fill(m_magnitudes, 0.0);
     VideoVisual::prepare();
 }
 
@@ -143,7 +148,7 @@ bool VideoVisualSpectrum::Initialise(const QRect Area)
     m_scale.setMax(192, m_area.width() / m_barWidth);
 
     m_magnitudes.resize(m_scale.range() * 2);
-    std::fill(m_magnitudes.begin(), m_magnitudes.end(), 0.0);
+    std::ranges::fill(m_magnitudes, 0.0);
     InitialisePriv();
     return true;
 }

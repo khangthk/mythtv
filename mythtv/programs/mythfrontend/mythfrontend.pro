@@ -3,13 +3,13 @@ include ( ../../version.pro )
 include ( ../programs-libs.pro )
 
 QT += network xml sql widgets
-using_qtscript: QT += script
-mingw | win32-msvc* {
-   # script debugger currently only enabled for WIN32 builds
-   QT += scripttools
-}
-using_qtwebkit {
-    QT += webkitwidgets
+using_qtwebengine {
+    equals(QT_MAJOR_VERSION, 6) {
+        QT += webenginequick
+    } else {
+        QT += webengine
+    }
+    QT += webenginewidgets
 }
 android: QT += androidextras
 using_qtdbus: QT += dbus
@@ -80,7 +80,21 @@ SOURCES += galleryconfig.cpp            galleryviews.cpp
 SOURCES += galleryslide.cpp             gallerytransitions.cpp
 SOURCES += galleryinfo.cpp              prevreclist.cpp
 
+HEADERS += servicecontracts/datacontracthelper.h
+HEADERS += servicecontracts/frontendActionList.h
+HEADERS += servicecontracts/frontendServices.h
+HEADERS += servicecontracts/frontendStatus.h
+SOURCES += servicecontracts/service.cpp
+HEADERS += servicecontracts/service.h
+
 HEADERS += serviceHosts/frontendServiceHost.h
+SOURCES += serviceHosts/servicehost.cpp
+HEADERS += serviceHosts/servicehost.h
+SOURCES += serviceHosts/wsdl.cpp
+HEADERS += serviceHosts/wsdl.h
+SOURCES += serviceHosts/xsd.cpp
+HEADERS += serviceHosts/xsd.h
+
 HEADERS += services/frontend.h
 SOURCES += services/frontend.cpp
 
@@ -114,24 +128,6 @@ win32 : !debug {
     # To hide the window that contains logging output:
     CONFIG -= console
     DEFINES += WINDOWS_CLOSE_CONSOLE
-}
-
-using_x11:DEFINES += USING_X11
-using_opengl:DEFINES += USING_OPENGL
-using_vdpau:DEFINES += USING_VDPAU
-using_vaapi:using_opengl:DEFINES += USING_VAAPI
-using_mmal:DEFINES += USING_MMAL
-
-using_pulse:DEFINES += USING_PULSE
-using_pulseoutput: DEFINES += USING_PULSEOUTPUT
-using_alsa:DEFINES += USING_ALSA
-using_jack:DEFINES += USING_JACK
-using_oss: DEFINES += USING_OSS
-using_libcec: DEFINES += USING_LIBCEC
-macx:      DEFINES += USING_COREAUDIO
-using_libdns_sd {
-    DEFINES += USING_LIBDNS_SD
-    using_libcrypto: DEFINES += USING_AIRPLAY
 }
 
 android {

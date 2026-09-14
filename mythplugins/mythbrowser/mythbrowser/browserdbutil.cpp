@@ -2,9 +2,10 @@
 #include <QSqlError>
 
 // MythTV
-#include <libmyth/mythcontext.h>
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythdb.h>
 #include <libmythbase/mythdbcheck.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythbase/mythsorthelper.h>
 
 // mythbrowser
@@ -225,6 +226,8 @@ int GetSiteList(QList<Bookmark*>  &siteList)
             site->m_selected = false;
             siteList.append(site);
         }
+        // QList doesn't play well with std::ranges
+        // NOLINTNEXTLINE(modernize-use-ranges)
         std::sort(siteList.begin(), siteList.end(), Bookmark::sortByName);
     }
 

@@ -9,17 +9,20 @@
 // Licensed under the GPL v2 or later, see LICENSE for details
 //
 //////////////////////////////////////////////////////////////////////////////
+#include "upnpcds.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 
+#include <QUrl>
+
 #include "libmythbase/configuration.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythversion.h"
 
-#include "upnp.h"
-#include "upnpcds.h"
+#include "httprequest.h"
+#include "upnpresultcode.h"
 #include "upnputil.h"
 
 static constexpr const char* DIDL_LITE_BEGIN { R"(<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">)" };
@@ -145,7 +148,7 @@ UPnpCDSMethod UPnpCDS::GetMethod( const QString &sURI )
         sURI == "GetFeatureList"        ) return CDSM_GetFeatureList       ;
     if (sURI == "GetServiceResetToken"  ) return CDSM_GetServiceResetToken ;
 
-    return(  CDSM_Unknown );
+    return CDSM_Unknown;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -154,10 +157,10 @@ UPnpCDSMethod UPnpCDS::GetMethod( const QString &sURI )
 
 UPnpCDSBrowseFlag UPnpCDS::GetBrowseFlag( const QString &sFlag )
 {
-    if (sFlag == "BrowseMetadata"       ) return( CDS_BrowseMetadata        );
-    if (sFlag == "BrowseDirectChildren" ) return( CDS_BrowseDirectChildren  );
+    if (sFlag == "BrowseMetadata"       ) return CDS_BrowseMetadata;
+    if (sFlag == "BrowseDirectChildren" ) return CDS_BrowseDirectChildren;
 
-    return( CDS_BrowseUnknown );
+    return CDS_BrowseUnknown;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -268,7 +271,7 @@ bool UPnpCDS::ProcessRequest( HTTPRequest *pRequest )
                 HandleGetServiceResetToken( pRequest );
                 break;
             default:
-                UPnp::FormatErrorResponse( pRequest, UPnPResult_InvalidAction );
+                pRequest->FormatErrorResponse(UPnPResult_InvalidAction);
                 break;
         }
 
@@ -280,25 +283,25 @@ bool UPnpCDS::ProcessRequest( HTTPRequest *pRequest )
 
 static const std::array<const UPnpCDSClientException,5> clientExceptions {{
     // Windows Media Player version 12
-    { CDS_ClientWMP, 
-      "User-Agent",
-      "Windows-Media-Player/" },
+    { .nClientType=CDS_ClientWMP,
+      .sHeaderKey="User-Agent",
+      .sHeaderValue="Windows-Media-Player/" },
     // Windows Media Player version < 12
-    { CDS_ClientWMP,
-      "User-Agent",
-      "Mozilla/4.0 (compatible; UPnP/1.0; Windows 9x" },
+    { .nClientType=CDS_ClientWMP,
+      .sHeaderKey="User-Agent",
+      .sHeaderValue="Mozilla/4.0 (compatible; UPnP/1.0; Windows 9x" },
     // XBMC
-    { CDS_ClientXBMC,
-      "User-Agent",
-      "Platinum/" },
+    { .nClientType=CDS_ClientXBMC,
+      .sHeaderKey="User-Agent",
+      .sHeaderValue="Platinum/" },
     // XBox 360
-    { CDS_ClientXBox,
-      "User-Agent",
-      "Xbox" },
+    { .nClientType=CDS_ClientXBox,
+      .sHeaderKey="User-Agent",
+      .sHeaderValue="Xbox" },
     // Sony Blu-ray players
-    { CDS_ClientSonyDB,
-      "X-AV-Client-Info",
-      R"(cn="Sony Corporation"; mn="Blu-ray Disc Player")" },
+    { .nClientType=CDS_ClientSonyDB,
+      .sHeaderKey="X-AV-Client-Info",
+      .sHeaderValue=R"(cn="Sony Corporation"; mn="Blu-ray Disc Player")" },
 }};
 
 void UPnpCDS::DetermineClient( HTTPRequest *pRequest,
@@ -531,7 +534,7 @@ void UPnpCDS::HandleBrowse( HTTPRequest *pRequest )
     }
     else
     {
-        UPnp::FormatErrorResponse ( pRequest, eErrorCode, sErrorDesc );
+        pRequest->FormatErrorResponse(eErrorCode, sErrorDesc);
     }
 
 }
@@ -673,7 +676,7 @@ void UPnpCDS::HandleSearch( HTTPRequest *pRequest )
     }
     else
     {
-        UPnp::FormatErrorResponse( pRequest, eErrorCode, sErrorDesc );
+        pRequest->FormatErrorResponse(eErrorCode, sErrorDesc);
     }
 }
 
@@ -821,7 +824,7 @@ UPnpCDSExtensionResults *UPnpCDSExtension::Browse( UPnpCDSRequest *pRequest )
     // -=>TODO: Need to add Filter & Sorting Support.
 
     if (!IsBrowseRequestForUs( pRequest ))
-        return( nullptr );
+        return nullptr;
 
     // ----------------------------------------------------------------------
     // Split the request ID into token key/value
@@ -882,7 +885,7 @@ UPnpCDSExtensionResults *UPnpCDSExtension::Browse( UPnpCDSRequest *pRequest )
 
     }
 
-    return( pResults );
+    return pResults;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1108,7 +1111,8 @@ QString UPnPShortcutFeature::CreateXML()
         const QString& objectID = *it;
         xml += "<shortcut>\r\n";
         xml += QString("<name>%1</name>\r\n").arg(TypeToName(type));
-        xml += QString("<objectID>%1</objectID>\r\n").arg(HTTPRequest::Encode(objectID));
+        xml += QString{"<objectID>%1</objectID>\r\n"}
+                .arg(QString::fromUtf8(QUrl::toPercentEncoding(objectID)));
         xml += "</shortcut>\r\n";
     }
 
@@ -1121,7 +1125,9 @@ bool UPnPShortcutFeature::AddShortCut(ShortCutType type,
                                          const QString &objectID)
 {
     if (!m_shortcuts.contains(type))
+    {
         m_shortcuts.insert(type, objectID);
+    }
     else
     {
         LOG(VB_GENERAL, LOG_ERR, QString("UPnPCDSShortcuts::AddShortCut(): "

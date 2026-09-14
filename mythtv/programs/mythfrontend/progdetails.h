@@ -6,7 +6,7 @@
 #include <QKeyEvent>
 
 // MythTV
-#include "libmythbase/programinfo.h"
+#include "libmythtv/programinfo.h"
 #include "libmythui/mythscreentype.h"
 
 //  MythFrontend
@@ -22,8 +22,10 @@ class ProgDetails : public MythScreenType
     ~ProgDetails() override;
 
     bool Create(void) override; // MythScreenType
-    void Init(void) override; // MythScreenType
     bool keyPressEvent(QKeyEvent *event) override; // MythScreenType
+
+  protected:
+    void Init(void) override; // MythScreenType
 
   private:
     static QString getRatings(bool recorded, uint chanid, const QDateTime& startts);

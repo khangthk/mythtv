@@ -5,13 +5,13 @@
 #include <vector>
 
 // Qt
+#include <QObject>
 #include <QStringList>
 #include <QRecursiveMutex>
 #include <QSize>
 #include <QMap>
 
 // MythTV
-#include "libmyth/mythcontext.h"
 #include "libmythtv/mythtvexp.h"
 
 static constexpr const char* DEINT_QUALITY_NONE   { "none"     };
@@ -74,6 +74,11 @@ class MTV_PUBLIC MythVideoProfileItem
     auto IsValid() const;
     bool operator<(const MythVideoProfileItem &Other) const;
     QString toString() const;
+
+    bool operator==(const MythVideoProfileItem& o) const
+        { return m_profileid == o.m_profileid; }
+    std::strong_ordering operator<=>(const MythVideoProfileItem& o) const
+        { return m_profileid <=> o.m_profileid; }
 
   private:
     uint       m_profileid        { 0 };

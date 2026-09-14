@@ -3,6 +3,7 @@
 #include <QFontMetrics>
 #include <QPainter>
 
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythui/mythfontproperties.h"
 #include "libmythui/mythimage.h"
@@ -13,7 +14,6 @@
 
 #include "captions/subtitlescreen.h"
 #include "captions/teletextscreen.h"
-#include "vbilut.h"
 
 #define LOC QString("TeletextScreen: ")
 
@@ -30,6 +30,47 @@ const int    TeletextScreen::kTeletextRows    = 26;
 
 static MythFontProperties* gTTFont;
 static int gTTBackgroundAlpha;
+
+static constexpr std::array<const std::array<const uint8_t,16>,1+8+8> lang_chars
+{{
+    { 0, 0x23,0x24,0x40,0x5b,0x5c,0x5d,0x5e,0x5f,0x60,0x7b,0x7c,0x7d,0x7e },
+
+    // for latin-1 font
+    // English (100%)
+    { 0, 0xa3,0x24,0x40,0xab,0xbd,0xbb,0xac,0x23,0xad,0xbc,0xa6,0xbe,0xf7 }, // £$@«½»¬#­¼¦¾÷
+    // German (100%)
+    { 0, 0x23,0x24,0xa7,0xc4,0xd6,0xdc,0x5e,0x5f,0xb0,0xe4,0xf6,0xfc,0xdf }, // #$§ÄÖÜ^_°äöüß
+    // Swedish/Finnish/Hungarian (100%)
+    { 0, 0x23,0xa4,0xc9,0xc4,0xd6,0xc5,0xdc,0x5f,0xe9,0xe4,0xf6,0xe5,0xfc }, // #¤ÉÄÖÅÜ_éäöåü
+    // Italian (100%)
+    { 0, 0xa3,0x24,0xe9,0xb0,0xe7,0xbb,0xac,0x23,0xf9,0xe0,0xf2,0xe8,0xec }, // £$é°ç»¬#ùàòèì
+    // French (100%)
+    { 0, 0xe9,0xef,0xe0,0xeb,0xea,0xf9,0xee,0x23,0xe8,0xe2,0xf4,0xfb,0xe7 }, // éïàëêùî#èâôûç
+    // Portuguese/Spanish (100%)
+    { 0, 0xe7,0x24,0xa1,0xe1,0xe9,0xed,0xf3,0xfa,0xbf,0xfc,0xf1,0xe8,0xe0 }, // ç$¡áéíóú¿üñèà
+    // Czech/Slovak (60%)
+    { 0, 0x23,0x75,0x63,0x74,0x7a,0xfd,0xed,0x72,0xe9,0xe1,0x65,0xfa,0x73 }, // #uctzýíréáeús
+    // reserved (English mapping)
+    { 0, 0xa3,0x24,0x40,0xab,0xbd,0xbb,0xac,0x23,0xad,0xbc,0xa6,0xbe,0xf7 }, // £$@«½»¬#­¼¦¾÷
+
+    // for latin-2 font
+    // Polish (100%)
+    { 0, 0x23,0xf1,0xb1,0xaf,0xa6,0xa3,0xe6,0xf3,0xea,0xbf,0xb6,0xb3,0xbc }, // #ñ±¯¦£æóê¿¶³¼
+    // German (100%)
+    { 0, 0x23,0x24,0xa7,0xc4,0xd6,0xdc,0x5e,0x5f,0xb0,0xe4,0xf6,0xfc,0xdf }, // #$§ÄÖÜ^_°äöüß
+    // Estonian (100%)
+    { 0, 0x23,0xf5,0xa9,0xc4,0xd6,0xae,0xdc,0xd5,0xb9,0xe4,0xf6,0xbe,0xfc }, // #õ©ÄÖ®ÜÕ¹äö¾ü
+    // Lettish/Lithuanian (90%)
+    { 0, 0x23,0x24,0xa9,0xeb,0xea,0xae,0xe8,0xfc,0xb9,0xb1,0x75,0xbe,0x69 }, // #$©ëê®èü¹±u¾i
+    // French (90%)
+    { 0, 0xe9,0x69,0x61,0xeb,0xec,0x75,0xee,0x23,0x65,0xe2,0xf4,0x75,0xe7 }, // éiaëìuî#eâôuç
+    // Serbian/Croation/Slovenian (100%)
+    { 0, 0x23,0xcb,0xc8,0xc6,0xae,0xd0,0xa9,0xeb,0xe8,0xe6,0xae,0xf0,0xb9 }, // #ËÈÆ®Ð©ëèæ®ð¹
+    // Czech/Slovak (100%)
+    { 0, 0x23,0xf9,0xe8,0xbb,0xbe,0xfd,0xed,0xf8,0xe9,0xe1,0xec,0xfa,0xb9 }, // #ùè»¾ýíøéáìú¹
+    // Rumanian (95%)
+    { 0, 0x23,0xa2,0xde,0xc2,0xaa,0xc3,0xce,0x69,0xfe,0xe2,0xba,0xe3,0xee }, // #¢ÞÂªÃÎiþâºãî
+}};
 
 static QChar cvt_char(char ch, int lang)
 {
@@ -94,10 +135,8 @@ QImage* TeletextScreen::GetRowImage(int row, QRect &rect)
 
 void TeletextScreen::OptimiseDisplayedArea()
 {
-    QHashIterator<int, QImage*> it(m_rowImages);
-    while (it.hasNext())
+    for (auto it = m_rowImages.begin(); it != m_rowImages.end(); ++it)
     {
-        it.next();
         MythImage *image = m_painter->GetFormatImage();
         if (!image || !it.value())
             continue;
@@ -114,12 +153,8 @@ void TeletextScreen::OptimiseDisplayedArea()
     }
 
     QRegion visible;
-    QListIterator<MythUIType *> i(m_childrenList);
-    while (i.hasNext())
-    {
-        MythUIType *img = i.next();
+    for (const auto *img : std::as_const(m_childrenList))
         visible = visible.united(img->GetArea());
-    }
 
     if (visible.isEmpty())
         return;
@@ -131,12 +166,8 @@ void TeletextScreen::OptimiseDisplayedArea()
     int top  = m_safeArea.top()  - bounding.top();
     SetArea(MythRect(bounding));
 
-    i.toFront();;
-    while (i.hasNext())
-    {
-        MythUIType *img = i.next();
+    for (MythUIType *img : std::as_const(m_childrenList))
         img->SetArea(MythRect(img->GetArea().translated(left, top)));
-    }
 }
 
 void TeletextScreen::Pulse()
@@ -382,6 +413,7 @@ void TeletextScreen::DrawLine(const tt_line_array& page, uint row, int lang)
         SetBackgroundColor(bgcolor);
 
         unsigned char ch = page[x] & 0x7F;
+        bool reserved = false;
         switch (ch)
         {
             case 0x00: case 0x01: case 0x02: case 0x03:
@@ -391,68 +423,65 @@ void TeletextScreen::DrawLine(const tt_line_array& page, uint row, int lang)
                 conceal = false;
                 // increment FLOF/FastText count if menu item detected
                 flof_link_count += (row == 25) ? 1 : 0;
-                goto ctrl;
+                break;
             case 0x08: // flash
                 // XXX
-                goto ctrl;
+                break;
             case 0x09: // steady
                 flash = false;
-                goto ctrl;
+                break;
             case 0x0a: // end box
                 endbox = true;
-                goto ctrl;
+                break;
             case 0x0b: // start box
                 if (x < kTeletextColumns - 1 && ((page[x + 1] & 0x7F) == 0x0b))
                     startbox = true;
-                goto ctrl;
+                break;
             case 0x0c: // normal height
                 doubleheight = false;
-                goto ctrl;
+                break;
             case 0x0d: // double height
                 doubleheight = (row < (kTeletextRows-1)) && (x < (kTeletextColumns - 1));
-                goto ctrl;
+                break;
 
             case 0x10: case 0x11: case 0x12: case 0x13:
             case 0x14: case 0x15: case 0x16: case 0x17: // graphics + foreground color
                 fgcolor = ch & 7;
                 mosaic = true;
                 conceal = false;
-                goto ctrl;
+                break;
             case 0x18: // conceal display
                 conceal = true;
-                goto ctrl;
+                break;
             case 0x19: // contiguous graphics
                 seperation = false;
-                goto ctrl;
+                break;
             case 0x1a: // separate graphics
                 seperation = true;
-                goto ctrl;
+                break;
             case 0x1c: // black background
                 bgcolor = kTTColorBlack;
-                goto ctrl;
+                break;
             case 0x1d: // new background
                 bgcolor = fgcolor;
-                goto ctrl;
+                break;
             case 0x1e: // hold graphics
                 hold = true;
-                goto ctrl;
+                break;
             case 0x1f: // release graphics
                 hold = false;
-                goto ctrl;
+                break;
             case 0x0e: // SO (reserved, double width)
             case 0x0f: // SI (reserved, double size)
             case 0x1b: // ESC (reserved)
-                ch = ' ';
+                reserved = true;
                 break;
-            ctrl:
-                ch = ' ';
-                if (hold && mosaic)
-                    ch = last_ch;
-            break;
 
             default:
                 if ((ch >= 0x80) && (ch <=0x9f)) // these aren't used
+                {
                     ch = ' '; // BAD_CHAR;
+                }
                 else
                 {
                     if (conceal && !m_teletextReader->RevealHidden())
@@ -460,6 +489,10 @@ void TeletextScreen::DrawLine(const tt_line_array& page, uint row, int lang)
                 }
                 break;
         }
+
+        // Extra processing for control characters
+        if (ch < 0x20)
+            ch = (hold && mosaic && !reserved) ? last_ch : ' ';
 
         // Hide FastText/FLOF menu characters if not available
         if (flof_link_count && (flof_link_count <= 6))
@@ -469,7 +502,7 @@ void TeletextScreen::DrawLine(const tt_line_array& page, uint row, int lang)
             if (ttpage)
             {
                 bool has_flof = ttpage->floflink[flof_link_count - 1] != 0;
-                ch = (has_flof) ? ch : ' ';
+                ch = has_flof ? ch : ' ';
             }
         }
 
@@ -489,7 +522,7 @@ void TeletextScreen::DrawLine(const tt_line_array& page, uint row, int lang)
                 if (doubleheight && row < (uint)kTeletextRows)
                     DrawBackground(x, row + 1);
 
-                if ((mosaic) && (ch < 0x40 || ch > 0x5F))
+                if (mosaic && (ch < 0x40 || ch > 0x5F))
                 {
                     SetBackgroundColor(newfgcolor);
                     DrawMosaic(x, row, ch, doubleheight);
@@ -585,7 +618,7 @@ void TeletextScreen::DrawMosaic(int x, int y, int code, bool doubleheight)
 
     int dx = (int)round((double)m_colWidth / 2) + 1;
     int dy = (int)round((double)m_rowHeight / 3) + 1;
-    dy = (doubleheight) ? (2 * dy) : dy;
+    dy = doubleheight ? (2 * dy) : dy;
 
     if (code & 0x10)
         DrawRect(row, QRect(x,      y + (2*dy), dx, dy));
@@ -690,3 +723,5 @@ bool TeletextScreen::InitialiseFont()
         .arg(font));
     return true;
 }
+
+#include "moc_teletextscreen.cpp"

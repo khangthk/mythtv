@@ -4,6 +4,7 @@
 
 // C++ headers
 #include <algorithm>
+#include <ranges>
 #include <utility>
 
 // QT headers
@@ -19,9 +20,6 @@
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythmedia.h"
 #include "libmythbase/mythrandom.h"
-#ifdef _MSC_VER
-#  include "libmythbase/compat.h"   // random
-#endif
 
 // MythUI headers
 #include "mythgesture.h"
@@ -73,14 +71,8 @@ MythUIType::~MythUIType()
 void MythUIType::Reset()
 {
     // Reset all children
-    QMutableListIterator<MythUIType *> it(m_childrenList);
-
-    while (it.hasNext())
-    {
-        it.next();
-        MythUIType *type = it.value();
+    for (auto *type : std::as_const(m_childrenList))
         type->Reset();
-    }
 }
 
 /**
@@ -152,19 +144,16 @@ MythUIType *MythUIType::GetChild(const QString &name) const
  */
 void MythUIType::DeleteChild(const QString &name)
 {
-    QMutableListIterator<MythUIType *> it(m_childrenList);
-
-    while (it.hasNext())
+    for (auto it = m_childrenList.begin(); it != m_childrenList.end(); /* no inc*/)
     {
-        it.next();
-        MythUIType *type = it.value();
-
+        MythUIType *type = *it;
         if (type->objectName() == name)
         {
             delete type;
-            it.remove();
+            it = m_childrenList.erase(it);
             return;
         }
+        ++it;
     }
 }
 
@@ -179,20 +168,17 @@ void MythUIType::DeleteChild(MythUIType *child)
     if (!child)
         return;
 
-    QMutableListIterator<MythUIType *> it(m_childrenList);
-
-    while (it.hasNext())
+    for (auto it = m_childrenList.begin(); it != m_childrenList.end(); /* no inc */)
     {
-        it.next();
-        MythUIType *type = it.value();
-
+        MythUIType *type = *it;
         if (type == child)
         {
             delete type;
-            it.remove();
+            it = m_childrenList.erase(it);
             child = nullptr;
             return;
         }
+        ++it;
     }
 }
 
@@ -210,7 +196,7 @@ QList<MythUIType *> MythUIType::GetAllDescendants(void)
 
     for (const auto & item :std::as_const(m_childrenList))
     {
-        descendants += item;
+        descendants += item;  // clazy:exclude=reserve-candidates
         descendants += item->GetAllDescendants();
     }
     return descendants;
@@ -1044,6 +1030,12 @@ bool MythUIType::TakeFocus(void)
     return true;
 }
 
+void MythUIType::SetFocusedName(const QString & widgetname)
+{
+    m_focusedName = widgetname;
+    emit RequestUpdate();
+}
+
 void MythUIType::Activate(void)
 {
 }
@@ -1151,8 +1143,8 @@ void MythUIType::AddFocusableChildrenToList(FocusInfoType &focusList)
     if (m_canHaveFocus)
         focusList.insert(m_focusOrder, this);
 
-    for (auto it = m_childrenList.crbegin(); it != m_childrenList.crend(); ++it)
-        (*it)->AddFocusableChildrenToList(focusList);
+    for (auto *child : std::ranges::reverse_view(m_childrenList))
+        child->AddFocusableChildrenToList(focusList);
 }
 
 int MythUIType::NormX(const int width)
@@ -1240,7 +1232,9 @@ bool MythUIType::ParseElement(
     //FIXME add movement etc.
 
     if (element.tagName() == "position")
+    {
         SetPosition(parsePoint(element));
+    }
     else if (element.tagName() == "area")
     {
         SetArea(parseRect(element));
@@ -1437,17 +1431,14 @@ void MythUIType::SetReverseDependence(MythUIType *dependee, bool reverse)
 
 void MythUIType::ConnectDependants(bool recurse)
 {
-    QMapIterator<QString, QString> it(m_dependsMap);
     QStringList dependees;
     QList<int> operators;
-    while(it.hasNext())
+    for (auto it = m_dependsMap.begin(); it != m_dependsMap.end(); ++it)
     {
-        it.next();
-
         // build list of operators and dependeees.
         dependees.clear();
         operators.clear();
-        QString name = it.value();
+        QString& name = it.value();
         QStringList tmp1 = name.split("&");
         for (const QString& t1 : std::as_const(tmp1))
         {
@@ -1503,3 +1494,5 @@ void MythUIType::ConnectDependants(bool recurse)
         }
     }
 }
+
+#include "moc_mythuitype.cpp"

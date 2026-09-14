@@ -55,8 +55,6 @@
 #else // !defined(MYTH_IMPLEMENT_VERBOSE)
 
 // This is used to define the enumerated type (used by all files)
-
-#ifndef _MSC_VER
     #define VERBOSE_PREAMBLE \
         enum VerboseMask {
     #define VERBOSE_POSTAMBLE \
@@ -64,13 +62,6 @@
         };
     #define VERBOSE_MAP(name,mask,additive,help) \
         name = (mask),
-#else
-    // msvc can't have 64bit enums
-    #define VERBOSE_PREAMBLE
-    #define VERBOSE_POSTAMBLE
-    #define VERBOSE_MAP(name,mask,additive,help) \
-    const uint64_t name = mask;
-#endif
 
 #define LOGLEVEL_PREAMBLE \
     enum LogLevel_t : std::int8_t {
@@ -184,6 +175,8 @@ VERBOSE_MAP(VB_REFCOUNT,  0x20000000000ULL, true,
             "Reference Count messages")
 VERBOSE_MAP(VB_HTTP,  0x40000000000ULL, true,
             "HTTP Server messages")
+VERBOSE_MAP(VB_LIRC,  0x80000000000ULL, true,
+            "LIRC Client messages")
 VERBOSE_MAP(VB_NONE,      0x00000000, false,
             "NO debug output")
 VERBOSE_POSTAMBLE
@@ -199,7 +192,8 @@ LOGLEVEL_MAP(LOG_WARNING, 4, 'W')
 LOGLEVEL_MAP(LOG_NOTICE,  5, 'N')
 LOGLEVEL_MAP(LOG_INFO,    6, 'I')
 LOGLEVEL_MAP(LOG_DEBUG,   7, 'D')
-LOGLEVEL_MAP(LOG_UNKNOWN, 8, '-')
+LOGLEVEL_MAP(LOG_TRACE,   8, 'T')
+LOGLEVEL_MAP(LOG_UNKNOWN, 9, '-')
 LOGLEVEL_POSTAMBLE
 
 #ifndef MYTH_IMPLEMENT_VERBOSE

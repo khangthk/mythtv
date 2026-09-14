@@ -2,8 +2,7 @@
 #include <vorbis/vorbisfile.h>
 
 // C++
-#include <cstdlib>
-#include <ctime>
+#include <cstdio>
 #include <iostream>
 
 // Qt
@@ -11,7 +10,7 @@
 #include <QString>
 
 // MythTV
-#include <libmyth/mythcontext.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythbase/mythrandom.h>
 #include <libmythmetadata/metaiooggvorbis.h>
 #include <libmythmetadata/musicmetadata.h>

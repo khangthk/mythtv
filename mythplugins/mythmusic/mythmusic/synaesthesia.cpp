@@ -18,6 +18,7 @@
 #include <QCoreApplication>
 #include <QPainter>
 #include <QImage>
+#include <numbers>
 
 // MythTV
 #include <libmythbase/compat.h>
@@ -91,7 +92,7 @@ void Synaesthesia::setupPalette(void)
             if (blue > 255) { excess += blue - 255; blue = 255; }
         }
 
-        double scale2 = (0.5 + (red + green + blue) / 768.0) / 1.5;
+        double scale2 = (0.5 + ((red + green + blue) / 768.0)) / 1.5;
         red *= scale2;
         green *= scale2;
         blue *= scale2;
@@ -157,7 +158,7 @@ int Synaesthesia::bitReverser(int i)
     int sum = 0;
     for (size_t j = 0; j < LogSize; j++)
     {
-        sum = (i & 1) + sum * 2;
+        sum = (i & 1) + (sum * 2);
         i >>= 1;
     }
     
@@ -182,8 +183,8 @@ void Synaesthesia::fft(double *x, double *y)
                 x[i] = (x[i] + x[l]);
                 double yt = y[i] - y[l];
                 y[i] = (y[i] + y[l]);
-                x[l] = xt * c - yt * s;
-                y[l] = xt * s + yt * c;
+                x[l] = (xt * c) - (yt * s);
+                y[l] = (xt * s) + (yt * c);
             }
         }
     }
@@ -214,8 +215,8 @@ void Synaesthesia::coreInit(void)
 {
     for (size_t i = 0; i < NumSamples; i++)
     {
-        m_negSinTable[i] = -sin(3.141592 * 2.0 / NumSamples * i);
-        m_cosTable[i] = cos(3.141592 * 2.0 / NumSamples * i);
+        m_negSinTable[i] = -sin(std::numbers::pi * 2.0 / NumSamples * i);
+        m_cosTable[i] = cos(std::numbers::pi * 2.0 / NumSamples * i);
         m_bitReverse[i] = bitReverser(i);
     }
 }
@@ -264,8 +265,9 @@ unsigned char Synaesthesia::getPixel(int x, int y, int where) const
 void Synaesthesia::fadeFade(void) const
 {
     auto *ptr = (uint32_t *)output;
-    int i = static_cast<ptrdiff_t>(m_outWidth) * m_outHeight * 2 / sizeof(uint32_t);
-    do {
+    for (int i = static_cast<ptrdiff_t>(m_outWidth) * m_outHeight * 2 / sizeof(uint32_t);
+         i > 0; i--)
+    {
         uint32_t x = *ptr;
         if (x)
         {
@@ -276,7 +278,7 @@ void Synaesthesia::fadeFade(void) const
         {
             ptr++;
         }
-    } while (--i > 0);
+    }
 }
 
 void Synaesthesia::fadePixelWave(int x, int y, int where, int step)
@@ -330,8 +332,7 @@ void Synaesthesia::fadeWave(void)
     for (int y = 1, start = (m_outWidth * 2) + 2, end = (m_outWidth * 4) - 2;
          y < m_outHeight - 1; y++, start += step, end += step) 
     {
-        int i2 = start;
-        do
+        for (int i2 = start; i2 < end; i2++)
         {
             short j2 = short((int(lastOutput[i2 - 2]) +
                               int(lastOutput[i2 + 2]) +
@@ -352,7 +353,7 @@ void Synaesthesia::fadeWave(void)
                 else
                     output[i2] = j2;
             }
-        } while(++i2 < end);
+        }
     }
 }
 
@@ -406,8 +407,7 @@ void Synaesthesia::fadeHeat(void)
     for(int y = 1, start = (m_outWidth * 2) + 2, end = (m_outWidth * 4) - 2;
         y < m_outHeight - 1; y++, start += step, end += step) 
     {
-        int i2 = start;
-        do
+        for (int i2 = start; i2 < end; i2++)
         {
             short j2 = short((int(lastOutput[i2 - 2]) +
                               int(lastOutput[i2 + 2]) +
@@ -415,7 +415,9 @@ void Synaesthesia::fadeHeat(void)
                               int(lastOutput[i2 + step])) >> 2) +
                 lastOutput[i2];
             if (!j2)
+            {
                 output[i2] = 0;
+            }
             else
             {
                 j2 = j2 - lastLastOutput[i2] +
@@ -427,7 +429,7 @@ void Synaesthesia::fadeHeat(void)
                 else
                     output[i2] = j2;
             }
-        } while(++i2 < end);
+        };
     }
 }
 
@@ -480,13 +482,13 @@ bool Synaesthesia::process(VisualNode *node)
         double y1 = y[m_bitReverse[i]];
         double x2 = x[m_bitReverse[NumSamples - i]];
         double y2 = y[m_bitReverse[NumSamples - i]];
-        double aa = NAN;
-        double bb = NAN;
-        a[i] = sqrt(aa = (x1 + x2) * (x1 + x2) + (y1 - y2) * (y1 - y2));
-        b[i] = sqrt(bb = (x1 - x2) * (x1 - x2) + (y2 + y2) * (y1 + y2));
+        double aa = ((x1 + x2) * (x1 + x2)) + ((y1 - y2) * (y1 - y2));
+        double bb = ((x1 - x2) * (x1 - x2)) + ((y2 + y2) * (y1 + y2));
+        a[i] = sqrt(aa);
+        b[i] = sqrt(bb);
         if (aa + bb != 0.0)
         {
-            clarity[i] = (int)(((x1 + x2) * (x1 - x2) + (y1 + y2) * (y1 - y2)) /
+            clarity[i] = (int)((((x1 + x2) * (x1 - x2)) + ((y1 + y2) * (y1 - y2))) /
                          (aa + bb) * 256);
         }
         else
@@ -506,7 +508,7 @@ bool Synaesthesia::process(VisualNode *node)
     double brightFactor2 = (brightFactor / 65536.0 / NumSamples) *
                            sqrt(m_outHeight * m_outWidth / (320.0 * 200.0));
 
-    m_energyAvg = m_energyAvg * 0.95 + energy * 0.05;
+    m_energyAvg = (m_energyAvg * 0.95) + (energy * 0.05);
     if (m_energyAvg > 0.0)
         brightFactor2 *= 80.0 / (m_energyAvg + 5.0);
 
@@ -599,9 +601,7 @@ bool Synaesthesia::draw(QPainter *p, [[maybe_unused]] const QColor &back)
         auto *ptrTop = (uint32_t *)(m_outputImage->scanLine(j));
         auto *ptrBot = (uint32_t *)(m_outputImage->scanLine(j+1));
 
-        int i = m_outWidth / 4;
-
-        do
+        for (int i = m_outWidth / 4; i > 0; i--)
         {
             unsigned int const r1 = *(ptrOutput++);
             unsigned int const r2 = *(ptrOutput++);
@@ -614,13 +614,13 @@ bool Synaesthesia::draw(QPainter *p, [[maybe_unused]] const QColor &back)
             *(ptrTop++) = v | (((r2 & 0x000000f0UL) << 12) |
                                ((r2 & 0x0000f000UL) << 8) |
                                ((r2 & 0x00f00000UL) << 4) |
-                               ((r2 & 0xf0000000UL)));
+                               ( r2 & 0xf0000000UL));
 
             *(ptrBot++) = v | (((r2 & 0x000000f0UL) << 12) |
                                ((r2 & 0x0000f000UL) << 8) |
                                ((r2 & 0x00f00000UL) << 4) |
-                               ((r2 & 0xf0000000UL)));
-        } while (--i > 0);
+                               ( r2 & 0xf0000000UL));
+        }
     }
 
     p->drawImage(0, 0, *m_outputImage);

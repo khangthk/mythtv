@@ -1,5 +1,6 @@
 // MythTV
 #include "libmythbase/mythcorecontext.h"
+#include "libmythbase/mythlogging.h"
 #include "mythvideobounds.h"
 #include "mythvideoprofile.h"
 #include "mythvideogpu.h"
@@ -133,3 +134,5 @@ void MythVideoGPU::SetViewportRect(QRect DisplayVisibleRect)
 {
     SetMasterViewport(DisplayVisibleRect.size());
 }
+
+#include "moc_mythvideogpu.cpp"

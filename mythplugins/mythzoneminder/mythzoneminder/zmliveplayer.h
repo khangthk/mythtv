@@ -35,7 +35,7 @@ class Player
 {
   public:
     Player(void) = default;
-    ~Player(void);
+    ~Player(void) = default;
 
     void updateFrame(const uchar* buffer);
     void updateStatus(void);
@@ -52,8 +52,6 @@ class Player
     MythUIText  *m_statusText {nullptr};
     MythUIText  *m_cameraText {nullptr};
 
-    uchar       *m_rgba       {nullptr};
-
     Monitor      m_monitor;
 };
 
@@ -67,7 +65,6 @@ class ZMLivePlayer : public MythScreenType
 
     bool Create(void) override; // MythScreenType
     bool keyPressEvent(QKeyEvent *event) override; // MythScreenType
-    void customEvent(QEvent *event) override; // MythUIType
 
     void ShowMenu() override; // MythScreenType
 
@@ -78,6 +75,7 @@ class ZMLivePlayer : public MythScreenType
     bool initMonitorLayout(int layout);
 
   protected:
+    void customEvent(QEvent *event) override; // MythUIType
     MythUIType* GetMythUIType(const QString &name, bool optional = false);
     bool hideAll();
     void stopPlayers(void);

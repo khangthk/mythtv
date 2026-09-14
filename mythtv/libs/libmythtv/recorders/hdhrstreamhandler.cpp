@@ -1,9 +1,14 @@
 // -*- Mode: c++ -*-
 
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
+
 // POSIX headers
 #include <fcntl.h>
 #include <unistd.h>
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
 #include <sys/select.h>
 #include <sys/ioctl.h>
 #endif
@@ -225,7 +230,7 @@ static QString filt_str(uint pid)
 {
     uint pid0 = (pid / (16*16*16)) % 16;
     uint pid1 = (pid / (16*16))    % 16;
-    uint pid2 = (pid / (16))        % 16;
+    uint pid2 = (pid /  16)        % 16;
     uint pid3 = pid % 16;
     return QString("0x%1%2%3%4")
         .arg(pid0,0,16).arg(pid1,0,16)

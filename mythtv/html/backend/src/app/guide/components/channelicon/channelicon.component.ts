@@ -1,19 +1,32 @@
 import { Component, OnInit, Input } from '@angular/core';
-import { Channel } from 'src/app/services/interfaces/channel.interface';
+import { Channel } from '../../../services/interfaces/channel.interface';
 import { GuideComponent } from '../../guide.component';
 
+import { TooltipModule } from 'primeng/tooltip';
+
 @Component({
-  selector: 'app-guide-channelicon',
-  templateUrl: './channelicon.component.html',
-  styleUrls: ['./channelicon.component.css']
+    selector: 'app-guide-channelicon',
+    templateUrl: './channelicon.component.html',
+    styleUrls: ['./channelicon.component.css'],
+    imports: [TooltipModule]
 })
 export class ChannelIconComponent implements OnInit {
-  @Input() channel!: Channel;
-  @Input() guideComponent!: GuideComponent;
+    @Input() channel!: Channel;
+    @Input() guideComponent!: GuideComponent;
 
-  constructor() { }
+    authorization = '';
 
-  ngOnInit(): void {
-  }
+    constructor() { }
+
+    ngOnInit(): void {
+        let accessToken = sessionStorage.getItem('accessToken');
+        if (accessToken == null)
+            this.authorization = ''
+        else
+            this.authorization = '&authorization=' + accessToken;
+    }
+    URLencode(x: string): string {
+        return encodeURI(x);
+    }
 
 }

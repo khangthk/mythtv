@@ -1,7 +1,8 @@
 #include <QString>
 
-#include "libmythbase/mythcorecontext.h"
 #include "mythfilldatabase_commandlineparser.h"
+
+#include "libmythbase/mythappname.h"
 
 MythFillDatabaseCommandLineParser::MythFillDatabaseCommandLineParser() :
     MythCommandLineParser(MYTH_APPNAME_MYTHFILLDATABASE)
@@ -138,17 +139,10 @@ void MythFillDatabaseCommandLineParser::LoadArguments(void)
         ->SetGroup("Channel List Handling");
     add("--no-mark-repeats", "markrepeats", true, "do not mark repeats", "");
 
-    add("--graboptions", "graboptions", "", "", "")
-        ->SetRemoved("mythfilldatabase now passes any text after an\n"
-           "          independent '--' directly to the external grabber.\n"
-           "          e.g. mythfilldatabase -- --daily", "0.25");
-    add("--mark-repeats", "oldmarkrepeats", "", "", "")
-        ->SetRemoved("This is now the default behavior. Use\n"
-           "          --no-mark-repeats to disable.", "0.25");
     add("--dd-grab-all", "ddgraball", false, "", "")
-        ->SetDeprecated("It's no longer valid with Schedules Direct XMLTV.\n"
+        ->SetRemoved("It's no longer valid with Schedules Direct XMLTV.\n"
           "          Remove in mythtv-setup General -> Program Schedule\n"
-          "          -> Downloading Options -> Guide Data Arguements");
+                     "          -> Downloading Options -> Guide Data Arguements", "35.0");
     add("--no-resched", "noresched", false,
             "Do not invoke the rescheduler in the backend.",
 	    "This option prevents mythfilldatabase from asking the backend "

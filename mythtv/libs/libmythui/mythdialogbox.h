@@ -11,16 +11,14 @@
 #include <QStringList>
 
 // MythTV headers
-#include "libmythbase/mythlogging.h"
 #include "libmythui/mythmainwindow.h"
 #include "libmythui/mythscreentype.h"
+#include "libmythui/mythuibuttonlist.h"
 #include "libmythui/mythuitextedit.h"
 
 
 class QTimer;
 
-class MythUIButtonListItem;
-class MythUIButtonList;
 class MythUIButton;
 class MythUITextEdit;
 class MythUISpinBox;
@@ -114,10 +112,10 @@ class MUI_PUBLIC MythMenu
                  bool checked = false);
     // For class member non-const functions.
     template <typename SLOT>
-    typename std::enable_if_t<FunctionPointerTest<SLOT>::MemberFunction>
-    AddItem(const QString &title, const SLOT &slot,
+    void AddItem(const QString &title, const SLOT &slot,
                   MythMenu *subMenu = nullptr, bool selected = false,
                   bool checked = false)
+    requires is_nonconst_member_func_v<SLOT>
     {
         auto slot2 = static_cast<MythUICallbackMF>(slot);
         auto *item = new MythMenuItem(title, slot2, checked, subMenu);
@@ -125,10 +123,10 @@ class MUI_PUBLIC MythMenu
     }
     // For class member const functions.
     template <typename SLOT>
-    typename std::enable_if_t<FunctionPointerTest<SLOT>::MemberConstFunction>
-    AddItem(const QString &title, const SLOT &slot,
+    void AddItem(const QString &title, const SLOT &slot,
                   MythMenu *subMenu = nullptr, bool selected = false,
                   bool checked = false)
+    requires is_const_member_func_v<SLOT>
     {
         auto slot2 = static_cast<MythUICallbackMFc>(slot);
         auto *item = new MythMenuItem(title, slot2, checked, subMenu);
@@ -205,9 +203,9 @@ class MUI_PUBLIC MythDialogBox : public MythScreenType
     }
     // For class member non-const functions.
     template <typename SLOT>
-    typename std::enable_if_t<FunctionPointerTest<SLOT>::MemberFunction>
-    AddButton(const QString &title, const SLOT &slot,
+    void AddButton(const QString &title, const SLOT &slot,
                     bool newMenu = false, bool setCurrent = false)
+    requires is_nonconst_member_func_v<SLOT>
     {
         auto slot2 = static_cast<MythUICallbackMF>(slot);
         AddButtonV(title, QVariant::fromValue(slot2), newMenu, setCurrent);
@@ -215,9 +213,9 @@ class MUI_PUBLIC MythDialogBox : public MythScreenType
     }
     // For class member const functions.
     template <typename SLOT>
-    typename std::enable_if_t<FunctionPointerTest<SLOT>::MemberConstFunction>
-    AddButton(const QString &title, const SLOT &slot,
+    void AddButton(const QString &title, const SLOT &slot,
                     bool newMenu = false, bool setCurrent = false)
+    requires is_const_member_func_v<SLOT>
     {
         auto slot2 = static_cast<MythUICallbackMFc>(slot);
         AddButtonV(title, QVariant::fromValue(slot2), newMenu, setCurrent);
@@ -476,7 +474,7 @@ class MUI_PUBLIC MythTimeInputDialog : public MythScreenType
         // Work forward/backwards or backwards and fowards from start time
         kFutureDates  = 0x100,
         kPastDates    = 0x200,
-        kAllDates     = 0x300
+        kAllDates     = 0x300  // clazy:exclude=unexpected-flag-enumerator-value
     };
 
     MythTimeInputDialog(MythScreenStack *parent, QString message,
@@ -513,39 +511,11 @@ template <class OBJ, typename FUNC>
 MythConfirmationDialog  *ShowOkPopup(const QString &message, const OBJ *parent,
                                      FUNC slot, bool showCancel = false)
 {
-    QString                  LOC = "ShowOkPopup('" + message + "') - ";
-    MythScreenStack         *stk = nullptr;
-
-    MythMainWindow *win = GetMythMainWindow();
-
-    if (win)
-        stk = win->GetStack("popup stack");
-    else
+    auto* pop = ShowOkPopup(message, showCancel);
+    if (pop != nullptr && parent != nullptr)
     {
-        LOG(VB_GENERAL, LOG_ERR, LOC + "no main window?");
-        return nullptr;
-    }
-
-    if (!stk)
-    {
-        LOG(VB_GENERAL, LOG_ERR, LOC + "no popup stack? "
-                                       "Is there a MythThemeBase?");
-        return nullptr;
-    }
-
-    auto *pop = new MythConfirmationDialog(stk, message, showCancel);
-    if (pop->Create())
-    {
-        stk->AddScreen(pop);
-        if (parent)
-            QObject::connect(pop, &MythConfirmationDialog::haveResult, parent, slot,
-                             Qt::QueuedConnection);
-    }
-    else
-    {
-        delete pop;
-        pop = nullptr;
-        LOG(VB_GENERAL, LOG_ERR, LOC + "Couldn't Create() Dialog");
+        QObject::connect(pop, &MythConfirmationDialog::haveResult, parent, slot,
+                         Qt::QueuedConnection);
     }
 
     return pop;

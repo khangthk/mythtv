@@ -443,6 +443,8 @@ QDomElement MythWSDL::CreateMethodType( const HTTPMethodPtr& handler,
         size_t count = 1;
         QList<QByteArray> paramNames;
         QList<QByteArray> paramTypes;
+        paramNames.reserve(typecount);
+        paramTypes.reserve(typecount);
         for (count=1; count < typecount; count++)
         {
             auto name  = handler->m_names[count];
@@ -533,7 +535,7 @@ QString MythWSDL::AddTypeInfo( QString sType )
         sCustomAttr = "enum";
     }
 
-    TypeInfo info = { sCustomAttr, QString() };
+    TypeInfo info = { .sAttrName=sCustomAttr, .sContentType=QString() };
 
     m_typesToInclude.insert( sType, info );
 
@@ -549,7 +551,7 @@ QString MythWSDL::ReadClassInfo( const QMetaObject *pMeta, const QString &sKey )
     int nIdx = -1;
 
     if (pMeta)
-        nIdx = pMeta->indexOfClassInfo( sKey.toUtf8() );
+        nIdx = pMeta->indexOfClassInfo( sKey.toUtf8().constData() );
 
     if (nIdx >=0)
         return pMeta->classInfo( nIdx ).value();

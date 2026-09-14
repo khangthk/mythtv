@@ -4,11 +4,13 @@
 #define TVPLAY_H
 
 // C++
+#include <array>
 #include <cstdint>
 #include <utility>
 #include <vector>
 
 // Qt
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QReadWriteLock>
 #include <QWaitCondition>
 #include <QStringList>
@@ -21,10 +23,11 @@
 #include <QVector>
 
 // MythTV
-#include "libmyth/audio/volumebase.h"
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythdeque.h"
 #include "libmythbase/mythtimer.h"
 #include "libmythbase/referencecounter.h"
+#include "libmythbase/mthreadpool.h"
 
 #include "channelgroup.h"
 #include "channelinfo.h"
@@ -58,6 +61,7 @@ struct osdInfo;
 using EMBEDRETURNVOID        = void (*) (void *, bool);
 using EMBEDRETURNVOIDEPG     = void (*) (uint, const QString &, const QDateTime, TV *, bool, bool, int);
 using EMBEDRETURNVOIDFINDER  = void (*) (TV *, bool, bool);
+using EMBEDRETURNVOIDPROGLIST = void (*) (TV *, int, const QString &);
 using EMBEDRETURNVOIDSCHEDIT = void (*) (const ProgramInfo *, void *);
 
 // Locking order
@@ -89,25 +93,26 @@ using EMBEDRETURNVOIDSCHEDIT = void (*) (const ProgramInfo *, void *);
 // desirable and should be avoided when possible.)
 //
 
-enum scheduleEditTypes {
+enum scheduleEditTypes : uint8_t {
     kScheduleProgramGuide = 0,
     kScheduleProgramFinder,
     kScheduledRecording,
     kViewSchedule,
-    kPlaybackBox
+    kPlaybackBox,
+    kScheduleProgramList
 };
 
 /**
  * Type of message displayed in ShowNoRecorderDialog()
  */
-enum NoRecorderMsg
+enum NoRecorderMsg : uint8_t
 {
     kNoRecorders = 0,  ///< No free recorders
     kNoCurrRec = 1,    ///< No current recordings
     kNoTuners = 2,     ///< No capture cards configured
 };
 
-enum {
+enum : uint8_t {
     kStartTVNoFlags           = 0x00,
     kStartTVInPlayList        = 0x02,
     kStartTVByNetworkCommand  = 0x04,
@@ -155,9 +160,14 @@ class MTV_PUBLIC TV : public TVPlaybackState, public MythTVMenuItemDisplayer, pu
     friend class GuideGrid;
     friend class TVBrowseHelper;
 
+    using string_pair = QPair<QString, QString>;
+
     Q_OBJECT
 
   public:
+    bool event(QEvent* Event) override;
+    bool eventFilter(QObject* Object, QEvent* Event) override;
+
     static bool IsTVRunning();
     static bool StartTV(ProgramInfo* TVRec, uint Flags, const ChannelInfoList& Selection = ChannelInfoList());
     static bool IsPaused();
@@ -166,18 +176,20 @@ class MTV_PUBLIC TV : public TVPlaybackState, public MythTVMenuItemDisplayer, pu
     static int  ConfiguredTunerCards();
     static bool IsTunable(uint ChanId);
     void        ReloadKeys();
+    MThreadPool* GetPosThreadPool();
 
     bool IsSameProgram(const ProgramInfo* ProgInfo) const;
+    bool MenuItemDisplay(const MythTVMenuItemContext& Context, MythOSDDialogData* Menu) override;
 
   public slots:
-    bool event(QEvent* Event) override;
-    bool eventFilter(QObject* Object, QEvent* Event) override;
-    void timerEvent(QTimerEvent* Event) override;
     void StopPlayback();
     void HandleOSDClosed(int OSDType);
 
   signals:
     void PlaybackExiting(TV* Player);
+
+  protected:
+    void timerEvent(QTimerEvent* Event) override;
 
   protected slots:
     void onApplicationStateChange(Qt::ApplicationState State);
@@ -194,6 +206,7 @@ class MTV_PUBLIC TV : public TVPlaybackState, public MythTVMenuItemDisplayer, pu
     static inline EMBEDRETURNVOIDEPG RunProgramGuidePtr = nullptr;
     static inline EMBEDRETURNVOIDFINDER RunProgramFinderPtr = nullptr;
     static inline EMBEDRETURNVOIDSCHEDIT RunScheduleEditorPtr = nullptr;
+    static inline EMBEDRETURNVOIDPROGLIST RunProgramListPtr = nullptr;
 
     explicit TV(MythMainWindow* MainWindow);
    ~TV() override;
@@ -250,11 +263,13 @@ class MTV_PUBLIC TV : public TVPlaybackState, public MythTVMenuItemDisplayer, pu
     void HandleSaveLastPlayPosEvent();
 
     // Commands used by frontend UI screens (PlaybackBox, GuideGrid etc)
-    void EditSchedule(int EditType = kScheduleProgramGuide);
+    void EditSchedule(int EditType = kScheduleProgramGuide,
+                      const QString& arg = "");
     bool IsTunablePriv(uint ChanId);
     static QVector<uint> IsTunableOn(PlayerContext* Context, uint ChanId);
     void ChangeChannel(const ChannelInfoList& Options);
-    void DoEditSchedule(int EditType = kScheduleProgramGuide);
+    void DoEditSchedule(int EditType = kScheduleProgramGuide,
+                        const QString & EditArg = "");
     QString GetRecordingGroup() const;
     void UpdateChannelList(int GroupID);
 
@@ -284,7 +299,7 @@ class MTV_PUBLIC TV : public TVPlaybackState, public MythTVMenuItemDisplayer, pu
     void SetInPlayList(bool InPlayList) { m_inPlaylist = InPlayList; }
     void setUnderNetworkControl(bool setting) { m_underNetworkControl = setting; }
     void PrepToSwitchToRecordedProgram(const ProgramInfo& ProgInfo);
-    enum BookmarkAction {
+    enum BookmarkAction : uint8_t {
         kBookmarkAlways,
         kBookmarkNever,
         kBookmarkAuto // set iff db_playback_exit_prompt==2
@@ -360,7 +375,7 @@ class MTV_PUBLIC TV : public TVPlaybackState, public MythTVMenuItemDisplayer, pu
         DoSeek(TimeInSec.count(), Msg, TimeIsOffset, HonorCutlist); };
     bool DoPlayerSeek(float Time);
     bool DoPlayerSeekToFrame(uint64_t FrameNum);
-    enum ArbSeekWhence { ARBSEEK_SET = 0, ARBSEEK_REWIND, ARBSEEK_FORWARD, ARBSEEK_END };
+    enum ArbSeekWhence : uint8_t { ARBSEEK_SET = 0, ARBSEEK_REWIND, ARBSEEK_FORWARD, ARBSEEK_END };
     void DoSeekAbsolute(long long Seconds, bool HonorCutlist);
     void DoArbSeek(ArbSeekWhence Whence, bool HonorCutlist);
     void DoJumpFFWD();
@@ -484,8 +499,12 @@ class MTV_PUBLIC TV : public TVPlaybackState, public MythTVMenuItemDisplayer, pu
     // Menu dialog
     void ShowOSDMenu(bool isCompact = false);
     void FillOSDMenuJumpRec(const QString &Category = "", int Level = 0, const QString &Selected = "");
+    static void FillOSDMenuCastButton(MythOSDDialogData & dialog,
+                               const QVector<string_pair> & people);
+    void FillOSDMenuCast(void);
+    void FillOSDMenuActorShows(const QString & actor, int person_id,
+                               const QString & category = "");
     void PlaybackMenuShow(const MythTVMenu &Menu, const QDomNode &Node, const QDomNode &Selected);
-    bool MenuItemDisplay(const MythTVMenuItemContext& Context, MythOSDDialogData* Menu) override;
     bool MenuItemDisplayPlayback(const MythTVMenuItemContext& Context, MythOSDDialogData* Menu);
     bool MenuItemDisplayCutlist(const MythTVMenuItemContext& Context, MythOSDDialogData* Menu);
     void PlaybackMenuInit(const MythTVMenu& Menu);
@@ -499,8 +518,16 @@ class MTV_PUBLIC TV : public TVPlaybackState, public MythTVMenuItemDisplayer, pu
     void ShowLCDChannelInfo();
     void ShowLCDDVDInfo();
 
+    // Active ChannelGroup
+    static inline int m_activeChannelGroupId {-1};
+    static void SetActiveChannelGroupId(int channelgroupid) {m_activeChannelGroupId = channelgroupid; }
+    static int GetActiveChannelGroupId() {return m_activeChannelGroupId; }
+
   private:
+    void RetrieveCast(const ProgramInfo& ProgInfo);
+
     MythMainWindow*   m_mainWindow { nullptr };
+    MThreadPool*      m_posThreadPool { nullptr };
 
     // Configuration variables from database
     QString           m_dbChannelFormat {"<num> <sign>"};
@@ -556,11 +583,15 @@ class MTV_PUBLIC TV : public TVPlaybackState, public MythTVMenuItemDisplayer, pu
     QMutex                    m_progListsLock;
     QMap<QString,ProgramList> m_progLists;
 
+    QVector<string_pair> m_actors;
+    QVector<string_pair> m_guestStars;
+    QVector<string_pair> m_guests;
+
     mutable QRecursiveMutex m_chanEditMapLock; ///< Lock for chanEditMap and ddMap
     InfoMap        m_chanEditMap;          ///< Channel Editing initial map
 
     class SleepTimerInfo;
-    static const std::vector<SleepTimerInfo> s_sleepTimes;
+    static const std::vector<SleepTimerInfo> kSleepTimes;
     uint                   m_sleepIndex {0};          ///< Index into sleep_times.
     std::chrono::milliseconds m_sleepTimerTimeout {0ms};   ///< Current sleep timeout in msec
     int                    m_sleepTimerId {0};        ///< Timer for turning off playback.
@@ -678,8 +709,8 @@ class MTV_PUBLIC TV : public TVPlaybackState, public MythTVMenuItemDisplayer, pu
     // XXX This ignores kTrackTypeTextSubtitle which is greater than
     // kTrackTypeCount, and it unnecessarily includes
     // kTrackTypeUnknown.
-    QStringList m_tvmTracks[kTrackTypeCount];
-    int         m_tvmCurtrack[kTrackTypeCount] {};
+    std::array<QStringList,kTrackTypeCount> m_tvmTracks;
+    std::array<int,kTrackTypeCount>         m_tvmCurtrack {};
 
     // Audio
     bool    m_tvmAvsync {true};
@@ -745,11 +776,27 @@ class MTV_PUBLIC TV : public TVPlaybackState, public MythTVMenuItemDisplayer, pu
     static inline const std::chrono::milliseconds kErrorRecoveryCheckFrequency  = 250ms;
     static inline const std::chrono::milliseconds kEndOfRecPromptCheckFrequency = 250ms;
     static inline const std::chrono::milliseconds kSaveLastPlayPosTimeout       = 5s;
-#ifdef USING_VALGRIND
+#if CONFIG_VALGRIND
     static inline const std::chrono::milliseconds kEndOfPlaybackFirstCheckTimer = 1min;
 #else
     static inline const std::chrono::milliseconds kEndOfPlaybackFirstCheckTimer = 5s;
 #endif
+};
+
+class SavePositionThread : public QRunnable
+{
+    public:
+        SavePositionThread(ProgramInfo *progInfoPtr, uint64_t framesPos):
+            m_progInfo(progInfoPtr),
+            m_framesPlayed(framesPos)
+        {
+        }
+
+        void run() override; // QRunnable
+
+    private:
+        ProgramInfo *m_progInfo {nullptr};
+        uint64_t     m_framesPlayed {0};
 };
 
 #endif

@@ -30,6 +30,8 @@ function(find_or_build_udfread)
   ExternalProject_Add(
     udfread
     SOURCE_DIR ${PROJECT_SOURCE_DIR}/mythtv/external/libudfread
+    DOWNLOAD_COMMAND
+      ${CMAKE_COMMAND} -E echo "Using udfread sources in <SOURCE_DIR>"
     CMAKE_ARGS --no-warn-unused-cli ${CMDLINE_ARGS_UDFREAD} ${PLATFORM_ARGS}
     CMAKE_CACHE_ARGS
       -DCMAKE_FIND_ROOT_PATH:STRING=${CMAKE_FIND_ROOT_PATH}
@@ -44,6 +46,11 @@ function(find_or_build_udfread)
   set(ProjectDepends
       ${ProjectDepends} udfread
       PARENT_SCOPE)
+
+  add_dependencies(embedded_libs udfread)
+  if(LIBS_INSTALL_UDFREAD)
+    set_target_properties(embedded_libs PROPERTIES REQUIRES_RW TRUE)
+  endif()
 endfunction()
 
 find_or_build_udfread()

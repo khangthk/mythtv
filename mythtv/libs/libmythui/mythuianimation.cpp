@@ -1,7 +1,9 @@
 #include "mythuianimation.h"
+
+#include "libmythbase/mythdb.h"
+
 #include "mythuitype.h"
 #include "mythmainwindow.h"
-#include "libmythbase/mythcorecontext.h"
 
 #include <QDomDocument>
 
@@ -25,7 +27,7 @@ QRect UIEffects::GetExtent(const QSize size) const
     case BottomLeft:
     case Bottom:
     case BottomRight:
-        y = size.height() - zoomedHeight / 2; break;
+        y = size.height() - (zoomedHeight / 2); break;
     }
 
     switch (m_centre)
@@ -41,7 +43,7 @@ QRect UIEffects::GetExtent(const QSize size) const
     case TopRight:
     case Right:
     case BottomRight:
-        x = size.width() - zoomedWidth / 2; break;
+        x = size.width() - (zoomedWidth / 2); break;
     }
 
     return {x, y, zoomedWidth, zoomedHeight};

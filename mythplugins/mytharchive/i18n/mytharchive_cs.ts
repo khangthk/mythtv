@@ -14,18 +14,18 @@ Byla v nastavení definována správná cesta?</translation>
 <context>
     <name>(MythArchiveMain)</name>
     <message>
-        <location filename="../mytharchive/mytharchive.cpp" line="100"/>
+        <location filename="../mytharchive/mytharchive.cpp" line="105"/>
         <source>Found a lock file but the owning process isn&apos;t running!
 Removing stale lock file.</source>
         <translation type="unfinished">Nalezen zámek souboru, ale proces, který jej vlastní není spuštěn. Odstraňuji tento starý zámek souboru.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mytharchive.cpp" line="211"/>
+        <location filename="../mytharchive/mytharchive.cpp" line="216"/>
         <source>Last run did not create a playable DVD.</source>
         <translation type="unfinished">Při posledním spuštění se nevytvořilo hratelné DVD.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mytharchive.cpp" line="218"/>
+        <location filename="../mytharchive/mytharchive.cpp" line="223"/>
         <source>Last run failed to create a DVD.</source>
         <translation type="unfinished">Při posledním spuštěním selhalo vytváření DVD.</translation>
     </message>
@@ -33,7 +33,7 @@ Removing stale lock file.</source>
 <context>
     <name>ArchiveFileSelector</name>
     <message>
-        <location filename="../mytharchive/importnative.cpp" line="205"/>
+        <location filename="../mytharchive/importnative.cpp" line="206"/>
         <source>Find File To Import</source>
         <translation>Najít soubory pro import</translation>
     </message>
@@ -58,7 +58,7 @@ Removing stale lock file.</source>
         <translation type="obsolete">Domů</translation>
     </message>
     <message>
-        <location filename="../mytharchive/importnative.cpp" line="265"/>
+        <location filename="../mytharchive/importnative.cpp" line="266"/>
         <source>The selected item is not a valid archive file!</source>
         <translation>Vybraná položka není platným souborem archivu!</translation>
     </message>
@@ -66,333 +66,333 @@ Removing stale lock file.</source>
 <context>
     <name>ArchiveSettings</name>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="20"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="19"/>
         <source>MythArchive Temp Directory</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="23"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="22"/>
         <source>Location where MythArchive should create its temporary work files. LOTS of free space required here.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="35"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="34"/>
         <source>MythArchive Share Directory</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="38"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="37"/>
         <source>Location where MythArchive stores its scripts, intro movies and theme files</source>
         <translation type="unfinished">Umístění kde může MythArchiv ukládat svoje skripty, filmová intra a soubory motivů</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="50"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="49"/>
         <source>Video format</source>
         <translation type="unfinished">Video formát</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="55"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="54"/>
         <source>Video format for DVD recordings, PAL or NTSC.</source>
         <translation type="unfinished">Video formát pro nahrávání DVD, PAL nebo NTSC.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="64"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="63"/>
         <source>File Selector Filter</source>
         <translation type="unfinished">Filtr pro výběr souborů</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="67"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="66"/>
         <source>The file name filter to use in the file selector.</source>
         <translation type="unfinished">Filtr jmen souborů pro využití při výběru videa.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="76"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="75"/>
         <source>Location of DVD</source>
         <translation type="unfinished">Umístění DVD</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="79"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="78"/>
         <source>Which DVD drive to use when burning discs.</source>
         <translation type="unfinished">Kterou DVD mechaniku použít při vypalování disků.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="89"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="88"/>
         <source>DVD Drive Write Speed</source>
         <translation type="unfinished">Rychlost mechaniky pro vypalování DVD</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="92"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="91"/>
         <source>This is the write speed to use when burning a DVD. Set to 0 to allow growisofs to choose the fastest available speed.</source>
         <translation type="unfinished">Toto je rychlost použitá při vypalování DVD. Pokud nastaveno na 0, growisofs zvolí maximální dostupnou rychlost.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="103"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="102"/>
         <source>Command to play DVD</source>
         <translation type="unfinished">Příkaz pro přehrání DVD</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="106"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="105"/>
         <source>Command to run when test playing a created DVD. &apos;Internal&apos; will use the internal MythTV player. %f will be replaced with the path to the created DVD structure eg. &apos;xine -pfhq --no-splash dvd:/%f&apos;.</source>
         <translation type="unfinished">Příkaz pro testovací spuštění vytvořeného DVD. &apos;Internal&apos; použije interní MythTV přehrávač. %f bude nahrazeno cestou k vytvořenému DVD např. &apos;xine -pfhq --no-splash dvd:/%f&apos;.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="119"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="118"/>
         <source>Copy remote files</source>
         <translation type="unfinished">Kopírovat vzdálené soubory</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="122"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="121"/>
         <source>If set files on remote filesystems will be copied over to the local filesystem before processing. Speeds processing and reduces bandwidth on the network</source>
         <translation type="unfinished">Pokud nastaveno, soubory na vzdálených souborových systémech budou před zpracováním zkopírovány na lokální souborový systém. Zrychluje se tím zpracování a redukuje zátěž sítě.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="134"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="133"/>
         <source>Always Use Mythtranscode</source>
         <translation type="unfinished">Vždy použít Mythtranscode</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="137"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="136"/>
         <source>If set mpeg2 files will always be passed though mythtranscode to clean up any errors. May help to fix some audio problems. Ignored if &apos;Use ProjectX&apos; is set.</source>
         <translation type="unfinished">Pokud nastaveno, soubory mpeg2 budou vždy zpracovány pomocí mythtranscode pro vyčištění chyb. To může pomoci odstranit některé problémy se zvukem. Je-li nastaveno &apos;Použít ProjectX&apos;, tato volba je ignorována.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="149"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="148"/>
         <source>Use ProjectX</source>
         <translation type="unfinished">Použít ProjectX</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="152"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="151"/>
         <source>If set ProjectX will be used to cut commercials and split mpeg2 files instead of mythtranscode and mythreplex.</source>
         <translation type="unfinished">Pokud nastaveno, ProjectX bude použit pro odstranění reklam a rozdělení souborů mpeg2 místo mythtranscode a mythreplex.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="163"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="162"/>
         <source>Use FIFOs</source>
         <translation type="unfinished">Používat FIFO</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="166"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="165"/>
         <source>The script will use FIFOs to pass the output of mplex into dvdauthor rather than creating intermediate files. Saves time and disk space during multiplex operations but not supported on Windows platform</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="179"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="178"/>
         <source>Add Subtitles</source>
         <translation type="unfinished">Přidat titulky</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="182"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="181"/>
         <source>If available this option will add subtitles to the final DVD. Requires &apos;Use ProjectX&apos; to be on.</source>
         <translation type="unfinished">Pokud jsou k dispozici titulky, tato volba je přidá do finálního DVD. Vyžaduje aktivní volbu &apos;Použít ProjectX&apos;.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="192"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="191"/>
         <source>Main Menu Aspect Ratio</source>
         <translation type="unfinished">Poměr stran hlavního menu</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="194"/>
-        <location filename="../mytharchive/archivesettings.cpp" line="210"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="193"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="209"/>
         <source>4:3</source>
         <comment>Aspect ratio</comment>
         <translation type="unfinished">4:3</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="195"/>
-        <location filename="../mytharchive/archivesettings.cpp" line="211"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="194"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="210"/>
         <source>16:9</source>
         <comment>Aspect ratio</comment>
         <translation type="unfinished">16:9</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="199"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="198"/>
         <source>Aspect ratio to use when creating the main menu.</source>
         <translation type="unfinished">Poměr stran použitý při vytváření hlavního menu.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="208"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="207"/>
         <source>Chapter Menu Aspect Ratio</source>
         <translation type="unfinished">Poměr stran menu kapitol</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="212"/>
-        <location filename="../mytharchive/archivesettings.cpp" line="221"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="211"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="220"/>
         <source>Video</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="217"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="216"/>
         <source>Aspect ratio to use when creating the chapter menu. &apos;%1&apos; means use the same aspect ratio as the associated video.</source>
         <extracomment>%1 is the translation of the &quot;Video&quot; combo box choice</extracomment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="228"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="227"/>
         <source>Date format</source>
         <translation type="unfinished">Formát data</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="231"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="230"/>
         <source>Samples are shown using today&apos;s date.</source>
         <translation type="unfinished">Příklady využívají dnešní datum.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="237"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="236"/>
         <source>Samples are shown using tomorrow&apos;s date.</source>
         <translation type="unfinished">Příklady využívají zítřejší datum.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="255"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="254"/>
         <source>Your preferred date format to use on DVD menus. %1</source>
         <extracomment>%1 gives additional info on the date used</extracomment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="264"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="263"/>
         <source>Time format</source>
         <translation type="unfinished">Formát času</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="271"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="270"/>
         <source>Your preferred time format to display on DVD menus. You must choose a format with &quot;AM&quot; or &quot;PM&quot; in it, otherwise your time display will be 24-hour or &quot;military&quot; time.</source>
         <translation type="unfinished">Preferovaný formát času pro menu DVD. Nutno zvolit formát s &quot;AM&quot; nebo &quot;PM&quot;, jinak bude čas zobrazován v 24-hodinovém formátu.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="282"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="281"/>
         <source>Default Encoder Profile</source>
         <translation type="unfinished">Výchozí profil kodéru</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="284"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="283"/>
         <source>HQ</source>
         <comment>Encoder profile</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="285"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="284"/>
         <source>SP</source>
         <comment>Encoder profile</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="286"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="285"/>
         <source>LP</source>
         <comment>Encoder profile</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="287"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="286"/>
         <source>EP</source>
         <comment>Encoder profile</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="291"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="290"/>
         <source>Default encoding profile to use if a file needs re-encoding.</source>
         <translation type="unfinished">Výchozí kódovací profil pro případ, že soubor potřebuje překódovat.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="300"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="299"/>
         <source>mplex Command</source>
         <translation type="unfinished">Příkaz mplex</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="304"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="303"/>
         <source>Command to run mplex</source>
         <translation type="unfinished">Příkaz pro spuštění mplex</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="313"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="312"/>
         <source>dvdauthor command</source>
         <translation type="unfinished">Příkaz dvdauthor</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="317"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="316"/>
         <source>Command to run dvdauthor.</source>
         <translation type="unfinished">Příkaz pro spuštění dvdauthor.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="326"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="325"/>
         <source>mkisofs command</source>
         <translation type="unfinished">Příkaz mkisofs</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="330"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="329"/>
         <source>Command to run mkisofs. (Used to create ISO images)</source>
         <translation type="unfinished">Příkaz pro spuštění mkisofs. (Použitý pro vytvoření ISO obrazů)</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="339"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="338"/>
         <source>growisofs command</source>
         <translation type="unfinished">Příkaz growisofs</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="343"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="342"/>
         <source>Command to run growisofs. (Used to burn DVDs)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="352"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="351"/>
         <source>M2VRequantiser command</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="356"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="355"/>
         <source>Command to run M2VRequantiser. Optional - leave blank if you don&apos;t have M2VRequantiser installed.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="366"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="365"/>
         <source>jpeg2yuv command</source>
         <translation type="unfinished">Příkaz jpeg2yuv</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="370"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="369"/>
         <source>Command to run jpeg2yuv. Part of mjpegtools package</source>
         <translation type="unfinished">Příkaz pro spuštění jpeg2yuv. Část balíčku mjpegtools.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="379"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="378"/>
         <source>spumux command</source>
         <translation type="unfinished">Příkaz spumux</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="383"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="382"/>
         <source>Command to run spumux. Part of dvdauthor package</source>
         <translation type="unfinished">Příkaz pro spuštění spumux. Část balíčku dvdauthor.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="392"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="391"/>
         <source>mpeg2enc command</source>
         <translation type="unfinished">Příkaz mpeg2enc</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="396"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="395"/>
         <source>Command to run mpeg2enc. Part of mjpegtools package</source>
         <translation type="unfinished">Příkaz pro spuštění mpeg2enc. Část balíčku mjpegtools.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="405"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="404"/>
         <source>projectx command</source>
         <translation type="unfinished">Příkaz projectx</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="409"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="408"/>
         <source>Command to run ProjectX. Will be used to cut commercials and split mpegs files instead of mythtranscode and mythreplex.</source>
         <translation type="unfinished">Příkaz pro spuštění ProjectX. Bude použit pro odstranění reklam a rozdělění souborů mpeg.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="418"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="417"/>
         <source>MythArchive Settings</source>
         <translation type="unfinished">Nastavení MythArchiv</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="434"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="433"/>
         <source>DVD Menu Settings</source>
         <translation type="unfinished">Nastavení menu DVD</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="442"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="441"/>
         <source>MythArchive External Commands</source>
         <translation type="unfinished"></translation>
     </message>
@@ -400,37 +400,37 @@ Removing stale lock file.</source>
 <context>
     <name>BurnMenu</name>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="1091"/>
+        <location filename="../mytharchive/mythburn.cpp" line="1096"/>
         <source>Cannot burn a DVD.
 The last run failed to create a DVD.</source>
         <translation type="unfinished">Nelze vypálit DVD.
 Při posledním spuštění selhalo vytváření DVD.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="1097"/>
-        <location filename="../mytharchive/mythburn.cpp" line="1109"/>
+        <location filename="../mytharchive/mythburn.cpp" line="1102"/>
+        <location filename="../mytharchive/mythburn.cpp" line="1114"/>
         <source>Burn DVD</source>
         <translation type="unfinished">Vypálit DVD</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="1098"/>
+        <location filename="../mytharchive/mythburn.cpp" line="1103"/>
         <source>
 Place a blank DVD in the drive and select an option below.</source>
         <translation type="unfinished">
 Vložte prázdné DVD do mechaniky a vyberte níže uvedenou volbu.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="1110"/>
+        <location filename="../mytharchive/mythburn.cpp" line="1115"/>
         <source>Burn DVD Rewritable</source>
         <translation type="unfinished">Vypálit přepisovatelné DVD</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="1111"/>
+        <location filename="../mytharchive/mythburn.cpp" line="1116"/>
         <source>Burn DVD Rewritable (Force Erase)</source>
         <translation type="unfinished">Vypálit přepisovatelné DVD (vynutit vymazání)</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="1165"/>
+        <location filename="../mytharchive/mythburn.cpp" line="1170"/>
         <source>It was not possible to run mytharchivehelper to burn the DVD.</source>
         <translation type="unfinished">Nebylo možné spustit mytharchivehelper pro vypálení DVD.</translation>
     </message>
@@ -486,18 +486,18 @@ Vložte prázdné DVD do mechaniky a vyberte níže uvedenou volbu.</translation
 <context>
     <name>DVDThemeSelector</name>
     <message>
-        <location filename="../mytharchive/themeselector.cpp" line="201"/>
-        <location filename="../mytharchive/themeselector.cpp" line="212"/>
+        <location filename="../mytharchive/themeselector.cpp" line="205"/>
+        <location filename="../mytharchive/themeselector.cpp" line="217"/>
         <source>No theme description file found!</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/themeselector.cpp" line="225"/>
+        <location filename="../mytharchive/themeselector.cpp" line="230"/>
         <source>Empty theme description!</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/themeselector.cpp" line="230"/>
+        <location filename="../mytharchive/themeselector.cpp" line="235"/>
         <source>Unable to open theme description file!</source>
         <translation type="unfinished"></translation>
     </message>
@@ -536,27 +536,27 @@ Vložte prázdné DVD do mechaniky a vyberte níže uvedenou volbu.</translation
         <translation type="obsolete">Přidat video</translation>
     </message>
     <message>
-        <location filename="../mytharchive/exportnative.cpp" line="198"/>
+        <location filename="../mytharchive/exportnative.cpp" line="199"/>
         <source>You need to add at least one item to archive!</source>
         <translation>Je potřeba přidat minimálně jednu položku do archivu!</translation>
     </message>
     <message>
-        <location filename="../mytharchive/exportnative.cpp" line="350"/>
+        <location filename="../mytharchive/exportnative.cpp" line="351"/>
         <source>Remove Item</source>
         <translation>Odstranit položku</translation>
     </message>
     <message>
-        <location filename="../mytharchive/exportnative.cpp" line="442"/>
+        <location filename="../mytharchive/exportnative.cpp" line="443"/>
         <source>It was not possible to create the DVD. An error occured when running the scripts</source>
         <translation type="unfinished">Nebylo možné vytvořit DVD. Při běhu skriptů se vyskytla chyba</translation>
     </message>
     <message>
-        <location filename="../mytharchive/exportnative.cpp" line="478"/>
+        <location filename="../mytharchive/exportnative.cpp" line="479"/>
         <source>You don&apos;t have any videos!</source>
         <translation>Nemáte žádná videa!</translation>
     </message>
     <message>
-        <location filename="../mytharchive/exportnative.cpp" line="343"/>
+        <location filename="../mytharchive/exportnative.cpp" line="344"/>
         <source>Menu</source>
         <translation>Menu</translation>
     </message>
@@ -580,7 +580,7 @@ Vložte prázdné DVD do mechaniky a vyberte níže uvedenou volbu.</translation
         <translation type="obsolete">Domů</translation>
     </message>
     <message>
-        <location filename="../mytharchive/fileselector.cpp" line="280"/>
+        <location filename="../mytharchive/fileselector.cpp" line="282"/>
         <source>The selected item is not a directory!</source>
         <translation>Vybraná položka není adresář!</translation>
     </message>
@@ -620,27 +620,27 @@ Vložte prázdné DVD do mechaniky a vyberte níže uvedenou volbu.</translation
         <translation type="vanished">Je třeba vybrat platný identifikátor kanálu (ChanID)!</translation>
     </message>
     <message>
-        <location filename="../mytharchive/importnative.cpp" line="389"/>
+        <location filename="../mytharchive/importnative.cpp" line="395"/>
         <source>You need to select a valid channel id!</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/importnative.cpp" line="420"/>
+        <location filename="../mytharchive/importnative.cpp" line="426"/>
         <source>It was not possible to import the Archive.  An error occured when running &apos;mytharchivehelper&apos;</source>
         <translation>Nebylo možné importovat Archiv.  Vyskytla se chyba při běhu &apos;mytharchivehelper&apos;.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/importnative.cpp" line="550"/>
+        <location filename="../mytharchive/importnative.cpp" line="556"/>
         <source>Select a channel id</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/importnative.cpp" line="576"/>
+        <location filename="../mytharchive/importnative.cpp" line="582"/>
         <source>Select a channel number</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/importnative.cpp" line="602"/>
+        <location filename="../mytharchive/importnative.cpp" line="608"/>
         <source>Select a channel name</source>
         <translation type="unfinished"></translation>
     </message>
@@ -659,7 +659,7 @@ Vložte prázdné DVD do mechaniky a vyberte níže uvedenou volbu.</translation
         <translation type="vanished">Vybrat název kanálu</translation>
     </message>
     <message>
-        <location filename="../mytharchive/importnative.cpp" line="628"/>
+        <location filename="../mytharchive/importnative.cpp" line="634"/>
         <source>Select a Callsign</source>
         <translatorcomment>identifikátor stanice</translatorcomment>
         <translation>Vybrat ID stanice</translation>
@@ -680,39 +680,39 @@ Vložte prázdné DVD do mechaniky a vyberte níže uvedenou volbu.</translation
         <translation type="obsolete">Ukončit</translation>
     </message>
     <message>
-        <location filename="../mytharchive/logviewer.cpp" line="340"/>
+        <location filename="../mytharchive/logviewer.cpp" line="354"/>
         <source>Show Progress Log</source>
         <translation>Zobraz log průběhu</translation>
     </message>
     <message>
-        <location filename="../mytharchive/logviewer.cpp" line="341"/>
+        <location filename="../mytharchive/logviewer.cpp" line="355"/>
         <source>Show Full Log</source>
         <translation>Zobraz celý Log</translation>
     </message>
     <message>
-        <location filename="../mytharchive/logviewer.cpp" line="336"/>
+        <location filename="../mytharchive/logviewer.cpp" line="350"/>
         <source>Don&apos;t Auto Update</source>
         <translation>Automaticky neaktualizovat</translation>
     </message>
     <message>
-        <location filename="../mytharchive/logviewer.cpp" line="75"/>
+        <location filename="../mytharchive/logviewer.cpp" line="78"/>
         <source>Cannot find any logs to show!</source>
         <translation type="unfinished">Nelze najít logy pro zobrazení!</translation>
     </message>
     <message>
-        <location filename="../mytharchive/logviewer.cpp" line="189"/>
+        <location filename="../mytharchive/logviewer.cpp" line="201"/>
         <source>Background creation has been asked to stop.
 This may take a few minutes.</source>
         <translation type="unfinished">Proces vytváření na pozadí byl požádán o zastavení.
 Může to trvat několik minut.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/logviewer.cpp" line="338"/>
+        <location filename="../mytharchive/logviewer.cpp" line="352"/>
         <source>Auto Update</source>
         <translation>Automaticky aktualizovat</translation>
     </message>
     <message>
-        <location filename="../mytharchive/logviewer.cpp" line="328"/>
+        <location filename="../mytharchive/logviewer.cpp" line="342"/>
         <source>Menu</source>
         <translation>Menu</translation>
     </message>
@@ -754,55 +754,55 @@ Může to trvat několik minut.</translation>
         <translation type="vanished">Nepoužívání scénáře</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="317"/>
-        <location filename="../mytharchive/mythburn.cpp" line="437"/>
+        <location filename="../mytharchive/mythburn.cpp" line="320"/>
+        <location filename="../mytharchive/mythburn.cpp" line="442"/>
         <source>Using Cut List</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="322"/>
-        <location filename="../mytharchive/mythburn.cpp" line="442"/>
+        <location filename="../mytharchive/mythburn.cpp" line="325"/>
+        <location filename="../mytharchive/mythburn.cpp" line="447"/>
         <source>Not Using Cut List</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="328"/>
-        <location filename="../mytharchive/mythburn.cpp" line="448"/>
+        <location filename="../mytharchive/mythburn.cpp" line="331"/>
+        <location filename="../mytharchive/mythburn.cpp" line="453"/>
         <source>No Cut List</source>
         <translation>Bez scénáře</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="339"/>
+        <location filename="../mytharchive/mythburn.cpp" line="342"/>
         <source>You need to add at least one item to archive!</source>
         <translation>Je potřeba přidat minimálně jednu položku do archivu!</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="385"/>
+        <location filename="../mytharchive/mythburn.cpp" line="390"/>
         <source>Retrieving File Information. Please Wait...</source>
         <translation>Získává se informace o souboru. Prosím počkejte...</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="451"/>
+        <location filename="../mytharchive/mythburn.cpp" line="456"/>
         <source>Encoder: </source>
         <translation>Kodér:</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="763"/>
+        <location filename="../mytharchive/mythburn.cpp" line="768"/>
         <source>Menu</source>
         <translation>Menu</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="774"/>
+        <location filename="../mytharchive/mythburn.cpp" line="779"/>
         <source>Don&apos;t Use Cut List</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="779"/>
+        <location filename="../mytharchive/mythburn.cpp" line="784"/>
         <source>Use Cut List</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="964"/>
+        <location filename="../mytharchive/mythburn.cpp" line="969"/>
         <source>You don&apos;t have any videos!</source>
         <translation type="unfinished">Nemáte žádná videa!</translation>
     </message>
@@ -817,27 +817,27 @@ Může to trvat několik minut.</translation>
         <translation type="vanished">Použití scénáře</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="784"/>
+        <location filename="../mytharchive/mythburn.cpp" line="789"/>
         <source>Remove Item</source>
         <translation>Odstranit položku</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="785"/>
+        <location filename="../mytharchive/mythburn.cpp" line="790"/>
         <source>Edit Details</source>
         <translation>Upravit detaily</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="786"/>
+        <location filename="../mytharchive/mythburn.cpp" line="791"/>
         <source>Change Encoding Profile</source>
         <translation>Změnit kódovací profil</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="787"/>
+        <location filename="../mytharchive/mythburn.cpp" line="792"/>
         <source>Edit Thumbnails</source>
         <translation>Upravit náhledy</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="922"/>
+        <location filename="../mytharchive/mythburn.cpp" line="927"/>
         <source>It was not possible to create the DVD.  An error occured when running the scripts</source>
         <translation>Nebylo možné vytvořit DVD. Při běhu skriptů se vyskytla chyba.</translation>
     </message>
@@ -845,37 +845,37 @@ Může to trvat několik minut.</translation>
 <context>
     <name>MythControls</name>
     <message>
-        <location filename="../mytharchive/mytharchive.cpp" line="329"/>
+        <location filename="../mytharchive/mytharchive.cpp" line="334"/>
         <source>Toggle use cut list state for selected program</source>
         <translation>Přepnout stav použití scénáře pro vybraný program</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mytharchive.cpp" line="332"/>
+        <location filename="../mytharchive/mytharchive.cpp" line="337"/>
         <source>Create DVD</source>
         <translation>Vytvořit DVD</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mytharchive.cpp" line="334"/>
+        <location filename="../mytharchive/mytharchive.cpp" line="339"/>
         <source>Create Archive</source>
         <translation>Vytvořit archiv</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mytharchive.cpp" line="336"/>
+        <location filename="../mytharchive/mytharchive.cpp" line="341"/>
         <source>Import Archive</source>
         <translation>Importovat archiv</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mytharchive.cpp" line="338"/>
+        <location filename="../mytharchive/mytharchive.cpp" line="343"/>
         <source>View Archive Log</source>
         <translation>Prohlédnout log archivu</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mytharchive.cpp" line="340"/>
+        <location filename="../mytharchive/mytharchive.cpp" line="345"/>
         <source>Play Created DVD</source>
         <translation>Přehrát vytvořené DVD</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mytharchive.cpp" line="342"/>
+        <location filename="../mytharchive/mytharchive.cpp" line="347"/>
         <source>Burn DVD</source>
         <translation>Vypálit DVD</translation>
     </message>
@@ -1215,18 +1215,18 @@ Vložte prázdné DVD do mechaniky a vyberte níže uvedenou volbu.</translation
 <context>
     <name>RecordingSelector</name>
     <message>
-        <location filename="../mytharchive/recordingselector.cpp" line="110"/>
+        <location filename="../mytharchive/recordingselector.cpp" line="109"/>
         <source>Retrieving Recording List.
 Please Wait...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mytharchive/recordingselector.cpp" line="189"/>
+        <location filename="../mytharchive/recordingselector.cpp" line="190"/>
         <source>Clear All</source>
         <translation>Smazat vše</translation>
     </message>
     <message>
-        <location filename="../mytharchive/recordingselector.cpp" line="190"/>
+        <location filename="../mytharchive/recordingselector.cpp" line="191"/>
         <source>Select All</source>
         <translation>Vyber vše</translation>
     </message>
@@ -1239,9 +1239,9 @@ Please Wait...</source>
         <translation type="obsolete">OK</translation>
     </message>
     <message>
-        <location filename="../mytharchive/recordingselector.cpp" line="89"/>
-        <location filename="../mytharchive/recordingselector.cpp" line="374"/>
-        <location filename="../mytharchive/recordingselector.cpp" line="479"/>
+        <location filename="../mytharchive/recordingselector.cpp" line="88"/>
+        <location filename="../mytharchive/recordingselector.cpp" line="375"/>
+        <location filename="../mytharchive/recordingselector.cpp" line="480"/>
         <source>All Recordings</source>
         <translation>Všechny nahrávky</translation>
     </message>
@@ -1250,12 +1250,12 @@ Please Wait...</source>
         <translation type="vanished">Získává se seznam nahrávek. Prosím počkejte...</translation>
     </message>
     <message>
-        <location filename="../mytharchive/recordingselector.cpp" line="134"/>
+        <location filename="../mytharchive/recordingselector.cpp" line="133"/>
         <source>Either you don&apos;t have any recordings or no recordings are available locally!</source>
         <translation>Buď nejsou žádné nahrávky a nebo nejsou žádné lokálně dostupné!</translation>
     </message>
     <message>
-        <location filename="../mytharchive/recordingselector.cpp" line="182"/>
+        <location filename="../mytharchive/recordingselector.cpp" line="183"/>
         <source>Menu</source>
         <translation>Menu</translation>
     </message>
@@ -1327,8 +1327,8 @@ Please Wait...</source>
         <translation>Jakékoliv soubory přístupné na filesystému.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/selectdestination.cpp" line="262"/>
-        <location filename="../mytharchive/selectdestination.cpp" line="318"/>
+        <location filename="../mytharchive/selectdestination.cpp" line="264"/>
+        <location filename="../mytharchive/selectdestination.cpp" line="321"/>
         <source>Unknown</source>
         <translation>Neznámý</translation>
     </message>
@@ -1407,13 +1407,9 @@ Please Wait...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="8"/>
-        <source>%date% / %profile%</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="themestrings.h" line="9"/>
         <source>%size% (%profile%)</source>
+        <oldsource>%date% / %profile%</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1452,18 +1448,21 @@ Please Wait...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="33"/>
-        <source>Archive Callsign:</source>
+        <location filename="themestrings.h" line="37"/>
+        <source>Archive Item Details</source>
+        <oldsource>Archive Callsign:</oldsource>
+        <translation type="unfinished">Detaily o položkách archivu</translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="39"/>
+        <source>Archive Items</source>
+        <oldsource>Archive Chan ID:</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="34"/>
-        <source>Archive Chan ID:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="35"/>
-        <source>Archive Chan No:</source>
+        <location filename="themestrings.h" line="40"/>
+        <source>Archive Items to DVD</source>
+        <oldsource>Archive Chan No:</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1472,14 +1471,10 @@ Please Wait...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="38"/>
-        <source>Archive Item:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="40"/>
-        <source>Archive Items to DVD</source>
-        <translation type="unfinished"></translation>
+        <location filename="themestrings.h" line="45"/>
+        <source>Archived Channel</source>
+        <oldsource>Archive Item:</oldsource>
+        <translation type="unfinished">Archivovaný kanál</translation>
     </message>
     <message>
         <location filename="themestrings.h" line="41"/>
@@ -1487,23 +1482,8 @@ Please Wait...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="42"/>
-        <source>Archive Media</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="43"/>
-        <source>Archive Name:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="themestrings.h" line="46"/>
         <source>Associate Channel</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="47"/>
-        <source>Associated Channel</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1532,11 +1512,6 @@ Please Wait...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="55"/>
-        <source>Callsign</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="themestrings.h" line="57"/>
         <source>Callsign:  %1</source>
         <translation type="unfinished"></translation>
@@ -1557,23 +1532,8 @@ Please Wait...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="65"/>
-        <source>Channel ID</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="themestrings.h" line="67"/>
         <source>Channel ID:  %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="68"/>
-        <source>Channel Name:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="69"/>
-        <source>Channel No</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1584,11 +1544,6 @@ Please Wait...</source>
     <message>
         <location filename="themestrings.h" line="74"/>
         <source>Chapter Menu --&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="75"/>
-        <source>Chapter Menu:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1612,28 +1567,8 @@ Please Wait...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="85"/>
-        <source>Current Destination:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="themestrings.h" line="87"/>
         <source>Current Position:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="88"/>
-        <source>Current Size:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="89"/>
-        <source>Current selected item size: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="90"/>
-        <source>Current size: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
@@ -1666,23 +1601,8 @@ Please Wait...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="98"/>
-        <source>Destination</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="themestrings.h" line="99"/>
         <source>Destination Free Space:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="103"/>
-        <source>Details:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="104"/>
-        <source>Done</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1721,11 +1641,6 @@ Please Wait...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="113"/>
-        <source>Encoder Profile:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="themestrings.h" line="114"/>
         <source>Encoding Profile</source>
         <translation type="unfinished"></translation>
@@ -1761,23 +1676,134 @@ Please Wait...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="125"/>
-        <source>File browser</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="themestrings.h" line="126"/>
         <source>File...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="127"/>
-        <source>Filename:</source>
-        <translation type="unfinished"></translation>
+        <location filename="themestrings.h" line="157"/>
+        <source>Main Menu</source>
+        <oldsource>Filename:</oldsource>
+        <translation type="unfinished">Hlavní menu</translation>
     </message>
     <message>
         <location filename="themestrings.h" line="128"/>
         <source>Filesize</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="8"/>
+        <source>%date% / %profile%</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="33"/>
+        <source>Archive Callsign:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="34"/>
+        <source>Archive Chan ID:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="35"/>
+        <source>Archive Chan No:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="38"/>
+        <source>Archive Item:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="42"/>
+        <source>Archive Media</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="43"/>
+        <source>Archive Name:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="47"/>
+        <source>Associated Channel</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="55"/>
+        <source>Callsign</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="65"/>
+        <source>Channel ID</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="68"/>
+        <source>Channel Name:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="69"/>
+        <source>Channel No</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="75"/>
+        <source>Chapter Menu:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="85"/>
+        <source>Current Destination:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="88"/>
+        <source>Current Size:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="89"/>
+        <source>Current selected item size: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="90"/>
+        <source>Current size: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="98"/>
+        <source>Destination</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="103"/>
+        <source>Details:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="104"/>
+        <source>Done</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="113"/>
+        <source>Encoder Profile:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="125"/>
+        <source>File browser</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="127"/>
+        <source>Filename:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -2339,11 +2365,6 @@ When the preview image has focus, UP/DOWN changes the seek amount, LEFT/RIGHT ju
         <translation>Úvod</translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="157"/>
-        <source>Main Menu</source>
-        <translation>Hlavní menu</translation>
-    </message>
-    <message>
         <location filename="themestrings.h" line="73"/>
         <source>Chapter Menu</source>
         <translation>Menu kapitol</translation>
@@ -2372,11 +2393,6 @@ When the preview image has focus, UP/DOWN changes the seek amount, LEFT/RIGHT ju
         <location filename="themestrings.h" line="11"/>
         <source>0 mb</source>
         <translation>0 mb</translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="37"/>
-        <source>Archive Item Details</source>
-        <translation>Detaily o položkách archivu</translation>
     </message>
     <message>
         <location filename="themestrings.h" line="5"/>
@@ -2523,11 +2539,6 @@ When the preview image has focus, UP/DOWN changes the seek amount, LEFT/RIGHT ju
         <translation>Vybrat přiřazený kanál</translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="45"/>
-        <source>Archived Channel</source>
-        <translation>Archivovaný kanál</translation>
-    </message>
-    <message>
         <location filename="themestrings.h" line="60"/>
         <source>Chan. ID:</source>
         <translatorcomment>identifikátor kanálu</translatorcomment>
@@ -2606,11 +2617,6 @@ When the preview image has focus, UP/DOWN changes the seek amount, LEFT/RIGHT ju
     <message>
         <location filename="themestrings.h" line="190"/>
         <source>Parental Level: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="39"/>
-        <source>Archive Items</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -2843,17 +2849,17 @@ When the preview image has focus, UP/DOWN changes the seek amount, LEFT/RIGHT ju
         <translation type="vanished">Zrušit</translation>
     </message>
     <message>
-        <location filename="../mytharchive/thumbfinder.cpp" line="858"/>
+        <location filename="../mytharchive/thumbfinder.cpp" line="870"/>
         <source>Exit, Save Thumbnails</source>
         <translation>Ukončit a uložit náhledy</translation>
     </message>
     <message>
-        <location filename="../mytharchive/thumbfinder.cpp" line="859"/>
+        <location filename="../mytharchive/thumbfinder.cpp" line="871"/>
         <source>Exit, Don&apos;t Save Thumbnails</source>
         <translation>Ukončit a neuložit náhledy</translation>
     </message>
     <message>
-        <location filename="../mytharchive/thumbfinder.cpp" line="851"/>
+        <location filename="../mytharchive/thumbfinder.cpp" line="863"/>
         <source>Menu</source>
         <translation>Menu</translation>
     </message>
@@ -2861,17 +2867,17 @@ When the preview image has focus, UP/DOWN changes the seek amount, LEFT/RIGHT ju
 <context>
     <name>VideoSelector</name>
     <message>
-        <location filename="../mytharchive/videoselector.cpp" line="148"/>
+        <location filename="../mytharchive/videoselector.cpp" line="151"/>
         <source>Clear All</source>
         <translation>Smazat Vše</translation>
     </message>
     <message>
-        <location filename="../mytharchive/videoselector.cpp" line="149"/>
+        <location filename="../mytharchive/videoselector.cpp" line="152"/>
         <source>Select All</source>
         <translation>Vyber vše</translation>
     </message>
     <message>
-        <location filename="../mytharchive/videoselector.cpp" line="549"/>
+        <location filename="../mytharchive/videoselector.cpp" line="555"/>
         <source>You need to enter a valid password for this parental level</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2884,8 +2890,8 @@ When the preview image has focus, UP/DOWN changes the seek amount, LEFT/RIGHT ju
         <translation type="obsolete">OK</translation>
     </message>
     <message>
-        <location filename="../mytharchive/videoselector.cpp" line="331"/>
-        <location filename="../mytharchive/videoselector.cpp" line="497"/>
+        <location filename="../mytharchive/videoselector.cpp" line="334"/>
+        <location filename="../mytharchive/videoselector.cpp" line="502"/>
         <source>All Videos</source>
         <translation>Všechna videa</translation>
     </message>
@@ -2894,7 +2900,7 @@ When the preview image has focus, UP/DOWN changes the seek amount, LEFT/RIGHT ju
         <translation type="vanished">Rodičovský PIN:</translation>
     </message>
     <message>
-        <location filename="../mytharchive/videoselector.cpp" line="141"/>
+        <location filename="../mytharchive/videoselector.cpp" line="144"/>
         <source>Menu</source>
         <translation>Menu</translation>
     </message>

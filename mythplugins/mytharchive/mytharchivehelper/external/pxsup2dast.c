@@ -27,11 +27,11 @@
  #
  */
 
-typedef enum { false = 0, true = 1 }	bool;
-typedef unsigned char			bool8;
-
+/* This file hides braces inside of #define statement. */
+/* NOLINTBEGIN(readability-inconsistent-ifelse-braces) */
 
 #include <unistd.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -134,7 +134,7 @@ GCCATTR_NORETURN static void exc_throw(int type, const char * format, ...)
 {
     if (format != NULL) 
     {
-        va_list ap;
+        va_list ap; // NOLINT(cppcoreguidelines-init-variables) for macos
         int err = errno;
 
         va_start(ap, format);
@@ -214,9 +214,9 @@ static void yuv2rgb(int y,   int cr,  int cb,
             eu8 * r, eu8 * g, eu8 * b)  
 {
     /* from dvdauthor... */
-    int lr = (500 + 1164 * (y - 16) + 1596 * (cr - 128)              ) /1000;
-    int lg = (500 + 1164 * (y - 16) -  813 * (cr - 128) - 391 * (cb - 128)) / 1000;
-    int lb = (500 + 1164 * (y - 16)                    + 2018 * (cb - 128)) / 1000;
+    int lr = (500 + (1164 * (y - 16)) + (1596 * (cr - 128))                      ) / 1000;
+    int lg = (500 + (1164 * (y - 16)) - ( 813 * (cr - 128)) - ( 391 * (cb - 128))) / 1000;
+    int lb = (500 + (1164 * (y - 16))                       + (2018 * (cb - 128))) / 1000;
 
     *r = clamp(lr, 0, 255);
     *g = clamp(lg, 0, 255);
@@ -229,9 +229,9 @@ static void rgb2yuv(eu8 r,   eu8   g,  eu8 b,
     /* int ly, lcr, lcb; */
 
     /* from dvdauthor... */
-    *y  = ( 257 * r + 504 * g +  98 * b +  16500) / 1000;
-    *cr = ( 439 * r - 368 * g -  71 * b + 128500) / 1000;
-    *cb = (-148 * r - 291 * g + 439 * b + 128500) / 1000; 
+    *y  = ( (257 * r) + (504 * g) +  (98 * b) +  16500) / 1000;
+    *cr = ( (439 * r) - (368 * g) -  (71 * b) + 128500) / 1000;
+    *cb = ((-148 * r) - (291 * g) + (439 * b) + 128500) / 1000;
 }
 
 /* the code above matches nicely with http://www.fourcc.org/fccyvrgb.php
@@ -374,7 +374,7 @@ static void ifopalette(const char * filename,
         eu8 r = 0;
         eu8 g = 0;
         eu8 b = 0;
-        eu8 * p = buf + ((ptrdiff_t)(i) * 4) + 1;
+        eu8 * p = buf + ((ptrdiff_t)i * 4) + 1;
         yuvpalette[i][0] =p[0]; yuvpalette[i][1] =p[1]; yuvpalette[i][2] =p[2];
         yuv2rgb(p[0], p[1], p[2], &r, &g, &b);
         rgbpalette[i][0] = r; rgbpalette[i][1] = g; rgbpalette[i][2] = b; 
@@ -487,10 +487,9 @@ static void png4file_flush(Png4File * self)
 
 static void png4file_addpixel(Png4File * self, eu8 pixel) 
 {
-    if (self->m_nibble < 0)
+    if (self->m_nibble < 0) {
         self->m_nibble = (pixel << 4);
-    else 
-    {
+    } else {
         self->m_buffer[self->m_bufPos++] = self->m_nibble | pixel;
         self->m_nibble = -1;
         if (self->m_bufPos == sizeof self->m_buffer - 4)
@@ -515,10 +514,9 @@ static void png4file_close(Png4File * self)
 {
     eu8 adlerbuf[4];
     self->m_buffer[0] = 0x01;
-    if (self->m_bufPos)
+    if (self->m_bufPos) {
         png4file_flush(self);
-    else 
-    {
+    } else {
         self->m_bufPos = 5;
         png4file_flush(self); 
     }
@@ -610,6 +608,11 @@ static void getpixelline(eu8 ** data, int width, Png4File * picfile)
 static void makebitmap(eu8 * data, int w, int h, int top, int bot,
                        char * filename, eu8 palette[4][3])
 {
+    if (top < 0 || bot < 0)
+    {
+        printf("ERROR: invalid arguments to makebitmap");
+        return;
+    }
     eu8 * top_ibuf = data + top;
     eu8 * bot_ibuf = data + bot;
     Png4File picfile;
@@ -735,7 +738,7 @@ static void pxsubtitle(const char * supfile, FILE * ofh, eu8 palette[16][3],
                     while (1) 
                     {
                         eu8 * p = 0;
-                        eu8 cmd = boundstr_read(&bs, 1)[0];
+                        eu8 cmd = boundstr_read(&bs, 1)[0];//NOLINT(clang-analyzer-security.ArrayBound)
                         int xpalette = 0;
                         int colcon_length = 0;
                         switch (cmd) 
@@ -799,7 +802,7 @@ static void pxsubtitle(const char * supfile, FILE * ofh, eu8 palette[16][3],
                 {
                     if (lastendpts < endpts)
                     {
-                        pts = lastendpts + 2 * (1000 / 30) * 90;/*??? */
+                        pts = lastendpts + (2 * (1000 / 30) * 90);/*??? */
                         tmppts = pts;
                         if (delay_ms)
                             tmppts += delay_ms * 90;
@@ -1016,3 +1019,5 @@ int sup2dast(const char *supfile, const char *ifofile ,int delay_ms)
 
     return 0; 
 }
+
+/* NOLINTEND(readability-inconsistent-ifelse-braces) */

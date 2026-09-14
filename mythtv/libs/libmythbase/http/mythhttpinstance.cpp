@@ -1,3 +1,5 @@
+#include <thread>
+
 // MythTV
 #include "mthread.h"
 #include "http/mythhttpinstance.h"
@@ -25,7 +27,11 @@ MythHTTPInstance::MythHTTPInstance()
 
     m_httpServer->moveToThread(m_httpServerThread->qthread());
     m_httpServerThread->start();
-    do { QThread::usleep(50); } while (!m_httpServerThread->qthread()->isRunning());
+    std::this_thread::sleep_for(50us);
+    while (!m_httpServerThread->qthread()->isRunning())
+    {
+        std::this_thread::sleep_for(50us);
+    }
 }
 
 MythHTTPInstance::~MythHTTPInstance()

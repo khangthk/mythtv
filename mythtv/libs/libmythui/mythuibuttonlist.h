@@ -8,6 +8,7 @@
 #include <QList>
 #include <QString>
 #include <QVariant>
+#include <optional>
 
 // MythTV headers
 #include "mythuitype.h"
@@ -55,12 +56,14 @@ class MUI_PUBLIC MythUIButtonListItem
     MythUIButtonListItem(MythUIButtonList *lbtype, const QString& text,
                          QVariant data, int listPosition = -1);
     template <typename SLOT>
-    MythUIButtonListItem(std::enable_if_t<FunctionPointerTest<SLOT>::MemberFunction, MythUIButtonList *>lbtype,
+    MythUIButtonListItem(MythUIButtonList *lbtype,
                          const QString& text, SLOT slot, int listPosition = -1)
+    requires is_nonconst_member_func_v<SLOT>
         : MythUIButtonListItem(lbtype, text, QVariant::fromValue(static_cast<MythUICallbackMF>(slot)), listPosition) { }
     template <typename SLOT>
-    MythUIButtonListItem(std::enable_if_t<FunctionPointerTest<SLOT>::MemberConstFunction, MythUIButtonList *>lbtype,
+    MythUIButtonListItem(MythUIButtonList *lbtype,
                          const QString& text, SLOT slot, int listPosition = -1)
+    requires is_const_member_func_v<SLOT>
         : MythUIButtonListItem(lbtype, text, QVariant::fromValue(static_cast<MythUICallbackMFc>(slot)), listPosition) { }
     virtual ~MythUIButtonListItem();
 
@@ -164,8 +167,8 @@ class MUI_PUBLIC MythUIButtonListItem
     bool            m_isVisible     {false};
     bool            m_enabled       {true};
     bool            m_debugme       {false};
-    ProgressInfo    m_progress1      {0,0,0};
-    ProgressInfo    m_progress2      {0,0,0};
+    ProgressInfo    m_progress1;
+    ProgressInfo    m_progress2;
 
     QMap<QString, TextProperties> m_strings;
     QMap<QString, MythImage*> m_images;
@@ -192,7 +195,8 @@ class MUI_PUBLIC MythUIButtonList : public MythUIType
 {
     Q_OBJECT
   public:
-    MythUIButtonList(MythUIType *parent, const QString &name);
+    MythUIButtonList(MythUIType *parent, const QString &name,
+                     QString shadow = "");
     MythUIButtonList(MythUIType *parent, const QString &name,
                    QRect area, bool showArrow = true,
                    bool showScrollBar = false);
@@ -200,7 +204,6 @@ class MUI_PUBLIC MythUIButtonList : public MythUIType
 
     bool keyPressEvent(QKeyEvent *event) override; // MythUIType
     bool gestureEvent(MythGestureEvent *event) override; // MythUIType
-    void customEvent(QEvent *event) override; // MythUIType
 
     enum MovementUnit : std::uint8_t
                       { MoveItem, MoveColumn, MoveRow, MovePage, MoveMax,
@@ -208,7 +211,9 @@ class MUI_PUBLIC MythUIButtonList : public MythUIType
     enum LayoutType : std::uint8_t
                      { LayoutVertical, LayoutHorizontal, LayoutGrid };
 
+#if 0
     void SetDrawFromBottom(bool draw);
+#endif
 
     void Reset() override; // MythUIType
     void Update();
@@ -250,6 +255,7 @@ class MUI_PUBLIC MythUIButtonList : public MythUIType
 
     void RemoveItem(MythUIButtonListItem *item);
 
+    bool IsShadowing(void) { return m_shadowListName == GetFocusedName(); }
     void SetLCDTitles(const QString &title, const QString &columnList = "");
     void updateLCD(void);
 
@@ -274,6 +280,8 @@ class MUI_PUBLIC MythUIButtonList : public MythUIType
     void itemLoaded(MythUIButtonListItem* item);
 
   protected:
+    void customEvent(QEvent *event) override; // MythUIType
+
     enum ScrollStyle : std::uint8_t
                      { ScrollFree, ScrollCenter, ScrollGroupCenter };
     enum ArrangeType : std::uint8_t
@@ -344,8 +352,8 @@ class MUI_PUBLIC MythUIButtonList : public MythUIType
     ArrangeType m_arrange             {ArrangeFixed};
     ScrollStyle m_scrollStyle         {ScrollFree};
     WrapStyle   m_wrapStyle           {WrapNone};
-    int         m_alignment           {Qt::AlignLeft | Qt::AlignTop};
-
+    int         m_defaultAlignment    {Qt::AlignLeft | Qt::AlignTop};
+    std::optional<int> m_shadowAlignment {std::nullopt};
     MythRect    m_contentsRect        {0, 0, 0, 0};
 
     MythPoint   m_searchPosition      {-2,-2};
@@ -365,6 +373,8 @@ class MUI_PUBLIC MythUIButtonList : public MythUIType
     int m_rightColumns                {0};
     int m_topRows                     {0};
     int m_bottomRows                  {0};
+
+    QString m_shadowListName;
 
     bool m_active                     {false};
     bool m_showArrow                  {true};
@@ -392,7 +402,8 @@ class MUI_PUBLIC MythUIButtonList : public MythUIType
     QList<MythUIButtonListItem*> m_itemList;
     int m_nextItemLoaded              {0};
 
-    bool m_drawFromBottom             {false};
+    bool m_defaultDrawFromBottom      {false};
+    std::optional<bool> m_shadowDrawFromBottom {std::nullopt};
 
     QString     m_lcdTitle;
     QStringList m_lcdColumns;

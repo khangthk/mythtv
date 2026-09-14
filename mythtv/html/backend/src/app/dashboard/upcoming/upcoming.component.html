@@ -5,54 +5,66 @@
     <h2>{{ 'dashboard.upcoming.heading' | translate }}</h2>
     <div class="block card w-full">
         <div style="height: 90vh">
-            <p-table #table *ngIf="showTable" [value]="programs" scrollHeight="flex" [scrollable]="true"
-                [totalRecords]="totalRecords" styleClass="p-datatable-gridlines p-datatable-sm" [virtualScroll]="true"
-                [rows]="100" [lazy]="true" (onLazyLoad)="loadLazy($event)" [rowHover]="true" sortField="StartTime">
-
+            @if (showTable) {
+            <p-table #table [value]="programs" scrollHeight="flex" [scrollable]="true" [totalRecords]="totalRecords"
+                 [virtualScroll]="true" [lazy]="true"
+                (onLazyLoad)="loadLazy($event)" [rowHover]="true" [sortField]="sortField" [sortOrder]="sortOrder"
+                (onSort)="onSort($event)" [showGridlines]="true" [stripedRows]="true" size="small" [virtualScrollItemSize]="43" >
                 <ng-template pTemplate="caption">
                     <!-- Top Buttons -->
-                    <div class="flex align-items-center">
-                        <p-checkbox inputId="showAllStatuses" [(ngModel)]="showAllStatuses" name="showAllStatuses"
-                            #showAll="ngModel" [binary]="true" (onChange)="onFilter()"
-                            label="{{ 'dashboard.upcoming.showall' | translate }} " class="'px-3">
-                        </p-checkbox>
+                    <div class="flex items-center">
+                        {{ 'dashboard.upcoming.status' | translate }}: &nbsp;
+                        <p-select [(ngModel)]="selectedStatus" [options]="dataService.recStatusList" optionLabel="Name"
+                            optionValue="Status" name="Statusfilter" (onChange)="onFilter()"
+                            placeholder="{{ 'data.recstatus.Default' | translate }}" [showClear]="true" class="'px-3">
+                        </p-select>
                         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
                         {{ 'dashboard.upcoming.recrule' | translate }}: &nbsp;
-                        <p-dropdown [(ngModel)]="selectedRule" [options]="recRules" name="rulefilter"
+                        <p-select [(ngModel)]="selectedRule" [options]="recRules" name="rulefilter"
                             (onChange)="onFilter()" optionLabel="Title"
                             placeholder="{{ 'settings.chanedit.all' | translate }}" [showClear]="true" class="'px-3">
-                        </p-dropdown>
-
+                        </p-select>
+                        &nbsp;&nbsp;&nbsp; {{ 'dashboard.recordings.recgrp' | translate }}: &nbsp;
+                        <p-select [(ngModel)]="selectedRecGroup" [options]="recGroups" name="filter"
+                            (onChange)="onFilter()" placeholder="{{ 'settings.chanedit.all' | translate }}"
+                            [showClear]="true" class="'px-3">
+                        </p-select>
                         <!-- Refresh button and number of rows. -->
-                        <div *ngIf="refreshing else refreshBn"><p-progressSpinner
-                                [style]="{width: '2rem', height: '2rem'}"></p-progressSpinner></div>
-                        <ng-template #refreshBn>
-                            <button pButton pRipple icon="pi pi-refresh" class="p-button-text .p-button-success"
-                                (click)="refresh()" pTooltip="{{ 'common.refresh' | translate }}"></button>
-                            &nbsp;&nbsp;&nbsp;{{ programs.length }} {{ 'common.rows' | translate }}
-                        </ng-template>
+                        <!-- The progressspinner no longer works -->
+                        @if (refreshing) {
+                        <div>
+                            <i class="pi pi-spin pi-cog px-3 text-primary"></i>
+                        </div>
+                        } @else {
+                        <button pButton pRipple icon="pi pi-refresh" class="p-button-text .p-button-success"
+                            (click)="reload()" pTooltip="{{ 'common.refresh' | translate }}"></button>
+                        &nbsp;&nbsp;&nbsp;{{ programs.length }} {{ 'common.rows' | translate }}
+                        }
+                        <!-- <div *ngIf="refreshing else refreshBn"><p-progressSpinner
+            [style]="{width: '2rem', height: '2rem'}"></p-progressSpinner></div> -->
                     </div>
                 </ng-template>
-
                 <ng-template pTemplate="header">
                     <tr>
                         <!-- Column Headings -->
                         <th style="width: 10%" class="p-1" pSortableColumn="StartTime">
                             {{ 'dashboard.upcoming.date' | translate }}<p-sortIcon field="StartTime"></p-sortIcon>
                         </th>
-                        <th style="width: 7%" class="justify-content-end p-1">
+                        <th style="width: 7%" class="justify-end p-1">
                             {{ 'dashboard.upcoming.time' | translate }} </th>
-                        <th style="width: 7%" class="justify-content-end pl-1 pr-3 pt-1 pb-1"></th>
-                        <th style="width: 8%" class="p-1">{{ 'dashboard.upcoming.encoder' |
+                        <th style="width: 7%" class="justify-end pl-1 pr-4 pt-1 pb-1" pSortableColumn="Length">
+                            {{ 'dashboard.upcoming.length' | translate }}<p-sortIcon field="Length"></p-sortIcon>
+                        </th>
+                        <th style="width: 4%" class="p-1">{{ 'dashboard.upcoming.encoder' |
                             translate }} </th>
-                        <th style="width: 11%" class="p-1" pSortableColumn="Title">
+                        <th style="width: 17%" class="p-1" pSortableColumn="Title">
                             {{ 'dashboard.recordings.title' | translate }}<p-sortIcon field="Title"></p-sortIcon>
                         </th>
                         <th style="width: 17%" class="p-1">{{ 'dashboard.recordings.subtitle' | translate
                             }}</th>
                         <th style="width: 4%" class="p-1">{{ 'dashboard.recordings.seas_ep' | translate
                             }}</th>
-                        <th style="width: 8%" class="justify-content-end p-1">
+                        <th style="width: 6%" class="justify-end p-1">
                             {{ 'dashboard.recordings.orig_airdate' | translate }}
                         </th>
                         <th style="width: 9%" class="p-1" pSortableColumn="Channel.ChanNum">{{
@@ -60,17 +72,30 @@
                             }} <p-sortIcon field="Channel.ChanNum"></p-sortIcon></th>
                         <th style="width: 8%" class="p-1">
                             {{ 'dashboard.recordings.recgrp' | translate }} </th>
-                        <th style="width: 7%" class="p-1">
-                            {{ 'dashboard.upcoming.status' | translate }} </th>
+                        <th style="width: 7%" class="p-1" pSortableColumn="StatusName">
+                            {{ 'dashboard.upcoming.status' | translate }} <p-sortIcon field="StatusName"></p-sortIcon>
+                        </th>
                         <th style="width: 4%" class="p-1" style="white-space: nowrap;">
-                            <button pButton pRipple icon="pi pi-paperclip" [disabled]="true"
-                                class="p-button-text p-button-primary"></button>
-                            <button pButton pRipple icon="pi pi-pencil" [disabled]="true"
-                                class="p-button-text p-button-primary"></button>
+                            <i pButton icon="pi pi-paperclip" class="p-button-text p-button-primary"
+                                pTooltip="{{ 'dashboard.recordings.override_rule' | translate }}"
+                                tooltipPosition="left"></i>
+                            <i pButton icon="pi pi-pencil" class="p-button-text p-button-primary"
+                                pTooltip="{{ 'dashboard.recordings.edit_rule' | translate }}"
+                                tooltipPosition="left"></i>
+                            <i pButton icon="pi pi-thumbs-down" class="p-button-text p-button-primary"
+                                pTooltip="{{ 'dashboard.recordings.dont_rec' | translate }}" tooltipPosition="left"></i>
+                            <i pButton icon="pi pi-thumbs-down-fill" class="p-button-text p-button-primary"
+                                pTooltip="{{ 'dashboard.recordings.never_rec' | translate }}"
+                                tooltipPosition="left"></i>
+                            <i pButton icon="pi pi-thumbs-up" class="p-button-text p-button-primary"
+                                pTooltip="{{ 'dashboard.recordings.enable_rec' | translate }}"
+                                tooltipPosition="left"></i>
+                            <i pButton icon="pi pi-check" class="p-button-text p-button-primary"
+                                pTooltip="{{ 'dashboard.recordings.normal_rec' | translate }}"
+                                tooltipPosition="left"></i>
                         </th>
                     </tr>
                 </ng-template>
-
                 <ng-template pTemplate="body" let-program let-rowIndex="rowIndex">
                     <tr #row>
                         <td class="p-1 overflow-hidden">
@@ -78,12 +103,12 @@
                                 <div class="mytext" [innerHTML]="formatStartDate(program, rowIndex)"></div>
                             </div>
                         </td>
-                        <td class="justify-content-end p-1 overflow-hidden">
+                        <td class="justify-end p-1 overflow-hidden">
                             <div class="mycell">
                                 <div class="mytext">{{formatStartTime(program)}} </div>
                             </div>
                         </td>
-                        <td class="justify-content-end pl-1 pr-3 pt-1 pb-1 overflow-hidden">
+                        <td class="justify-end pl-1 pr-4 pt-1 pb-1 overflow-hidden">
                             <div class="mycell">
                                 <div class="mytext">{{ getDuration(program) | number:'1.0-0' }} min</div>
                             </div>
@@ -104,11 +129,13 @@
                             </div>
                         </td>
                         <td class="p-1">
-                            <div *ngIf="program.Season>0 || program.Episode>0">
+                            @if (program.Season>0 || program.Episode>0) {
+                            <div>
                                 {{program.Season}}x{{program.Episode}}
                             </div>
+                            }
                         </td>
-                        <td class="justify-content-end p-1">
+                        <td class="justify-end p-1">
                             <div class="mycell">
                                 <div class="mytext" [innerHTML]="formatAirDate(program)"></div>
                             </div>
@@ -121,33 +148,61 @@
                         <td class="p-1">{{program.Recording.RecGroup}}</td>
                         <td class="p-1">
                             <div class="mycell">
-                                <div class="mytext" *ngIf="program.Recording" [ngClass]="['WillRecord','Recording','Recorded'].indexOf(program.Recording.StatusName)>-1 ?
+                                <!-- Recorded = -3, Recording = -2, WillRecord = -1, -->
+                                @if (program.Recording) {
+                                <div class="mytext" [ngClass]="[-3,-2,-1].indexOf(program.Recording.Status)>-1 ?
                                 'text-green-500' : 'text-pink-500'">
-                                    {{dataService.recStatusText[program.Recording.StatusName]}}
+                                    {{ program.Recording.StatusName }}
                                 </div>
+                                }
                             </div>
                         </td>
                         <td class="pt-1 pb-0" style="white-space: nowrap;">
+                            @if (['Recording', 'Failing'].indexOf(program.Recording.StatusName) > -1) {
                             <button pButton pRipple icon="pi pi-stop-circle" class="p-button-text p-button-danger"
-                                *ngIf="['Recording', 'Failing'].indexOf(program.Recording.StatusName) > -1 else overrideBn"
                                 (click)="stopRequest(program)"
                                 pTooltip="{{ 'dashboard.recordings.stop_recording' | translate }}"
                                 tooltipPosition="left"></button>
-                            <ng-template #overrideBn>
-                                <button pButton pRipple icon="pi pi-paperclip" class="p-button-text p-button-primary"
-                                    (click)="override(program)"
-                                    pTooltip="{{ 'dashboard.recordings.override_rule' | translate }}"
-                                    tooltipPosition="left"></button>
-                            </ng-template>
+                            } @else {
+                            @if (['Recorded', 'Failed'].indexOf(program.Recording.StatusName) > -1) {
+                            <button pButton pRipple icon="pi pi-video" class="p-button-text p-button-primary"
+                                (click)="restartRequest(program)"
+                                pTooltip="{{ 'dashboard.recordings.restart_recording' | translate }}"
+                                tooltipPosition="left"></button>
+                            } @else {
+                            <button pButton pRipple icon="pi pi-paperclip" class="p-button-text p-button-primary"
+                                (click)="override(program)"
+                                pTooltip="{{ 'dashboard.recordings.override_rule' | translate }}"
+                                tooltipPosition="left"></button>
+                            }
+                            }
                             <button pButton pRipple icon="pi pi-pencil" class="p-button-text p-button-primary"
                                 (click)="updateRecRule(program)"
                                 pTooltip="{{ 'dashboard.recordings.edit_rule' | translate }}" tooltipPosition="left"
-                                [disabled]="program.Recording && (program.Recording.RecType == 7 || program.Recording.RecType == 8
-                                    || program.Recording.StatusName == 'NeverRecord')"></button>
+                                [disabled]="program.Recording && (program.Recording.RecType == 7 || program.Recording.RecType == 8)"></button>
+                            <button pButton pRipple icon="pi pi-thumbs-down" class="p-button-text p-button-primary"
+                                (click)="override(program, 'Do not Record')"
+                                pTooltip="{{ 'dashboard.recordings.dont_rec' | translate }}" tooltipPosition="left"
+                                [disabled]="program.Recording && [1,7,8].indexOf(program.Recording.RecType) > -1"></button>
+                            <button pButton pRipple icon="pi pi-thumbs-down-fill" class="p-button-text p-button-primary"
+                                (click)="override(program, 'Never Record')"
+                                pTooltip="{{ 'dashboard.recordings.never_rec' | translate }}" tooltipPosition="left"
+                                [disabled]="program.Recording && [1,7,8].indexOf(program.Recording.RecType) > -1
+                                    || program.Recording.Status == 11"></button>
+                            <button pButton pRipple icon="pi pi-thumbs-up" class="p-button-text p-button-primary"
+                                (click)="override(program,'Override Recording')"
+                                pTooltip="{{ 'dashboard.recordings.enable_rec' | translate }}" tooltipPosition="left"
+                                [disabled]="program.Recording && (program.Recording.RecType == 7
+                                    || [-2,-1].indexOf(program.Recording.Status) >= 0)"></button>
+                            <button pButton pRipple icon="pi pi-check" class="p-button-text p-button-primary"
+                                (click)="override(program, 'Not Recording')"
+                                pTooltip="{{ 'dashboard.recordings.normal_rec' | translate }}" tooltipPosition="left"
+                                [disabled]="program.Recording && [7,8].indexOf(program.Recording.RecType) == -1"></button>
                         </td>
                     </tr>
                 </ng-template>
             </p-table>
+            }
 
             <p-dialog header="{{ 'dashboard.recordings.stop_recording' | translate }}" [(visible)]="displayStop"
                 [modal]="true" [draggable]="false" [resizable]="false">
@@ -155,9 +210,10 @@
                 <p>{{ 'dashboard.recordings.stop_details' |
                     translate }} <br><b> {{ program?.Title }}: {{ program?.SubTitle }}</b></p>
                 <ng-template pTemplate="footer">
-                    <div class="col-12" style="text-align: left;">
-                        <p-message *ngIf="errorCount > 0" severity="error"
-                            text="{{ 'common.networkfail' | translate }}"></p-message>
+                    <div class="col-span-12" style="text-align: left;">
+                        @if (errorCount > 0) {
+                        <p-message severity="error" text="{{ 'common.networkfail' | translate }}"></p-message>
+                        }
                     </div>
                     <p-button icon="pi pi-times-circle" (onClick)="displayStop=false"
                         label="{{ 'common.close' | translate }}" styleClass="p-button-warning">

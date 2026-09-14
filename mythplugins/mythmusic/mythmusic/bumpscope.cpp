@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <numbers>
 
 // QT headers
 #include <QCoreApplication>
@@ -16,7 +17,9 @@
 #include <libmythbase/compat.h>
 #include <libmythbase/mythlogging.h>
 #include <libmythbase/mythrandom.h>
+#ifndef __cpp_size_t_suffix
 #include <libmythbase/sizetliteral.h>
+#endif
 
 // Mythmusic Headers
 #include "bumpscope.h"
@@ -28,7 +31,7 @@ BumpScope::BumpScope()
 
     for (unsigned int i = 255; i > 0; i--)
     {
-        m_intense1[i] = cos(((double)(255 - i) * M_PI) / 512.0);
+        m_intense1[i] = cos(((double)(255 - i) * std::numbers::pi) / 512.0);
         m_intense2[i] = pow(m_intense1[i], 250) * 150;
     }
     m_intense1[0] = m_intense1[1];
@@ -40,8 +43,8 @@ BumpScope::~BumpScope()
     delete [] m_rgbBuf;
     delete m_image;
     for (auto & dat : m_phongDat)
-        dat.resize(0);
-    m_phongDat.resize(0);
+        dat.clear();
+    m_phongDat.clear();
 }
 
 void BumpScope::resize(const QSize &newsize)
@@ -69,9 +72,15 @@ void BumpScope::resize(const QSize &newsize)
     m_x = m_width / 2;
     m_y = m_height;
 
+#ifdef __cpp_size_t_suffix
+    m_phongDat.resize(m_phongRad * 2UZ);
+    for (auto & dat : m_phongDat)
+        dat.resize(m_phongRad * 2UZ);
+#else
     m_phongDat.resize(m_phongRad * 2_UZ);
     for (auto & dat : m_phongDat)
         dat.resize(m_phongRad * 2_UZ);
+#endif
 
     generate_phongdat();
     generate_cmap(m_color);
@@ -130,7 +139,7 @@ void BumpScope::generate_phongdat(void)
             double i2 = ((double)y / ((double)m_phongRad)) - 1;
 
             //if (m_diamond)
-               i = 1 - pow(i*i2,.75) - i*i - i2*i2;
+               i = 1 - pow(i*i2,.75) - (i*i) - (i2*i2);
             //else
             //   i = 1 - i*i - i2*i2;
 
@@ -160,7 +169,7 @@ void BumpScope::generate_phongdat(void)
     }
 }
 
-#define M_PI_F static_cast<float>(M_PI)
+static constexpr float  M_PI_F  { std::numbers::pi_v<float> };
 void BumpScope::translate(int x, int y, int *xo, int *yo, int *xd, int *yd,
                           int *angle) const
 {
@@ -173,7 +182,7 @@ void BumpScope::translate(int x, int y, int *xo, int *yo, int *xd, int *yd,
     /* try setting y to both maxes */
     *yo = HEIGHT/2;
     *angle = (int)(asinf((float)(y-(HEIGHT/2.0F))/(float)*yo)/(M_PI_F/180.0F));
-    *xo = (int)((x-(WIDTH/2.0F))/cosf(*angle*(M_PI/180.0)));
+    *xo = (int)((x-(WIDTH/2.0F))/cosf(*angle*(M_PI_F/180.0F)));
 
     if (*xo >= -wd2 && *xo <= wd2) {
         *xd = (*xo>0)?-1:1;
@@ -183,7 +192,7 @@ void BumpScope::translate(int x, int y, int *xo, int *yo, int *xd, int *yd,
 
     *yo = -*yo;
     *angle = (int)(asinf((float)(y-(HEIGHT/2.0F))/(float)*yo)/(M_PI_F/180.0F));
-    *xo = (int)((x-(WIDTH/2.0F))/cosf(*angle*(M_PI/180.0)));
+    *xo = (int)((x-(WIDTH/2.0F))/cosf(*angle*(M_PI_F/180.0F)));
 
     if (*xo >= -wd2 && *xo <= wd2) {
         *xd = (*xo>0)?-1:1;
@@ -194,7 +203,7 @@ void BumpScope::translate(int x, int y, int *xo, int *yo, int *xd, int *yd,
     /* try setting x to both maxes */
     *xo = WIDTH/2;
     *angle = (int)(acosf((float)(x-(WIDTH/2.0F))/(float)*xo)/(M_PI_F/180.0F));
-    *yo = (int)((y-(HEIGHT/2.0F))/sinf(*angle*(M_PI/180.0)));
+    *yo = (int)((y-(HEIGHT/2.0F))/sinf(*angle*(M_PI_F/180.0F)));
 
     if (*yo >= -hd2 && *yo <= hd2) {
         *yd = (*yo>0)?-1:1;
@@ -204,7 +213,7 @@ void BumpScope::translate(int x, int y, int *xo, int *yo, int *xd, int *yd,
 
     *xo = -*xo;
     *angle = (int)(acosf((float)(x-(WIDTH/2.0F))/(float)*xo)/(M_PI_F/180.0F));
-    *yo = (int)((y-(HEIGHT/2.0F))/sinf(*angle*(M_PI/180.0)));
+    *yo = (int)((y-(HEIGHT/2.0F))/sinf(*angle*(M_PI_F/180.0F)));
 
     /* if this isn't right, it's out of our range and we don't care */
     *yd = (*yo>0)?-1:1;
@@ -290,14 +299,17 @@ void BumpScope::rgb_to_hsv(unsigned int color, double *h, double *s, double *v)
   if (max != 0.0) *s = (max - min) / max;
   else *s = 0.0;
 
-  if (*s == 0.0) *h = 0.0;
+  if (*s == 0.0)
+    {
+      *h = 0.0;
+    }
   else
     {
       double delta = max - min;
 
       if (r == max) *h = (g - b) / delta;
-      else if (g == max) *h = 2.0 + (b - r) / delta;
-      else if (b == max) *h = 4.0 + (r - g) / delta;
+      else if (g == max) *h = 2.0 + ((b - r) / delta);
+      else if (b == max) *h = 4.0 + ((r - g) / delta);
 
       *h = *h * 60.0;
 
@@ -307,9 +319,9 @@ void BumpScope::rgb_to_hsv(unsigned int color, double *h, double *s, double *v)
 
 void BumpScope::hsv_to_rgb(double h, double s, double v, unsigned int *color)
 {
-  double r = NAN;
-  double g = NAN;
-  double b = NAN;
+  double r = __builtin_nan("");
+  double g = __builtin_nan("");
+  double b = __builtin_nan("");
 
   if (s == 0.0)
     s = 0.000001;
@@ -361,8 +373,8 @@ bool BumpScope::process(VisualNode *node)
     for (uint i = 0; i < m_width; i++)
     {
         int y = (i * numSamps) / (m_width - 1);
-        y = (int)m_height / 2 +
-            ((int)node->m_left[y] * (int)m_height) / 0x10000;
+        y = ((int)m_height / 2) +
+            (((int)node->m_left[y] * (int)m_height) / 0x10000);
 
         y = std::max(y, 0);
         if (y >= (int)m_height)
@@ -396,8 +408,8 @@ bool BumpScope::draw(QPainter *p, [[maybe_unused]] const QColor &back)
             m_wasMoving = 1;
         }
 
-        m_ilx = (int)((m_width / 2.0F) + (cosf(m_iangle * (M_PI / 180.0)) * m_ixo));
-        m_ily = (int)((m_height / 2.0F) + (sinf(m_iangle * (M_PI / 180.0)) * m_iyo));
+        m_ilx = (int)((m_width / 2.0F) + (cosf(m_iangle * (M_PI_F / 180.0F)) * m_ixo));
+        m_ily = (int)((m_height / 2.0F) + (sinf(m_iangle * (M_PI_F / 180.0F)) * m_iyo));
 
         m_iangle += 2;
         if (m_iangle >= 360)
@@ -488,7 +500,9 @@ bool BumpScope::draw(QPainter *p, [[maybe_unused]] const QColor &back)
             {
                 m_is = std::max<double>(m_is, 0);
                 if (m_is > 0.52)
+                {
                     m_isd = -0.01;
+                }
                 else if (m_is == 0)
                 {
                     m_ihd = MythRandom(0, 360 - 1);

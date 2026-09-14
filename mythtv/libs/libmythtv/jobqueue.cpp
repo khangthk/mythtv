@@ -4,17 +4,32 @@
 #include <sys/stat.h>
 #include <iostream>
 #include <cstdlib>
+#include <thread>
 #include <fcntl.h>
 #include <pthread.h>
 
+#include <QtGlobal> // for Q_OS_XXX
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
+#ifndef PTHREAD_NULL
+#ifdef Q_OS_BSD4
+static constexpr pthread_t PTHREAD_NULL { nullptr };
+#else
+static constexpr int PTHREAD_NULL { 0 };
+#endif
+#endif
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QDateTime>
 #include <QFileInfo>
 #include <QEvent>
 #include <QCoreApplication>
+#include <QTimeZone>
 
 #include "libmythbase/compat.h"
 #include "libmythbase/exitcodes.h"
 #include "libmythbase/mthread.h"
+#include "libmythbase/mythappname.h"
 #include "libmythbase/mythconfig.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
@@ -23,10 +38,10 @@
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythmiscutil.h"
 #include "libmythbase/mythsystemlegacy.h"
-#include "libmythbase/programinfo.h"
 
 #include "jobqueue.h"
 #include "previewgenerator.h"
+#include "programinfo.h"
 #include "recordinginfo.h"
 #include "recordingprofile.h"
 
@@ -43,7 +58,7 @@ JobQueue::JobQueue(bool master) :
 {
     m_jobQueueCPU = gCoreContext->GetNumSetting("JobQueueCPU", 0);
 
-#ifndef USING_VALGRIND
+#if !CONFIG_VALGRIND
     QMutexLocker locker(&m_queueThreadCondLock);
     //NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer)
     m_processQueue = true;
@@ -52,7 +67,7 @@ JobQueue::JobQueue(bool master) :
     LOG(VB_GENERAL, LOG_ERR, LOC +
         "The JobQueue has been disabled because "
         "you compiled with the --enable-valgrind option.");
-#endif // USING_VALGRIND
+#endif // CONFIG_VALGRIND
 
     gCoreContext->addListener(this);
 }
@@ -93,7 +108,9 @@ void JobQueue::customEvent(QEvent *e)
             int jobID = -1;
 
             if (tokens[2] == "ID")
+            {
                 jobID = tokens[3].toInt();
+            }
             else
             {
                 jobID = GetJobID(
@@ -251,7 +268,7 @@ void JobQueue::ProcessQueue(void)
                                       .arg(jobs[x].startts);
 
                 // Should we even be looking at this job?
-                if ((inTimeWindow) &&
+                if (inTimeWindow &&
                     (!hostname.isEmpty()) &&
                     (hostname != m_hostname))
                 {
@@ -291,7 +308,7 @@ void JobQueue::ProcessQueue(void)
                 jobStatus[jobID] = status;
 
                 // Are we allowed to run this job?
-                if ((inTimeWindow) && (!AllowedToRun(jobs[x])))
+                if (inTimeWindow && (!AllowedToRun(jobs[x])))
                 {
                     message = QString("Skipping '%1' job for %2, "
                                       "not allowed to run on this backend.")
@@ -416,7 +433,7 @@ void JobQueue::ProcessQueue(void)
                 if (startedJobAlready)
                     continue;
 
-                if ((inTimeWindow) &&
+                if (inTimeWindow &&
                     (hostname.isEmpty()) &&
                     (!ChangeJobHost(jobID, m_hostname)))
                 {
@@ -474,7 +491,7 @@ void JobQueue::ProcessQueue(void)
         locker.relock();
         if (m_processQueue)
         {
-            std::chrono::milliseconds st = (startedJobAlready) ? 5s : sleepTime;
+            std::chrono::milliseconds st = startedJobAlready ? 5s : sleepTime;
             if (st > 0ms)
                 m_queueThreadCond.wait(locker.mutex(), st.count());
         }
@@ -612,8 +629,14 @@ bool JobQueue::QueueJobs(int jobTypes, uint chanid, const QDateTime &recstartts,
             int defer = gCoreContext->GetNumSetting("DeferAutoTranscodeDays", 0);
             if (defer)
             {
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
                 schedruntime = QDateTime(schedruntime.addDays(defer).date(),
                                          QTime(0,0,0), Qt::UTC);
+#else
+                schedruntime = QDateTime(schedruntime.addDays(defer).date(),
+                                         QTime(0,0,0),
+                                         QTimeZone(QTimeZone::UTC));
+#endif
             }
 
             QueueJob(JOB_TRANSCODE, chanid, recstartts, args, comment, host,
@@ -777,7 +800,7 @@ bool JobQueue::DeleteAllJobs(uint chanid, const QDateTime &recstartts)
     std::chrono::seconds maxSleep   = 90s;
     while (jobsAreRunning && totalSlept < maxSleep)
     {
-        usleep(1000);
+        std::this_thread::sleep_for(1ms);
         query.prepare("SELECT id FROM jobqueue "
                       "WHERE chanid = :CHANID and starttime = :STARTTIME "
                       "AND status NOT IN "
@@ -808,7 +831,7 @@ bool JobQueue::DeleteAllJobs(uint chanid, const QDateTime &recstartts)
             LOG(VB_JOBQUEUE, LOG_INFO, LOC + message);
         }
 
-        sleep(1);
+        std::this_thread::sleep_for(1s);
         totalSlept++;
     }
 
@@ -1196,8 +1219,14 @@ bool JobQueue::InJobRunWindow(std::chrono::minutes orStartsWithinMins)
         {
             // We passed the start time for today, try tomorrow
             QDateTime curDateTime = MythDate::current();
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
             QDateTime startDateTime = QDateTime(
                 curDateTime.date(), queueStartTime, Qt::UTC).addDays(1);
+#else
+            QDateTime startDateTime =
+                QDateTime(curDateTime.date(), queueStartTime,
+                          QTimeZone(QTimeZone::UTC)).addDays(1);
+#endif
 
             if (curDateTime.secsTo(startDateTime) <= duration_cast<std::chrono::seconds>(orStartsWithinMins).count())
             {
@@ -1763,11 +1792,12 @@ void JobQueue::ProcessJob(const JobQueueEntry& job)
 
 void JobQueue::StartChildJob(void *(*ChildThreadRoutine)(void *), int jobID)
 {
+    // clazy:exclude-next-line=heap-allocated-small-trivial-type
     auto *jts = new JobThreadStruct;
     jts->jq = this;
     jts->jobID = jobID;
 
-    pthread_t childThread = 0;
+    pthread_t childThread = PTHREAD_NULL;
     pthread_attr_t attr;
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
@@ -1869,15 +1899,15 @@ QString JobQueue::PrettyPrint(off_t bytes)
         int           m_precision;
     };
     static constexpr std::array<const PpTab_t,9> kPpTab {{
-        { "bytes", 9999, 0 },
-        { "kB", 999, 0 },
-        { "MB", 999, 1 },
-        { "GB", 999, 1 },
-        { "TB", 999, 1 },
-        { "PB", 999, 1 },
-        { "EB", 999, 1 },
-        { "ZB", 999, 1 },
-        { "YB", 0, 0 },
+        { .m_suffix="bytes", .m_max=9999, .m_precision=0 },
+        { .m_suffix="kB",    .m_max=999,  .m_precision=0 },
+        { .m_suffix="MB",    .m_max=999,  .m_precision=1 },
+        { .m_suffix="GB",    .m_max=999,  .m_precision=1 },
+        { .m_suffix="TB",    .m_max=999,  .m_precision=1 },
+        { .m_suffix="PB",    .m_max=999,  .m_precision=1 },
+        { .m_suffix="EB",    .m_max=999,  .m_precision=1 },
+        { .m_suffix="ZB",    .m_max=999,  .m_precision=1 },
+        { .m_suffix="YB",    .m_max=0,    .m_precision=0 },
     }};
     float fbytes = bytes;
 
@@ -2502,4 +2532,4 @@ int JobQueue::UserJobTypeToIndex(int jobType)
     return JOB_NONE;
 }
 
-/* vim: set expandtab tabstop=4 shiftwidth=4: */
+#include "moc_jobqueue.cpp"

@@ -1,8 +1,8 @@
 #ifndef CUSTOMEDIT_H_
 #define CUSTOMEDIT_H_
 
-#include "libmythbase/programinfo.h"
 #include "libmythtv/mythplayer.h"
+#include "libmythtv/programinfo.h"
 #include "libmythui/mythscreentype.h"
 
 class MythUITextEdit;
@@ -24,6 +24,8 @@ class CustomEdit : public MythScreenType
 
     bool Create() override; // MythScreenType
     bool keyPressEvent(QKeyEvent *event) override; // MythScreenType
+
+  protected:
     void customEvent(QEvent *event) override; // MythUIType
 
   protected slots:

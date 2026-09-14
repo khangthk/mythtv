@@ -6,9 +6,10 @@
 #include <QString>
 
 // MythTV
-#include <libmyth/mythcontext.h>
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythdbcon.h>
 #include <libmythbase/mythdirs.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythbase/mythsystemlegacy.h>
 #include <libmythui/mythmainwindow.h>
 #include <libmythui/mythuibuttonlist.h>
@@ -184,6 +185,7 @@ void BookmarkManager::UpdateGroupList(void)
 {
     m_groupList->Reset();
     QStringList groups;
+    groups.reserve(m_siteList.count());
     for (int x = 0; x < m_siteList.count(); x++)
     {
         Bookmark *site = m_siteList.at(x);
@@ -658,3 +660,5 @@ void BookmarkManager::slotClearMarked(void)
         }
     }
 }
+
+#include "moc_bookmarkmanager.cpp"

@@ -17,12 +17,16 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
+#ifndef LIBMYTHMETADATA_TEST_VIDEOMETADATA_H
+#define LIBMYTHMETADATA_TEST_VIDEOMETADATA_H
 
+#include <QChar>     // Fix Qt6 GCC SFINAE warning
+#include <QBitArray> // Fix Qt6 GCC SFINAE warning
 #include <QTest>
 
-#include "libmythbase/programinfo.h"
 #include "libmythmetadata/metadatafactory.h"
 #include "libmythmetadata/videometadata.h"
+#include "libmythtv/programinfo.h"
 #include "libmythtv/recordinginfo.h"
 
 class Testvideometadata: public QObject
@@ -62,7 +66,7 @@ class Testvideometadata: public QObject
     {
         // With Spaces as separator
         TestMetadata(QString("A Movie Title (1984).mpg"),
-                     QString("A Movie Title"),
+                     QString("A Movie Title (1984)"),
                      QString(""),
                      0,
                      0);
@@ -380,3 +384,5 @@ class Testvideometadata: public QObject
         QCOMPARE (obj.GetEpisode(), 3);
     }
 };
+
+#endif // LIBMYTHMETADATA_TEST_VIDEOMETADATA_H

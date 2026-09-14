@@ -3,13 +3,17 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdint>
-#include <ctime>
 
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QString>
 #include <QDir>
 
-#ifdef _WIN32
+#ifdef Q_OS_WINDOWS
     #undef mkdir
 #endif
 
@@ -21,6 +25,11 @@ MBASE_PUBLIC bool getMemStats(
     int &totalMB, int &freeMB, int &totalVM, int &freeVM);
 using loadArray = std::array<double,3>;
 MBASE_PUBLIC loadArray getLoadAvgs(void);
+
+MBASE_PUBLIC bool RemoteGetLoad(loadArray &load);
+MBASE_PUBLIC bool RemoteGetUptime(std::chrono::seconds &uptime);
+MBASE_PUBLIC
+bool RemoteGetMemStats(int &totalMB, int &freeMB, int &totalVM, int &freeVM);
 
 MBASE_PUBLIC bool ping(const QString &host, std::chrono::milliseconds timeout);
 MBASE_PUBLIC bool telnet(const QString &host, int port);

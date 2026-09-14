@@ -30,7 +30,6 @@
 #include <QStack>
 
 // MythTV
-#include "libmythbase/mythlogging.h"
 #include "libmythui/mythuiexp.h"
 #include "libmythui/mythrender_base.h"
 #include "libmythui/mythuianimation.h"
@@ -58,7 +57,7 @@ class MUI_PUBLIC MythGLTexture
   public:
     explicit MythGLTexture(QOpenGLTexture *Texture);
     explicit MythGLTexture(GLuint Texture);
-   ~MythGLTexture() = default;
+    virtual ~MythGLTexture() = default;
 
     unsigned char  *m_data                    { nullptr };
     int             m_bufferSize              { 0 } ;
@@ -102,7 +101,6 @@ class MUI_PUBLIC MythRenderOpenGL : public QOpenGLContext, public QOpenGLFunctio
     static MythRenderOpenGL* Create(QWidget *Widget);
 
     // MythRender
-    void  ReleaseResources(void) override;
     QStringList GetDescription(void) override;
 
     bool  IsReady(void);
@@ -168,6 +166,9 @@ class MUI_PUBLIC MythRenderOpenGL : public QOpenGLContext, public QOpenGLFunctio
     void  DrawProcedural(QRect Area, int Alpha, QOpenGLFramebufferObject* Target,
                          QOpenGLShaderProgram* Program, float TimeVal);
     std::tuple<int,int,int> GetGPUMemory();
+
+  protected:
+    void  ReleaseResources(void) override;
 
   public slots:
     void  MessageLogged  (const QOpenGLDebugMessage &Message);

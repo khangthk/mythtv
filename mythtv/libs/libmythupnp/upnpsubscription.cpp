@@ -15,13 +15,19 @@ QObject::customEvent to receive event notifications for subscribed services.
 #else
 #include <QTextCodec>
 #endif
+#include <algorithm>
 #include <utility>
 
-#include "libmythbase/mythcorecontext.h"
+#include <QHostAddress>
+#include <QString>
+#include <QUrl>
+#include <QDomDocument>
+
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythtypes.h"
 
-#include "bufferedsocketdevice.h"
+#include "blockingtcpsocket.h"
+#include "upnp.h"
 
 // default requested time for subscription (actual is dictated by server)
 static constexpr uint16_t SUBSCRIPTION_TIME { 1800 };
@@ -45,12 +51,13 @@ UPNPSubscription::UPNPSubscription(const QString &share_path, int port)
 {
     m_nSupportedMethods = (uint)RequestTypeNotify; // Only NOTIFY supported
 
-    QHostAddress addr;
-    if (!UPnp::g_IPAddrList.isEmpty())
-        addr = UPnp::g_IPAddrList.at(0);
+    auto it = std::ranges::find_if(std::as_const(UPnp::g_IPAddrList),
+                           [](const QHostAddress& tmp) {return !tmp.isLoopback(); });
+    if (it == UPnp::g_IPAddrList.cend())
+        return;
+    const QHostAddress& addr = *it;
 
     QString host;
-    // taken from MythCoreContext
     if (addr.protocol() == QAbstractSocket::IPv6Protocol)
         host = "[" + addr.toString() + "]";
     else
@@ -230,6 +237,7 @@ bool UPNPSubscription::ProcessRequest(HTTPRequest *pRequest)
 
     pRequest->m_nResponseStatus = 400;
     QDomDocument body;
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     QString error;
     int errorCol = 0;
     int errorLine = 0;
@@ -240,6 +248,19 @@ bool UPNPSubscription::ProcessRequest(HTTPRequest *pRequest)
                 .arg(errorLine).arg(errorCol).arg(error));
         return true;
     }
+#else
+    auto parseResult =
+        body.setContent(payload,
+                        QDomDocument::ParseOption::UseNamespaceProcessing);
+    if (!parseResult)
+    {
+        LOG(VB_GENERAL, LOG_ERR, LOC +
+            QString("Failed to parse event: Line: %1 Col: %2 Error: '%3'")
+                .arg(parseResult.errorLine).arg(parseResult.errorColumn)
+                .arg(parseResult.errorMessage));
+        return true;
+    }
+#endif
 
     LOG(VB_UPNP, LOG_DEBUG, LOC + "/n/n" + body.toString(4) + "/n/n");
 
@@ -299,32 +320,16 @@ bool UPNPSubscription::SendUnsubscribeRequest(const QString &usn,
 
     LOG(VB_UPNP, LOG_DEBUG, LOC + "\n\n" + sub);
 
-    auto *sockdev = new MSocketDevice(MSocketDevice::Stream);
-    auto *sock = new BufferedSocketDevice(sockdev);
-    sockdev->setBlocking(true);
-
-    if (sock->Connect(QHostAddress(host), port))
+    BlockingTcpSocket socket;
+    if (socket.connect(QHostAddress(host), port, MAX_WAIT))
     {
-        if (sock->WriteBlockDirect(sub.constData(), sub.size()) != -1)
+        if (socket.write(sub.constData(), sub.size(), MAX_WAIT) != -1)
         {
-            QString line = sock->ReadLine(MAX_WAIT);
+            QString line = socket.readLine(MAX_WAIT);
             success = !line.isEmpty();
         }
-        else
-        {
-            LOG(VB_GENERAL, LOG_ERR, LOC +
-                QString("Socket write error for %1:%2") .arg(host).arg(port));
-        }
-        sock->Close();
-    }
-    else
-    {
-        LOG(VB_GENERAL, LOG_ERR, LOC +
-            QString("Failed to open socket for %1:%2") .arg(host).arg(port));
     }
 
-    delete sock;
-    delete sockdev;
     if (success)
         LOG(VB_GENERAL, LOG_INFO, LOC + QString("Unsubscribed to %1").arg(usn));
     else
@@ -373,32 +378,32 @@ std::chrono::seconds UPNPSubscription::SendSubscribeRequest(const QString &callb
 
     LOG(VB_UPNP, LOG_DEBUG, LOC + "\n\n" + sub);
 
-    auto *sockdev = new MSocketDevice(MSocketDevice::Stream);
-    auto *sock = new BufferedSocketDevice(sockdev);
-    sockdev->setBlocking(true);
-
+    QString error {"unknown"};
     QString uuid;
     QString timeout;
     std::chrono::seconds result = 0s;
 
-    if (sock->Connect(QHostAddress(host), port))
+    BlockingTcpSocket socket;
+    if (socket.connect(QHostAddress(host), port, MAX_WAIT))
     {
-        if (sock->WriteBlockDirect(sub.constData(), sub.size()) != -1)
+        if (socket.write(sub.constData(), sub.size(), MAX_WAIT) != -1)
         {
             bool ok = false;
-            QString line = sock->ReadLine(MAX_WAIT);
+            QString line = socket.readLine(MAX_WAIT);
             while (!line.isEmpty())
             {
-                LOG(VB_UPNP, LOG_DEBUG, LOC + line);
+                LOG(VB_UPNP, LOG_DEBUG, LOC + line.trimmed());
                 if (line.contains("HTTP/1.1 200 OK", Qt::CaseInsensitive))
                     ok = true;
+                else if (line.contains("HTTP/1.1", Qt::CaseInsensitive))
+                    error = line.mid(8).trimmed();
                 if (line.startsWith("SID:", Qt::CaseInsensitive))
                     uuid = line.mid(4).trimmed().mid(5).trimmed();
                 if (line.startsWith("TIMEOUT:", Qt::CaseInsensitive))
                     timeout = line.mid(8).trimmed().mid(7).trimmed();
                 if (ok && !uuid.isEmpty() && !timeout.isEmpty())
                     break;
-                line = sock->ReadLine(MAX_WAIT);
+                line = socket.readLine(MAX_WAIT);
             }
 
             if (ok && !uuid.isEmpty() && !timeout.isEmpty())
@@ -409,23 +414,10 @@ std::chrono::seconds UPNPSubscription::SendSubscribeRequest(const QString &callb
             else
             {
                 LOG(VB_GENERAL, LOG_ERR, LOC +
-                    QString("Failed to subscribe to %1").arg(usn));
+                    QString("Error '%1' subscribing to %2").arg(error,usn));
             }
         }
-        else
-        {
-            LOG(VB_GENERAL, LOG_ERR, LOC +
-                QString("Socket write error for %1:%2") .arg(host).arg(port));
-        }
-        sock->Close();
-    }
-    else
-    {
-        LOG(VB_GENERAL, LOG_ERR, LOC +
-            QString("Failed to open socket for %1:%2") .arg(host).arg(port));
     }
 
-    delete sock;
-    delete sockdev;
     return result;
 }

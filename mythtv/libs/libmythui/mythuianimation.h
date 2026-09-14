@@ -1,6 +1,7 @@
 #ifndef MYTHUIANIMATION_H
 #define MYTHUIANIMATION_H
 
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QDateTime>
 #include <QVariantAnimation>
 
@@ -22,16 +23,16 @@ class UIEffects
 
     QPointF GetCentre(const QRect rect, int xoff, int yoff) const
     {
-        float x = static_cast<float>(xoff) + static_cast<float>(rect.left());
-        float y = static_cast<float>(yoff) + static_cast<float>(rect.top());
+        qreal x = static_cast<qreal>(xoff) + rect.left();
+        qreal y = static_cast<qreal>(yoff) + rect.top();
         if (Middle == m_centre || Top == m_centre || Bottom == m_centre)
-            x += static_cast<float>(rect.width()) / 2.0F;
+            x += rect.width() / 2.0;
         if (Middle == m_centre || Left == m_centre || Right == m_centre)
-            y += static_cast<float>(rect.height()) / 2.0F;
+            y += rect.height() / 2.0;
         if (Right == m_centre || TopRight == m_centre || BottomRight == m_centre)
-            x += static_cast<float>(rect.width());
+            x += rect.width();
         if (Bottom == m_centre || BottomLeft == m_centre || BottomRight == m_centre)
-            y += static_cast<float>(rect.height());
+            y += rect.height();
         return {x, y};
     }
 
@@ -59,8 +60,6 @@ class MythUIAnimation : public QVariantAnimation, XMLParseBase
     QVariant Value() const { return m_value; }
     bool IsActive() const { return m_active; }
 
-    void updateCurrentValue(const QVariant& value) override; // QVariantAnimation
-
     void IncrementCurrentTime(void);
     void SetEasingCurve(const QString &curve);
     void SetCentre(const QString &centre);
@@ -68,6 +67,9 @@ class MythUIAnimation : public QVariantAnimation, XMLParseBase
     void SetReversible(bool rev) { m_reversible = rev; }
 
     static void ParseElement(const QDomElement& element, MythUIType* parent);
+
+  protected:
+    void updateCurrentValue(const QVariant& value) override; // QVariantAnimation
 
   private:
     static void ParseSection(const QDomElement &element,

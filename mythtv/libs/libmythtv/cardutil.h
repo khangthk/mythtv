@@ -14,6 +14,8 @@
 #include <QMetaEnum>
 
 // MythTV headers
+#include "libmythbase/mythconfig.h"
+
 #include "mythtvexp.h"
 #include "dtvconfparserhelpers.h"
 
@@ -46,7 +48,7 @@ class MTV_PUBLIC CardUtil : public QObject
     using InputTypes = QMap<QString, QString>;
 
     /// \brief all the different inputs
-    enum INPUT_TYPES : std::uint8_t
+    enum class INPUT_TYPES : std::uint8_t
     {
         ERROR_OPEN    = 0,
         ERROR_UNKNOWN = 1,
@@ -75,61 +77,61 @@ class MTV_PUBLIC CardUtil : public QObject
 
     Q_ENUM(INPUT_TYPES)
 
-    static enum INPUT_TYPES toInputType(const QString &name)
+    static INPUT_TYPES toInputType(const QString &name)
     {
         if ("ERROR_OPEN" == name)
-            return ERROR_OPEN;
+            return INPUT_TYPES::ERROR_OPEN;
         if ("ERROR_UNKNOWN" == name)
-            return ERROR_UNKNOWN;
+            return INPUT_TYPES::ERROR_UNKNOWN;
         if ("ERROR_PROBE" == name)
-            return ERROR_PROBE;
+            return INPUT_TYPES::ERROR_PROBE;
         if ("QPSK" == name)
-            return QPSK;
+            return INPUT_TYPES::QPSK;
         if ("DVBS" == name)
-            return DVBS;
+            return INPUT_TYPES::DVBS;
         if ("QAM" == name)
-            return QAM;
+            return INPUT_TYPES::QAM;
         if ("DVBC" == name)
-            return DVBC;
+            return INPUT_TYPES::DVBC;
         if ("OFDM" == name)
-            return OFDM;
+            return INPUT_TYPES::OFDM;
         if ("DVBT" == name)
-            return DVBT;
+            return INPUT_TYPES::DVBT;
         if ("ATSC" == name)
-            return ATSC;
+            return INPUT_TYPES::ATSC;
         if ("V4L" == name)
-            return V4L;
+            return INPUT_TYPES::V4L;
         if ("MPEG" == name)
-            return MPEG;
+            return INPUT_TYPES::MPEG;
         if ("FIREWIRE" == name)
-            return FIREWIRE;
+            return INPUT_TYPES::FIREWIRE;
         if ("HDHOMERUN" == name)
-            return HDHOMERUN;
+            return INPUT_TYPES::HDHOMERUN;
         if ("FREEBOX" == name)
-            return FREEBOX;
+            return INPUT_TYPES::FREEBOX;
         if ("HDPVR" == name)
-            return HDPVR;
+            return INPUT_TYPES::HDPVR;
         if ("DVB_S2" == name)
-            return DVBS2;
+            return INPUT_TYPES::DVBS2;
         if ("IMPORT" == name)
-            return IMPORT;
+            return INPUT_TYPES::IMPORT;
         if ("DEMO" == name)
-            return DEMO;
+            return INPUT_TYPES::DEMO;
         if ("ASI" == name)
-            return ASI;
+            return INPUT_TYPES::ASI;
         if ("CETON" == name)
-            return CETON;
+            return INPUT_TYPES::CETON;
         if ("EXTERNAL" == name)
-            return EXTERNAL;
+            return INPUT_TYPES::EXTERNAL;
         if ("VBOX" == name)
-            return VBOX;
+            return INPUT_TYPES::VBOX;
         if ("DVB_T2" == name)
-            return DVBT2;
+            return INPUT_TYPES::DVBT2;
         if ("V4L2ENC" == name)
-            return V4L2ENC;
+            return INPUT_TYPES::V4L2ENC;
         if ("SATIP" == name)
-            return SATIP;
-        return ERROR_UNKNOWN;
+            return INPUT_TYPES::SATIP;
+        return INPUT_TYPES::ERROR_UNKNOWN;
     }
 
     static bool         IsEncoder(const QString &rawtype)
@@ -224,10 +226,10 @@ class MTV_PUBLIC CardUtil : public QObject
         return !(rawtype == "FREEBOX" || rawtype == "VBOX");
     }
 
-#ifdef USING_VBOX
+#if CONFIG_VBOX
     static bool         IsVBoxPresent(uint inputid);
 #endif
-#ifdef USING_SATIP
+#if CONFIG_SATIP
     static bool         IsSatIPPresent(uint inputid);
 #endif
 

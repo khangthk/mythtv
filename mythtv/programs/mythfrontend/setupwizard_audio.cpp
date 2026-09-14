@@ -6,10 +6,12 @@
 #include <QVariant>
 
 // MythTV
-#include "libmyth/audio/audiooutpututil.h"
-#include "libmyth/mythcontext.h"
+#include "libmythtv/audio/audiooutput.h"
+#include "libmythtv/audio/audiooutputsettings.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdbcon.h"
 #include "libmythbase/mythdirs.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythui/mythprogressdialog.h"
 
 // MythFrontend
@@ -142,7 +144,7 @@ void AudioSetupWizard::Init(void)
     if (!current.isEmpty())
     {
         auto samename = [current](const auto & ao){ return ao.m_name == current; };
-        found = std::any_of(m_outputlist->cbegin(), m_outputlist->cend(), samename);
+        found = std::ranges::any_of(std::as_const(*m_outputlist), samename);
         if (!found)
         {
             AudioOutput::AudioDeviceConfig *adc =
@@ -191,11 +193,18 @@ AudioOutputSettings AudioSetupWizard::UpdateCapabilities(bool restore, bool AC3)
 
     AudioOutputSettings settings;
 
-    auto samename = [out](const auto & ao){ return ao.m_name == out; };
-    // NOLINTNEXTLINE(readability-qualified-auto) // qt6
-    const auto ao = std::find_if(m_outputlist->cbegin(), m_outputlist->cend(), samename);
-    if (ao != m_outputlist->cend())
-        settings = ao->m_settings;
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+    const auto* it = std::ranges::find(std::as_const(*m_outputlist), out,
+                                       &AudioOutput::AudioDeviceConfig::m_name);
+#else
+    const auto it = std::ranges::find(std::as_const(*m_outputlist), out,
+                                      &AudioOutput::AudioDeviceConfig::m_name);
+#endif
+    if (it != m_outputlist->cend())
+    {
+        const AudioOutput::AudioDeviceConfig& ao = *it;
+        settings = ao.m_settings;
+    }
 
     realmax_speakers = max_speakers = settings.BestSupportedChannels();
 
@@ -230,8 +239,7 @@ AudioOutputSettings AudioSetupWizard::UpdateCapabilities(bool restore, bool AC3)
 
     if (m_speakerNumberButtonList->GetItemCurrent() != nullptr)
     {
-        cur_speakers = m_speakerNumberButtonList->GetItemCurrent()->GetData()
-                                      .value<int>();
+        cur_speakers = m_speakerNumberButtonList->GetItemCurrent()->GetData().toInt();
     }
     m_maxspeakers = std::max(cur_speakers, m_maxspeakers);
     if (restore)
@@ -344,8 +352,7 @@ void AudioSetupWizard::save(void)
     gCoreContext->SaveBoolSetting("PassThruDeviceOverride", false);
     gCoreContext->SaveSetting("PassThruOutputDevice", QString());
 
-    int channels = m_speakerNumberButtonList->GetItemCurrent()->GetData()
-                               .value<int>();
+    int channels = m_speakerNumberButtonList->GetItemCurrent()->GetData().toInt();
     gCoreContext->SaveSetting("MaxChannels", channels);
 
     QString device =
@@ -400,12 +407,11 @@ void AudioSetupWizard::toggleSpeakers(void)
 
     AudioOutputSettings settings = UpdateCapabilities(false);
     QString out = m_audioDeviceButtonList->GetItemCurrent()->GetText();
-    int channels = m_speakerNumberButtonList->GetItemCurrent()->GetData()
-                        .value<int> ();
+    int channels = m_speakerNumberButtonList->GetItemCurrent()->GetData().toInt();
 
     m_testThread =
         new AudioTestThread(this, out, out, channels, settings, false);
-    if (!m_testThread->result().isEmpty())
+    if (!m_testThread->isOutputOpen())
     {
         QString msg = QObject::tr("Audio device is invalid or not useable.");
         ShowOkPopup(msg);
@@ -418,3 +424,5 @@ void AudioSetupWizard::toggleSpeakers(void)
         m_testSpeakerButton->SetText(tr("Stop Speaker Test"));
     }
 }
+
+#include "moc_setupwizard_audio.cpp"

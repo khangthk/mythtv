@@ -17,7 +17,6 @@ object_script.*
 .DS_Store
 .*.swp
 *.pc
-patches
 *.core
 debug
 release
@@ -61,9 +60,13 @@ __pycache__
 mocinclude.opt
 build
 build-*
+debug*
 *.bak
 README.CMake.*
 CMakeUserPresets.json
 libsinstall-*
 cppcheck.html
 cppcheck.xml
+log
+log-*
+success-*

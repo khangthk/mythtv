@@ -48,14 +48,25 @@ Q_DECLARE_METATYPE(MythUICallbackNMF)
 Q_DECLARE_METATYPE(MythUICallbackMF)
 Q_DECLARE_METATYPE(MythUICallbackMFc)
 
-// Templates for determining if an argument is a "Pointer to a
-// Member Function"
-template<typename Func> struct FunctionPointerTest
-{ enum : std::uint8_t {MemberFunction = false, MemberConstFunction = false}; };
-template<class Obj, typename Ret, typename... Args> struct FunctionPointerTest<Ret (Obj::*) (Args...)>
-{ enum : std::uint8_t {MemberFunction = true, MemberConstFunction = false}; };
-template<class Obj, typename Ret, typename... Args> struct FunctionPointerTest<Ret (Obj::*) (Args...) const>
-{ enum {MemberFunction = false, MemberConstFunction = true}; };
+// std::is_member_function_pointer_v is true for both const and
+// non-const member functions.  Need a way to distinguish between
+// these two cases.
+
+// Base template
+template <typename T>
+struct is_const_member_func : std::false_type {};
+// Specialization for const member functions
+template <typename Return, typename Class, typename... Args>
+struct is_const_member_func<Return (Class::*)(Args...) const> : std::true_type {};
+
+// Helpers for convenience
+template <typename T>
+constexpr bool is_const_member_func_v =
+    std::is_member_function_pointer_v<T> && is_const_member_func<T>::value;
+template <typename T>
+constexpr bool is_nonconst_member_func_v =
+    std::is_member_function_pointer_v<T> && !is_const_member_func<T>::value;
+
 
 /**
  * \defgroup MythUI MythTV User Interface Library
@@ -113,6 +124,8 @@ class MUI_PUBLIC MythUIType : public QObject, public XMLParseBase
     bool CanTakeFocus(void) const;
     void SetCanTakeFocus(bool set = true);
     void SetFocusOrder(int order);
+    void SetFocusedName(const QString & widgetname);
+    QString GetFocusedName(void) const { return m_focusedName; }
 
     bool IsEnabled(void) const { return m_enabled; }
     void SetEnabled(bool enable);
@@ -206,9 +219,9 @@ class MUI_PUBLIC MythUIType : public QObject, public XMLParseBase
     void customEvent(QEvent *event) override; // QObject
 
   public slots:
-    void LoseFocus();
-    bool TakeFocus();
-    void Activate();
+    void LoseFocus(void);
+    bool TakeFocus(void);
+    void Activate(void);
     void Hide(void);
     void Show(void);
     void Refresh(void);
@@ -216,17 +229,17 @@ class MUI_PUBLIC MythUIType : public QObject, public XMLParseBase
     void UpdateDependState(MythUIType *dependee, bool isDefault);
 
   signals:
-    void RequestUpdate();
+    void RequestUpdate(void);
     void RequestRegionUpdate(const QRect &);
-    void TakingFocus();
-    void LosingFocus();
+    void TakingFocus(void);
+    void LosingFocus(void);
     void VisibilityChanged(bool Visible);
-    void Showing();
-    void Hiding();
-    void Enabling();
-    void Disabling();
-    void FinishedMoving();
-    void FinishedFading();
+    void Showing(void);
+    void Hiding(void);
+    void Enabling(void);
+    void Disabling(void);
+    void FinishedMoving(void);
+    void FinishedFading(void);
     void DependChanged(bool isDefault);
 
   protected:
@@ -269,6 +282,7 @@ class MUI_PUBLIC MythUIType : public QObject, public XMLParseBase
     bool         m_isDependDefault {false};
     QMap<MythUIType *, bool> m_reverseDepend;
 
+    QString      m_focusedName;
     int          m_focusOrder      {0};
 
     MythRect     m_area            {0,0,0,0};

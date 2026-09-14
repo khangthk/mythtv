@@ -19,7 +19,7 @@
 
 */
 
-#if !defined(INGREDIENTS_H)
+#ifndef INGREDIENTS_H
 #define INGREDIENTS_H
 
 #include "Root.h"
@@ -131,8 +131,8 @@ class MHSetData: public MHElemAction
   MHSetData(): MHElemAction(":SetData") {}
     void Initialise(MHParseNode *p, MHEngine *engine) override; // MHElemAction
     void Perform(MHEngine *engine) override; // MHElemAction
-    void PrintArgs(FILE *fd, int nTabs) const override; // MHElemAction
   protected:
+    void PrintArgs(FILE *fd, int nTabs) const override; // MHElemAction
     // Either included content or referenced content.
     bool m_fIsIncluded        {false};
     bool m_fSizePresent       {false};

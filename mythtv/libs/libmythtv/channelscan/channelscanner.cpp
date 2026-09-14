@@ -29,6 +29,14 @@
 
 #include <algorithm>
 
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
+
+#include "libmythbase/mythconfig.h"
+#include "libmythbase/mythlogging.h"
+
 #include "cardutil.h"
 #include "channelscan_sm.h"
 #include "channelscanner.h"
@@ -36,7 +44,7 @@
 #include "recorders/ExternalChannel.h"
 #include "recorders/analogsignalmonitor.h"
 #include "recorders/asichannel.h"
-#ifdef USING_DVB        // for bug in gcc 8.3
+#if CONFIG_DVB          // for bug in gcc 8.3
 #include "recorders/dvbchannel.h"
 #endif
 #include "recorders/dvbsignalmonitor.h"
@@ -81,7 +89,7 @@ void ChannelScanner::Teardown(void)
         m_iptvScanner = nullptr;
     }
 
-#ifdef USING_VBOX
+#if CONFIG_VBOX
     if (m_vboxScanner)
     {
         m_vboxScanner->Stop();
@@ -90,7 +98,7 @@ void ChannelScanner::Teardown(void)
     }
 #endif
 
-#if !defined( USING_MINGW ) && !defined( _MSC_VER )
+#ifndef Q_OS_WINDOWS
     if (m_externRecScanner)
     {
         m_externRecScanner->Stop();
@@ -253,7 +261,9 @@ void ChannelScanner::Scan(
 
             ok = m_sigmonScanner->ScanIPTVChannels(sourceid, m_iptvChannels);
             if (ok)
+            {
                 m_scanMonitor->ScanPercentComplete(0);
+            }
             else
             {
                 InformUser(tr("Error scanning MPTS in IPTV"));
@@ -291,38 +301,55 @@ void ChannelScanner::Scan(
 }
 
 DTVConfParser::return_t ChannelScanner::ImportDVBUtils(
-    uint sourceid, int cardtype, const QString &file)
+    uint sourceid, CardUtil::INPUT_TYPES cardtype, const QString &file)
 {
     m_sourceid = sourceid;
     m_channels.clear();
 
-    DTVConfParser::cardtype_t type = DTVConfParser::UNKNOWN;
-    type = ((CardUtil::DVBT == cardtype) ||
-            (CardUtil::DVBT2 == cardtype)) ? DTVConfParser::OFDM : type;
-    type = (CardUtil::QPSK == cardtype) ? DTVConfParser::QPSK : type;
-    type = (CardUtil::DVBC == cardtype) ? DTVConfParser::QAM  : type;
-    type = (CardUtil::DVBS2 == cardtype) ? DTVConfParser::DVBS2 : type;
-    type = ((CardUtil::ATSC == cardtype) ||
-            (CardUtil::HDHOMERUN == cardtype)) ? DTVConfParser::ATSC : type;
+    DTVConfParser::cardtype_t type = DTVConfParser::cardtype_t::UNKNOWN;
+    switch (cardtype) {
+      case CardUtil::INPUT_TYPES::DVBT:
+      case CardUtil::INPUT_TYPES::DVBT2:
+        type = DTVConfParser::cardtype_t::OFDM;
+        break;
+      case CardUtil::INPUT_TYPES::QPSK:
+        type = DTVConfParser::cardtype_t::QPSK;
+        break;
+      case CardUtil::INPUT_TYPES::DVBC:
+        type = DTVConfParser::cardtype_t::QAM;
+        break;
+      case CardUtil::INPUT_TYPES::DVBS2:
+        type = DTVConfParser::cardtype_t::DVBS2;
+        break;
+      case CardUtil::INPUT_TYPES::ATSC:
+      case CardUtil::INPUT_TYPES::HDHOMERUN:
+        type = DTVConfParser::cardtype_t::ATSC;
+        break;
+      default:
+        type = DTVConfParser::cardtype_t::UNKNOWN;
+        break;
+    }
 
-    DTVConfParser::return_t ret { DTVConfParser::OK };
-    if (type == DTVConfParser::UNKNOWN)
-        ret = DTVConfParser::ERROR_CARDTYPE;
+    DTVConfParser::return_t ret { DTVConfParser::return_t::OK };
+    if (type == DTVConfParser::cardtype_t::UNKNOWN)
+    {
+        ret = DTVConfParser::return_t::ERROR_CARDTYPE;
+    }
     else
     {
         DTVConfParser parser(type, sourceid, file);
 
         ret = parser.Parse();
-        if (DTVConfParser::OK == ret)
+        if (DTVConfParser::return_t::OK == ret)
             m_channels = parser.GetChannels();
     }
 
-    if (DTVConfParser::OK != ret)
+    if (DTVConfParser::return_t::OK != ret)
     {
         QString msg;
-        if (DTVConfParser::ERROR_PARSE == ret)
+        if (DTVConfParser::return_t::ERROR_PARSE == ret)
             msg = tr("Failed to parse '%1'").arg(file);
-        else if (DTVConfParser::ERROR_CARDTYPE == ret)
+        else if (DTVConfParser::return_t::ERROR_CARDTYPE == ret)
             msg = tr("Programmer Error : incorrect card type");
         else
             msg = tr("Failed to open '%1'").arg(file);
@@ -364,7 +391,7 @@ bool ChannelScanner::ImportVBox([[maybe_unused]] uint cardid,
                                 [[maybe_unused]] ServiceRequirements serviceType)
 {
     m_sourceid = sourceid;
-#ifdef USING_VBOX
+#if CONFIG_VBOX
     if (!m_scanMonitor)
         m_scanMonitor = new ScanMonitor(this);
 
@@ -386,7 +413,7 @@ bool ChannelScanner::ImportExternRecorder([[maybe_unused]] uint cardid,
                                           uint sourceid)
 {
     m_sourceid = sourceid;
-#if !defined( USING_MINGW ) && !defined( _MSC_VER )
+#ifndef Q_OS_WINDOWS
     if (!m_scanMonitor)
         m_scanMonitor = new ScanMonitor(this);
 
@@ -412,7 +439,7 @@ bool ChannelScanner::ImportHDHR([[maybe_unused]] uint cardid,
                                 [[maybe_unused]] ServiceRequirements serviceType)
 {
     m_sourceid = sourceid;
-#ifdef USING_HDHOMERUN
+#if CONFIG_HDHOMERUN
     if (!m_scanMonitor)
         m_scanMonitor = new ScanMonitor(this);
 
@@ -455,7 +482,7 @@ void ChannelScanner::PreScanCommon(
 
     QString card_type = CardUtil::GetRawInputType(cardid);
 
-#ifdef USING_DVB
+#if CONFIG_DVB
     if ("DVB" == card_type)
     {
         QString sub_type = CardUtil::ProbeDVBType(device).toUpper();
@@ -468,7 +495,7 @@ void ChannelScanner::PreScanCommon(
         if ((ScanTypeSetting::TransportScan     == scantype) ||
             (ScanTypeSetting::FullTransportScan == scantype))
         {
-            signal_timeout = (do_ignore_signal_timeout) ?
+            signal_timeout = do_ignore_signal_timeout ?
                 channel_timeout * 10 : signal_timeout;
         }
 
@@ -484,48 +511,48 @@ void ChannelScanner::PreScanCommon(
     }
 #endif
 
-#ifdef USING_V4L2
+#if CONFIG_V4L2
     if (("V4L" == card_type) || ("MPEG" == card_type))
         m_channel = new V4LChannel(nullptr, device);
 #endif
 
-#ifdef USING_HDHOMERUN
+#if CONFIG_HDHOMERUN
     if ("HDHOMERUN" == card_type)
     {
         m_channel = new HDHRChannel(nullptr, device);
         monitor_snr = true;
     }
-#endif // USING_HDHOMERUN
+#endif // CONFIG_HDHOMERUN
 
-#ifdef USING_SATIP
+#if CONFIG_SATIP
     if ("SATIP" == card_type)
     {
         m_channel = new SatIPChannel(nullptr, device);
     }
 #endif
 
-#ifdef USING_ASI
+#if CONFIG_ASI
     if ("ASI" == card_type)
     {
         m_channel = new ASIChannel(nullptr, device);
     }
-#endif // USING_ASI
+#endif // CONFIG_ASI
 
-#ifdef USING_IPTV
+#if CONFIG_IPTV
     if ("FREEBOX" == card_type)
     {
         m_channel = new IPTVChannel(nullptr, device);
     }
 #endif
 
-#ifdef USING_VBOX
+#if CONFIG_VBOX
     if ("VBOX" == card_type)
     {
         m_channel = new IPTVChannel(nullptr, device);
     }
 #endif
 
-#if !defined( USING_MINGW ) && !defined( _MSC_VER )
+#ifndef Q_OS_WINDOWS
     if ("EXTERNAL" == card_type)
     {
         m_channel = new ExternalChannel(nullptr, device);
@@ -599,14 +626,14 @@ void ChannelScanner::PreScanCommon(
 
     bool using_rotor = false;
 
-#ifdef USING_DVB
+#if CONFIG_DVB
     DVBSignalMonitor *dvbm = m_sigmonScanner->GetDVBSignalMonitor();
     if (dvbm && mon)
     {
         monitor_snr = true;
         using_rotor = mon->HasFlags(SignalMonitor::kDVBSigMon_WaitForPos);
     }
-#endif // USING_DVB
+#endif // CONFIG_DVB
 
     bool monitor_lock = mon != nullptr;
     bool monitor_strength = mon != nullptr;

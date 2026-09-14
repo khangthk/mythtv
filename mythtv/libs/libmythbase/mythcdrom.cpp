@@ -1,6 +1,8 @@
 #include "mythcdrom.h"
 
-#ifdef HAVE_LIBUDFREAD
+#include "mythconfig.h"
+
+#if HAVE_LIBUDFREAD
 #include <udfread/udfread.h>
 #include <udfread/blockinput.h>
 #else
@@ -13,13 +15,12 @@
 #include <QFileInfo>
 
 #include "compat.h"
-#include "mythconfig.h"
 #include "mythlogging.h"
 #include "remotefile.h"
 
-#ifdef __linux__
+#ifdef Q_OS_LINUX
 #   include "mythcdrom-linux.h"
-#elif defined(__FreeBSD__)
+#elif defined(Q_OS_FREEBSD)
 #   include "mythcdrom-freebsd.h"
 #elif defined(Q_OS_DARWIN)
 #   include "mythcdrom-darwin.h"
@@ -43,9 +44,9 @@ static constexpr const char* PATHTO_AUDIO_DETECT  { "/.TOC.plist" };
 MythCDROM* MythCDROM::get(QObject* par, const QString& devicePath,
                           bool SuperMount, bool AllowEject)
 {
-#if defined(__linux__) && !defined(Q_OS_ANDROID)
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
     return GetMythCDROMLinux(par, devicePath, SuperMount, AllowEject);
-#elif defined(__FreeBSD__)
+#elif defined(Q_OS_FREEBSD)
     return GetMythCDROMFreeBSD(par, devicePath, SuperMount, AllowEject);
 #elif defined(Q_OS_DARWIN)
     return GetMythCDROMDarwin(par, devicePath, SuperMount, AllowEject);
@@ -190,9 +191,13 @@ MythCDROM::ImageType MythCDROM::inspectImage(const QString &path)
     ImageType imageType = kUnknown;
 
     if (path.startsWith("bd:"))
+    {
         imageType = kBluray;
+    }
     else if (path.startsWith("dvd:"))
+    {
         imageType = kDVD;
+    }
     else
     {
         blockInput_t blockInput {};
@@ -251,3 +256,5 @@ MythCDROM::ImageType MythCDROM::inspectImage(const QString &path)
 
     return imageType;
 }
+
+#include "moc_mythcdrom.cpp"

@@ -1,6 +1,7 @@
 // C header
 #include <fcntl.h>
 #include <unistd.h>
+#include <thread>
 #include <utility>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -8,6 +9,9 @@
 
 // Qt Headers
 #include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QDir>
 #include <QFileInfo>
 #include <QFileInfoList>
@@ -21,7 +25,7 @@
 #include "mythsystemlegacy.h"
 #include "exitcodes.h"
 
-#ifdef _WIN32
+#ifdef Q_OS_WINDOWS
 #   undef O_NONBLOCK
 #   define O_NONBLOCK 0
 #endif
@@ -137,19 +141,19 @@ bool MythMediaDevice::performMountCmd(bool DoMount)
         if (QFile(PATHTO_PMOUNT).exists() && QFile(PATHTO_PUMOUNT).exists())
         {
             MountCommand = QString("%1 %2")
-                .arg((DoMount) ? PATHTO_PMOUNT : PATHTO_PUMOUNT, m_devicePath);
+                .arg(DoMount ? PATHTO_PMOUNT : PATHTO_PUMOUNT, m_devicePath);
         }
         else
         {
             MountCommand = QString("%1 %2")
-                .arg((DoMount) ? PATHTO_MOUNT : PATHTO_UNMOUNT, m_devicePath);
+                .arg(DoMount ? PATHTO_MOUNT : PATHTO_UNMOUNT, m_devicePath);
         }
 
         LOG(VB_MEDIA, LOG_INFO, QString("Executing '%1'").arg(MountCommand));
         int ret = myth_system(MountCommand, kMSDontBlockInputDevs);
         if (ret !=  GENERIC_EXIT_OK)
         {
-            usleep(300000);
+            std::this_thread::sleep_for(300ms);
             LOG(VB_MEDIA, LOG_INFO, QString("Retrying '%1'").arg(MountCommand));
             ret = myth_system(MountCommand, kMSDontBlockInputDevs);
         }
@@ -162,13 +166,13 @@ bool MythMediaDevice::performMountCmd(bool DoMount)
                 // In the case that m_devicePath is a symlink to a device
                 // in /etc/fstab then pmount delegates to mount which
                 // performs the mount asynchronously so we must wait a bit
-                usleep(1000000-1);
+                std::this_thread::sleep_for(1s);
                 for (int tries = 2; !findMountPath() && tries > 0; --tries)
                 {
                     LOG(VB_MEDIA, LOG_INFO,
                         QString("Repeating '%1'").arg(MountCommand));
                     myth_system(MountCommand, kMSDontBlockInputDevs);
-                    usleep(500000);
+                    std::this_thread::sleep_for(500ms);
                 }
                 if (!findMountPath())
                 {
@@ -558,3 +562,5 @@ QString MythMediaDevice::MediaTypeString(uint type)
 
     return mediatype;
 }
+
+#include "moc_mythmedia.cpp"

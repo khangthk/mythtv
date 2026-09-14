@@ -57,8 +57,8 @@ uint64_t add_pts_audio(uint64_t pts, audio_frame_t *aframe, uint64_t frames)
 {
 	int64_t newpts=0;
 
-	newpts = (pts + (frames *samples [3-aframe->layer] * 27000000ULL) 
-		  / aframe->frequency);
+	newpts = (pts + ((frames *samples [3-aframe->layer] * 27000000ULL) 
+		  / aframe->frequency));
 	return newpts>0 ? newpts%MAX_PTS2: MAX_PTS2+newpts;
 }
 
@@ -66,7 +66,7 @@ void fix_audio_count(uint64_t *acount, audio_frame_t *aframe, uint64_t origpts, 
 {
 	uint64_t di = (samples [3-aframe->layer] * 27000000ULL);
 	int64_t diff = ptsdiff(origpts,pts);
-	int c=(aframe->frequency * diff+di/2)/di;
+	int c=((aframe->frequency * diff)+(di/2))/di;
 	if (c)
             LOG(VB_GENERAL, LOG_INFO, QString("fix audio frames %1").arg(c));
 	*acount += c;
@@ -81,8 +81,8 @@ uint64_t next_ptsdts_video(uint64_t *pts, sequence_t *s, uint64_t fcount, uint64
 
 	
 	if ( s->pulldown == NOPULLDOWN ) {
-		newdts = ( (fcount-1) * SEC_PER + *pts);
-		newpts = ((fnum ) * SEC_PER + *pts);
+		newdts = ( ((fcount-1) * SEC_PER) + *pts);
+		newpts = ((fnum * SEC_PER) + *pts);
 	} else {
 		uint64_t extra_time = 0;
 #if 0
@@ -95,16 +95,16 @@ uint64_t next_ptsdts_video(uint64_t *pts, sequence_t *s, uint64_t fcount, uint64
 		else 
 			extra_time = 3*SEC_PER/2;
 
-		newdts = (fcount - 1) * 5ULL * SEC_PER / 4ULL + 
-			((fcount - 1)%2)*extra_time + 
+		newdts = ((fcount - 1) * 5ULL * SEC_PER / 4ULL) + 
+			(((fcount - 1)%2)*extra_time) + 
 			*pts;
 
 		if ((s->pulldown == PULLDOWN23) && (fcount-1))
 			newdts -= SEC_PER/2;
 
 		newpts = SEC_PER +
-			(fnum -1) * 5ULL * SEC_PER / 4ULL + 
-			((fnum - 1)%2)*extra_time + 
+			((fnum -1) * 5ULL * SEC_PER / 4ULL) + 
+			(((fnum - 1)%2)*extra_time) + 
 			*pts;
 		
 	}
@@ -133,18 +133,18 @@ void fix_video_count(sequence_t *s, uint64_t *frame, uint64_t origpts, uint64_t 
 	if (!dsig) ddiff = -ddiff;
 
 	if ( s->pulldown == NOPULLDOWN ) {
-		dframe = (ddiff+SEC_PER/2ULL) / SEC_PER;
-		pframe = (pdiff+SEC_PER/2ULL) / SEC_PER;
+		dframe = (ddiff+(SEC_PER/2ULL)) / SEC_PER;
+		pframe = (pdiff+(SEC_PER/2ULL)) / SEC_PER;
 	} else {
-		dframe = (4ULL*ddiff/5ULL+SEC_PER/2ULL) / SEC_PER;
-		pframe = (4ULL*pdiff/5ULL+SEC_PER/2ULL) / SEC_PER;
+		dframe = ((4ULL*ddiff/5ULL)+(SEC_PER/2ULL)) / SEC_PER;
+		pframe = ((4ULL*pdiff/5ULL)+(SEC_PER/2ULL)) / SEC_PER;
 	}
 
 	if (!psig) fr = -(int)pframe;
 	else fr = (int)pframe;
 	if (!dsig) fr -= (int)dframe;
 	else fr += (int)dframe;
-	*frame = *frame + fr/2;
+	*frame = *frame + (fr/2);
 	if (fr/2)
 		LOG(VB_GENERAL, LOG_INFO,
 			QString("fixed video frame %1").arg(fr/2));
@@ -163,15 +163,15 @@ void pts2time(uint64_t pts, uint8_t *buf, int len)
 	while (c+7 < len){
 		if (buf[c] == 0x00 && buf[c+1] == 0x00 && buf[c+2] == 0x01 && 
 		    buf[c+3] == GROUP_START_CODE && (buf[c+5] & 0x08)){
-			buf[c+4] &= ~(0x7F);
+			buf[c+4] &= ~0x7F;
 			buf[c+4] |= (h & 0x1F) << 2;
 			buf[c+4] |= (m & 0x30) >> 4;
 
-			buf[c+5] &= ~(0xF7);
+			buf[c+5] &= ~0xF7;
 			buf[c+5] |= (m & 0x0F) << 4;
 			buf[c+5] |= (s & 0x38) >> 3;
 
-			buf[c+6] &= ~(0xE0);
+			buf[c+6] &= ~0xE0;
 			buf[c+6] |= (s & 0x07) << 5;
 
 /* 1hhhhhmm|mmmm1sss|sss */
@@ -306,9 +306,9 @@ int get_video_info(ringbuffer *rbuf, sequence_t *s, int off, int le)
                 .arg(16*1024*(s->vbv_buffer_size)));
 
 	c += 8;
-	if ( !(s->flags & INTRAQ_FLAG) ) 
+	if ( !(s->flags & INTRAQ_FLAG) ) {
 		s->flags = ( headr[7] & 0x07);
-	else {
+	} else {
 		s->flags |= headr[c+63] & 0x01;
 		memset(s->intra_quant, 0, 64);
 		for (int i=0;i<64;i++)
@@ -571,7 +571,7 @@ int get_ac3_info(ringbuffer *rbuf, audio_frame_t *af, int off, int le)
 		break;
 
 	case 0x40:
-		af->framesize = 2 * (320 * af->bit_rate / 147000 + (frame & 1));
+		af->framesize = 2 * ((320 * af->bit_rate / 147000) + (frame & 1));
 		break;
 
 	case 0x80:

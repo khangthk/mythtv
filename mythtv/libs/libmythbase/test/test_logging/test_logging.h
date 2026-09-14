@@ -17,15 +17,12 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
+#ifndef LIBMYTHBASE_TEST_LOGGING_H
+#define LIBMYTHBASE_TEST_LOGGING_H
 
-#include <QTest>
-#include <iostream>
-#include <sstream>
-
-#include "mythsyslog.h"
-#include "exitcodes.h"
-#include "logging.h"
-#include "mythlogging.h"
+#include <QChar>     // Fix Qt6 GCC SFINAE warning
+#include <QBitArray> // Fix Qt6 GCC SFINAE warning
+#include <QObject>
 
 class TestLogging : public QObject
 {
@@ -49,3 +46,5 @@ private slots:
     static void test_logPropagateCalc_data(void);
     static void test_logPropagateCalc(void);
 };
+
+#endif // LIBMYTHBASE_TEST_LOGGING_H

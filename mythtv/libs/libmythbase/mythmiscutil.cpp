@@ -1,39 +1,37 @@
-#ifdef _WIN32
-    #include <sys/stat.h>
-#endif
-
 #include "mythmiscutil.h"
 
 // C++ headers
 #include <array>
 #include <cerrno>
 #include <cstdlib>
-#include <ctime>
 #include <iostream>
+#include <thread>
 
 // POSIX
 #include <unistd.h>
 #include <fcntl.h>
 #include <sched.h>
+#include <sys/stat.h> // for umask, chmod
 
 // System specific C headers
 #include "compat.h"
 #include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtEnvironmentVariables>
+#include <QtProcessorDetection>
+#include <QtSystemDetection>
+#endif
 
-#ifdef __linux__
-#include <sys/vfs.h>
+#ifdef Q_OS_LINUX
 #include <sys/sysinfo.h>
-#include <sys/stat.h> // for umask, chmod
 #endif
 
 #ifdef Q_OS_DARWIN
 #include <mach/mach.h>
 #endif
 
-#ifdef BSD
-#include <sys/mount.h>  // for struct statfs
+#ifdef Q_OS_BSD4
 #include <sys/sysctl.h>
-#include <sys/stat.h> // for umask, chmod
 #endif
 
 // Qt headers
@@ -55,17 +53,17 @@
 #include "exitcodes.h"
 #include "mythlogging.h"
 #include "mythsocket.h"
-#include "mythcoreutil.h"
+#include "filesysteminfo.h"
 #include "mythsystemlegacy.h"
 
 
-/** \fn getUptime(time_t&)
+/**
  *  \brief Returns uptime statistics.
  *  \return true if successful, false otherwise.
  */
 bool getUptime(std::chrono::seconds &uptime)
 {
-#ifdef __linux__
+#ifdef Q_OS_LINUX
     struct sysinfo sinfo {};
     if (sysinfo(&sinfo) == -1)
     {
@@ -74,11 +72,10 @@ bool getUptime(std::chrono::seconds &uptime)
     }
     uptime = std::chrono::seconds(sinfo.uptime);
 
-#elif defined(__FreeBSD__) || defined(Q_OS_DARWIN)
-
+#elif defined(Q_OS_BSD4)
     std::array<int,2> mib { CTL_KERN, KERN_BOOTTIME };
     struct timeval bootTime;
-    size_t         len;
+    size_t         len = 0;
 
     // Uptime is calculated. Get this machine's boot time
     // and subtract it from the current machine time
@@ -89,7 +86,7 @@ bool getUptime(std::chrono::seconds &uptime)
         return false;
     }
     uptime = std::chrono::seconds(time(nullptr) - bootTime.tv_sec);
-#elif defined(_WIN32)
+#elif defined(Q_OS_WINDOWS)
     uptime = std::chrono::seconds(::GetTickCount() / 1000);
 #else
     // Hmmm. Not Linux, not FreeBSD or Darwin. What else is there :-)
@@ -104,6 +101,7 @@ bool getUptime(std::chrono::seconds &uptime)
  *  \brief Returns memory statistics in megabytes.
  *
  *  \todo Memory Statistics are not supported (by MythTV) on NT or DOS.
+ *  \todo keep values as B not MiB, int64_t (or size_t?)
  *  \return true if it succeeds, false otherwise.
  */
 bool getMemStats([[maybe_unused]] int &totalMB,
@@ -111,7 +109,7 @@ bool getMemStats([[maybe_unused]] int &totalMB,
                  [[maybe_unused]] int &totalVM,
                  [[maybe_unused]] int &freeVM)
 {
-#ifdef __linux__
+#ifdef Q_OS_LINUX
     static constexpr size_t MB { 1024LL * 1024 };
     struct sysinfo sinfo {};
     if (sysinfo(&sinfo) == -1)
@@ -127,9 +125,9 @@ bool getMemStats([[maybe_unused]] int &totalMB,
     freeVM  = (int)((sinfo.freeswap  * sinfo.mem_unit)/MB);
     return true;
 #elif defined(Q_OS_DARWIN)
-    mach_port_t             mp;
-    mach_msg_type_number_t  count;
-    vm_size_t               pageSize;
+    mach_port_t             mp = 0;
+    mach_msg_type_number_t  count = 0;
+    vm_size_t               pageSize = 0;
     vm_statistics_data_t    s;
 
     mp = mach_host_self();
@@ -156,10 +154,11 @@ bool getMemStats([[maybe_unused]] int &totalMB,
     // This is a real hack. I have not found a way to ask the kernel how much
     // swap it is using, and the dynamic_pager daemon doesn't even seem to be
     // able to report what filesystem it is using for the swapfiles. So, we do:
-    int64_t total, used, free;
-    free = getDiskSpace("/private/var/vm", total, used);
-    totalVM = (int)(total >> 10);
-    freeVM = (int)(free >> 10);
+    {
+    auto fsInfo = FileSystemInfo(QString(), "/private/var/vm");
+    totalVM = (int)(fsInfo.getTotalSpace() >> 10);
+    freeVM  = (int)(fsInfo.getFreeSpace()  >> 10);
+    }
     return true;
 #else
     return false;
@@ -174,12 +173,63 @@ bool getMemStats([[maybe_unused]] int &totalMB,
  */
 loadArray getLoadAvgs (void)
 {
-#if !defined(_WIN32) && !defined(Q_OS_ANDROID)
+#if !defined(Q_OS_WINDOWS) && !defined(Q_OS_ANDROID)
     loadArray loads {};
     if (getloadavg(loads.data(), loads.size()) != -1)
         return loads;
 #endif
     return {-1, -1, -1};
+}
+
+bool RemoteGetLoad(loadArray& load)
+{
+    QStringList strlist(QString("QUERY_LOAD"));
+
+    if (gCoreContext->SendReceiveStringList(strlist) && strlist.size() >= 3)
+    {
+        load[0] = strlist[0].toDouble();
+        load[1] = strlist[1].toDouble();
+        load[2] = strlist[2].toDouble();
+        return true;
+    }
+
+    return false;
+}
+
+bool RemoteGetUptime(std::chrono::seconds &uptime)
+{
+    QStringList strlist(QString("QUERY_UPTIME"));
+
+    if (!gCoreContext->SendReceiveStringList(strlist) || strlist.isEmpty())
+        return false;
+
+    if (strlist[0].isEmpty() || !strlist[0].at(0).isNumber())
+        return false;
+
+    if (sizeof(std::chrono::seconds::rep) == sizeof(long long))
+        uptime = std::chrono::seconds(strlist[0].toLongLong());
+    else if (sizeof(std::chrono::seconds::rep) == sizeof(long))
+        uptime = std::chrono::seconds(strlist[0].toLong());
+    else if (sizeof(std::chrono::seconds::rep) == sizeof(int))
+        uptime = std::chrono::seconds(strlist[0].toInt());
+
+    return true;
+}
+
+bool RemoteGetMemStats(int &totalMB, int &freeMB, int &totalVM, int &freeVM)
+{
+    QStringList strlist(QString("QUERY_MEMSTATS"));
+
+    if (gCoreContext->SendReceiveStringList(strlist) && strlist.size() >= 4)
+    {
+        totalMB = strlist[0].toInt();
+        freeMB  = strlist[1].toInt();
+        totalVM = strlist[2].toInt();
+        freeVM  = strlist[3].toInt();
+        return true;
+    }
+
+    return false;
 }
 
 /**
@@ -198,7 +248,7 @@ loadArray getLoadAvgs (void)
  */
 bool ping(const QString &host, std::chrono::milliseconds timeout)
 {
-#ifdef _WIN32
+#ifdef Q_OS_WINDOWS
     QString cmd = QString("%systemroot%\\system32\\ping.exe -w %1 -n 1 %2>NUL")
                   .arg(timeout.count()) .arg(host);
 
@@ -208,7 +258,7 @@ bool ping(const QString &host, std::chrono::milliseconds timeout)
     QString addrstr =
         MythCoreContext::resolveAddress(host, MythCoreContext::ResolveAny, true);
     QHostAddress addr = QHostAddress(addrstr);
-#if defined(__FreeBSD__) || defined(Q_OS_DARWIN)
+#if defined(Q_OS_FREEBSD) || defined(Q_OS_DARWIN)
     QString timeoutparam("-t");
 #else
     // Linux, NetBSD, OpenBSD
@@ -223,7 +273,7 @@ bool ping(const QString &host, std::chrono::milliseconds timeout)
 
     return myth_system(cmd, kMSDontBlockInputDevs | kMSDontDisableDrawing |
                          kMSProcessEvents) == GENERIC_EXIT_OK;
-#endif // _WIN32
+#endif // Q_OS_WINDOWS
 }
 
 /**
@@ -317,14 +367,14 @@ long long MythFile::copy(QFile &dst, QFile &src, uint block_size)
     if (osrc)
         src.close();
 
-    return (ok) ? total_bytes : -1LL;
+    return ok ? total_bytes : -1LL;
 }
 
 QString createTempFile(QString name_template, bool dir)
 {
     int ret = -1;
 
-#ifdef _WIN32
+#ifdef Q_OS_WINDOWS
     char temppath[MAX_PATH] = ".";
     char tempfilename[MAX_PATH] = "";
     // if GetTempPath fails, use current dir
@@ -343,22 +393,20 @@ QString createTempFile(QString name_template, bool dir)
     QString tmpFileName(tempfilename);
 #else
     QByteArray safe_name_template = name_template.toLatin1();
-    const char *tmp = safe_name_template.constData();
-    char *ctemplate = strdup(tmp);
+    std::string ctemplate = safe_name_template.constData();
 
     if (dir)
     {
-        ret = (mkdtemp(ctemplate)) ? 0 : -1;
+        ret = (mkdtemp(ctemplate.data())) ? 0 : -1;
     }
     else
     {
         mode_t cur_umask = umask(S_IRWXO | S_IRWXG);
-        ret = mkstemp(ctemplate);
+        ret = mkstemp(ctemplate.data());
         umask(cur_umask);
     }
 
-    QString tmpFileName(ctemplate);
-    free(ctemplate);
+    QString tmpFileName = QString::fromStdString(ctemplate);
 #endif
 
     if (ret == -1)
@@ -420,8 +468,8 @@ QString getResponse(const QString &query, const QString &def)
 
     if (!isatty(fileno(stdin)) || !isatty(fileno(stdout)))
     {
-        std::cout << std::endl << "[console is not interactive, using default '"
-             << tmp.constData() << "']" << std::endl;
+        std::cout << "\n[console is not interactive, using default '"
+             << tmp.constData() << "']\n";
         return def;
     }
 
@@ -556,7 +604,9 @@ QString FileHash(const QString& filename)
         return {"NULL"};
 
     if (file.open(QIODevice::ReadOnly))
+    {
         hash = initialsize;
+    }
     else
     {
         LOG(VB_GENERAL, LOG_ERR,
@@ -637,11 +687,11 @@ bool MythWakeup(const QString &wakeUpCommand, uint flags, std::chrono::seconds t
 
 bool IsPulseAudioRunning(void)
 {
-#ifdef _WIN32
+#ifdef Q_OS_WINDOWS
     return false;
 #else
 
-#if defined(Q_OS_DARWIN) || defined(__FreeBSD__) || defined(__OpenBSD__)
+#ifdef Q_OS_BSD4
     const char *command = "ps -ax | grep -i pulseaudio | grep -v grep > /dev/null";
 #else
     const char *command = "ps ch -C pulseaudio -o pid > /dev/null";
@@ -650,7 +700,7 @@ bool IsPulseAudioRunning(void)
     uint res = myth_system(command, kMSDontBlockInputDevs |
                                     kMSDontDisableDrawing);
     return (res == GENERIC_EXIT_OK);
-#endif // _WIN32
+#endif // Q_OS_WINDOWS
 }
 
 bool myth_nice(int val)
@@ -671,9 +721,9 @@ void myth_yield(void)
 {
 #ifdef _POSIX_PRIORITY_SCHEDULING
     if (sched_yield()<0)
-        usleep(5000);
+        std::this_thread::sleep_for(5ms);
 #else
-    usleep(5000);
+    std::this_thread::sleep_for(5ms);
 #endif
 }
 
@@ -694,8 +744,8 @@ void myth_yield(void)
  *  Only Linux on i386, ppc, x86_64 and ia64 are currently supported.
  *  This is a no-op on all other architectures and platforms.
  */
-#if defined(__linux__) && ( defined(__i386__) || defined(__ppc__) || \
-                            defined(__x86_64__) || defined(__ia64__) )
+#if defined(Q_OS_LINUX) && ( defined(Q_PROCESSOR_X86) || defined(Q_PROCESSOR_POWER) || \
+                            defined(Q_PROCESSOR_IA64) )
 
 #include <cstdio>
 #include <getopt.h>
@@ -752,7 +802,7 @@ bool myth_ioprio(int val)
 
 #else
 
-bool myth_ioprio(int) { return true; }
+bool myth_ioprio(int /*val*/) { return true; }
 
 #endif
 
@@ -786,7 +836,7 @@ bool MythRemoveDirectory(QDir &aDir)
     if (!has_err && !aDir.rmdir(aDir.absolutePath()))
         has_err = true;
 
-    return(has_err);
+    return has_err;
 }
 
 /**
@@ -900,8 +950,11 @@ void setHttpProxy(void)
         }
 
         url = url.arg(p.hostName()).arg(p.port());
-        setenv("HTTP_PROXY", url.toLatin1(), 1);
-        setenv("http_proxy", url.toLatin1(), 0);
+        qputenv("HTTP_PROXY", url.toLocal8Bit().constData());
+        if (!qEnvironmentVariableIsSet("http_proxy"))
+        {
+            qputenv("http_proxy", url.toLocal8Bit().constData());
+        }
 
         return;
     }

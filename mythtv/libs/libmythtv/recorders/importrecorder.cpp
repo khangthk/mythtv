@@ -18,8 +18,13 @@
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
+
 // POSIX
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
 #include <sys/select.h>
 #endif
 #include <sys/types.h>
@@ -33,8 +38,10 @@
 #include <QDir>
 
 // MythTV
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythdirs.h"
+#include "libmythbase/mythlogging.h"
 
 #include "importrecorder.h"
 #include "mythcommflagplayer.h"

@@ -1,0 +1,34 @@
+/*
+ *  Class TestMhegParser
+ *
+ *  Copyright (c) David Hampton 2025
+ *
+ *  See the file LICENSE_FSF for licensing information.
+ */
+#ifndef LIBMYTHFREEMHEG_TEST_MHEG_PARSER_H
+#define LIBMYTHFREEMHEG_TEST_MHEG_PARSER_H
+
+#include <QChar>     // Fix Qt6 GCC SFINAE warning
+#include <QBitArray> // Fix Qt6 GCC SFINAE warning
+#include <QTest>
+
+//#include "recordingextender.h"
+
+class TestMhegParser : public QObject
+{
+    Q_OBJECT
+
+  private slots:
+    // Before/after all test cases
+    static void initTestCase(void);
+    static void cleanupTestCase(void);
+
+    // Before/after each test cases
+    static void init(void);
+    static void cleanup(void);
+
+    static void test_parser_asn1(void);
+    static void test_parser_text(void);
+};
+
+#endif // LIBMYTHFREEMHEG_TEST_MHEG_PARSER_H

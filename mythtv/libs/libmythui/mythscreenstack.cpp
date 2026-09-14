@@ -1,5 +1,5 @@
+#include "libmythbase/mythdb.h"
 #include "libmythbase/mythevent.h"
-#include "libmythbase/mythcorecontext.h"
 
 #include "mythscreenstack.h"
 #include "mythmainwindow.h"
@@ -390,3 +390,5 @@ MythPainter* MythScreenStack::GetPainter(void)
 {
     return GetMythPainter();
 }
+
+#include "moc_mythscreenstack.cpp"

@@ -5,12 +5,14 @@
 #include <QString>
 #include <QStringList>
 #include <QDomDocument>
+#include <QRegularExpression>
 
 // MythTV headers
 #include "libmythbase/mythdownloadmanager.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythtimer.h"
 #include "libmythupnp/ssdp.h"
+#include "libmythupnp/ssdpcache.h"
 #include "vboxutils.h"
 
 #define LOC QString("VBox: ")
@@ -67,7 +69,7 @@ QStringList VBox::doUPNPSearch(void)
 {
     QStringList result;
 
-    SSDPCacheEntries *vboxes = SSDP::Find(VBOX_URI);
+    SSDPCacheEntries *vboxes = SSDPCache::Instance()->Find(VBOX_URI);
 
     if (!vboxes)
     {
@@ -84,7 +86,7 @@ QStringList VBox::doUPNPSearch(void)
     else
     {
         LOG(VB_GENERAL, LOG_ERR, LOC +
-            "No UPnP VBoxes found, but SSDP::Find() not NULL");
+            "No UPnP VBoxes found, but SSDPCache::Instance()->Find() not NULL");
     }
 
     EntryMap map;
@@ -279,6 +281,7 @@ QStringList VBox::getTuners(void)
     {
         int noTuners = getIntValue(elem, "TunersNumber");
 
+        result.reserve(noTuners);
         for (int x = 1; x <= noTuners; x++)
         {
             QString tuner = getStrValue(elem, QString("Tuner%1").arg(x));
@@ -319,12 +322,21 @@ vbox_chan_map_t *VBox::getChannels(void)
         QString triplet = getStrValue(chanElem, "display-name", 2);
         bool    fta = (getStrValue(chanElem, "display-name", 3) == "Free");
         QString lcn = getStrValue(chanElem, "display-name", 4);
-        uint serviceID = triplet.right(4).toUInt(nullptr, 16);
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+        uint serviceID = triplet.rightRef(4).toUInt(nullptr, 16);
+#else
+        uint serviceID = QStringView(triplet).right(4).toUInt(nullptr, 16);
+#endif
 
         QString transType = "UNKNOWN";
         QStringList slist = triplet.split('-');
-        uint networkID = slist[2].left(4).toUInt(nullptr, 16);
-        uint transportID = slist[2].mid(4, 4).toUInt(nullptr, 16);
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+        uint networkID = slist[2].leftRef(4).toUInt(nullptr, 16);
+        uint transportID = slist[2].midRef(4, 4).toUInt(nullptr, 16);
+#else
+        uint networkID = QStringView(slist[2]).left(4).toUInt(nullptr, 16);
+        uint transportID = QStringView(slist[2]).mid(4, 4).toUInt(nullptr, 16);
+#endif
         LOG(VB_GENERAL, LOG_DEBUG, LOC + QString("NIT/TID/SID %1 %2 %3)").arg(networkID).arg(transportID).arg(serviceID));
 
         //sanity check - the triplet should look something like this: T-GER-111100020001
@@ -362,6 +374,7 @@ bool VBox::sendQuery(const QString& query, QDomDocument* xmlDoc)
     if (!GetMythDownloadManager()->download(query, &result, true))
         return false;
 
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     QString errorMsg;
     int errorLine = 0;
     int errorColumn = 0;
@@ -373,6 +386,17 @@ bool VBox::sendQuery(const QString& query, QDomDocument* xmlDoc)
                 arg(query).arg(errorLine).arg(errorColumn).arg(errorMsg));
         return false;
     }
+#else
+    auto parseResult = xmlDoc->setContent(result);
+    if (!parseResult)
+    {
+        LOG(VB_GENERAL, LOG_ERR, LOC +
+            QString("Error parsing: %1\nat line: %2  column: %3 msg: %4")
+            .arg(query).arg(parseResult.errorLine)
+            .arg(parseResult.errorColumn).arg(parseResult.errorMessage));
+        return false;
+    }
+#endif
 
     // check for a status or error element
     QDomNodeList statusNodes = xmlDoc->elementsByTagName("Status");

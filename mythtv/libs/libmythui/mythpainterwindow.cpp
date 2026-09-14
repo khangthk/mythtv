@@ -3,23 +3,26 @@
 #include <QGuiApplication>
 
 // MythTV
-#include "libmythbase/mythcorecontext.h"
+#include "libmythbase/mythconfig.h"
+#include "libmythbase/mythappname.h"
+#include "libmythbase/mythdb.h"
+#include "libmythbase/mythlogging.h"
 #include "mythmainwindow.h"
 #include "mythpainter_qt.h"
 #include "mythpainterwindowqt.h"
 #include "mythpainterwindow.h"
 
-#ifdef USING_OPENGL
+#if CONFIG_OPENGL
 #include "opengl/mythpainterwindowopengl.h"
 #include "opengl/mythpainteropengl.h"
 #endif
 
-#ifdef USING_VULKAN
+#if CONFIG_VULKAN
 #include "vulkan/mythpainterwindowvulkan.h"
 #include "vulkan/mythpaintervulkan.h"
 #endif
 
-#ifdef USING_WAYLANDEXTRAS
+#if CONFIG_WAYLANDEXTRAS
 #include "platforms/mythwaylandextras.h"
 #endif
 
@@ -29,9 +32,9 @@ using TryPainter = bool(*)(MythMainWindow*, MythPainterWindow*&, MythPainter*&, 
 
 QString MythPainterWindow::GetDefaultPainter()
 {
-#ifdef USING_OPENGL
+#if CONFIG_OPENGL
     return MYTH_PAINTER_OPENGL;
-#elif USING_VULKAN
+#elif CONFIG_VULKAN
     return MYTH_PAINTER_VULKAN;
 #else
     return MYTH_PAINTER_QT;
@@ -41,10 +44,10 @@ QString MythPainterWindow::GetDefaultPainter()
 QStringList MythPainterWindow::GetPainters()
 {
     QStringList result;
-#ifdef USING_OPENGL
+#if CONFIG_OPENGL
     result.append(MYTH_PAINTER_OPENGL);
 #endif
-#ifdef USING_VULKAN
+#if CONFIG_VULKAN
     result.append(MYTH_PAINTER_VULKAN);
 #endif
     return result;
@@ -60,7 +63,7 @@ QString MythPainterWindow::CreatePainters(MythMainWindow *MainWin,
     // build a prioritised list of painters to try
     QVector<TryPainter> painterstotry;
 
-#ifdef USING_OPENGL
+#if CONFIG_OPENGL
     auto TryOpenGL = [](MythMainWindow *MainWindow, MythPainterWindow *&PaintWindow,
                         MythPainter *&Painter, bool& /*unused*/)
     {
@@ -82,7 +85,7 @@ QString MythPainterWindow::CreatePainters(MythMainWindow *MainWin,
         painterstotry.append(TryOpenGL);
 #endif
 
-#ifdef USING_VULKAN
+#if CONFIG_VULKAN
     auto TryVulkan = [](MythMainWindow *MainWindow, MythPainterWindow *&PaintWindow,
                         MythPainter *&Painter, bool& /*unused*/)
     {
@@ -116,7 +119,7 @@ QString MythPainterWindow::CreatePainters(MythMainWindow *MainWin,
     };
 
     // N.B. this won't be selectable as a painter in the UI but can be forced
-    // from the command line again (-O ThemePainter=Qt)
+    // from the command line again (-O PaintEngine=Qt)
     if (painter.contains(MYTH_PAINTER_QT, Qt::CaseInsensitive))
         painterstotry.prepend(TryQt);
     else
@@ -140,7 +143,7 @@ void MythPainterWindow::DestroyPainters(MythPainterWindow *&PaintWin, MythPainte
 MythPainterWindow::MythPainterWindow(MythMainWindow *MainWin)
   : QWidget(MainWin)
 {
-#ifdef USING_WAYLANDEXTRAS
+#if CONFIG_WAYLANDEXTRAS
     if (QGuiApplication::platformName().toLower().contains("wayland"))
         m_waylandDev = new MythWaylandDevice(MainWin);
 #endif
@@ -149,7 +152,7 @@ MythPainterWindow::MythPainterWindow(MythMainWindow *MainWin)
 // NOLINTNEXTLINE(modernize-use-equals-default)
 MythPainterWindow::~MythPainterWindow()
 {
-#ifdef USING_WAYLANDEXTRAS
+#if CONFIG_WAYLANDEXTRAS
     delete m_waylandDev;
 #endif
 }
@@ -164,7 +167,7 @@ bool MythPainterWindow::RenderIsShared()
     return m_render && m_render->IsShared();
 }
 
-#if defined(DEBUG_PAINTERWIN_EVENTS)
+#ifdef DEBUG_PAINTERWIN_EVENTS
 bool MythPainterWindow::event(QEvent *Event)
 {
     qInfo() << Event;
@@ -174,8 +177,10 @@ bool MythPainterWindow::event(QEvent *Event)
 
 void MythPainterWindow::resizeEvent(QResizeEvent* /*ResizeEvent*/)
 {
-#ifdef USING_WAYLANDEXTRAS
+#if CONFIG_WAYLANDEXTRAS
     if (m_waylandDev)
         m_waylandDev->SetOpaqueRegion(rect());
 #endif
 }
+
+#include "moc_mythpainterwindow.cpp"

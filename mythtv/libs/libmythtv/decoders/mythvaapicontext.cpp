@@ -1,9 +1,12 @@
+// C++ headers
+#include <algorithm>
+
 // Qt
 #include <QCoreApplication>
 #include <QWaitCondition>
 
 // Mythtv
-#include "libmyth/mythcontext.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythui/mythmainwindow.h"
 #include "libmythui/opengl/mythrenderopengl.h"
@@ -15,6 +18,7 @@
 #include "videobuffers.h"
 
 extern "C" {
+#include "libavcodec/defs.h"
 #include "libavutil/hwcontext_vaapi.h"
 #include "libavutil/pixdesc.h"
 #include "libavfilter/buffersink.h"
@@ -50,8 +54,8 @@ VAProfile MythVAAPIContext::VAAPIProfileForCodec(const AVCodecContext* Codec)
         case AV_CODEC_ID_MPEG2VIDEO:
             switch (Codec->profile)
             {
-                case FF_PROFILE_MPEG2_SIMPLE: return VAProfileMPEG2Simple;
-                case FF_PROFILE_MPEG2_MAIN: return VAProfileMPEG2Main;
+                case AV_PROFILE_MPEG2_SIMPLE: return VAProfileMPEG2Simple;
+                case AV_PROFILE_MPEG2_MAIN: return VAProfileMPEG2Main;
                 default: break;
             }
             break;
@@ -59,40 +63,38 @@ VAProfile MythVAAPIContext::VAAPIProfileForCodec(const AVCodecContext* Codec)
         case AV_CODEC_ID_MPEG4:
             switch (Codec->profile)
             {
-                case FF_PROFILE_MPEG4_SIMPLE: return VAProfileMPEG4Simple;
-                case FF_PROFILE_MPEG4_ADVANCED_SIMPLE: return VAProfileMPEG4AdvancedSimple;
-                case FF_PROFILE_MPEG4_MAIN: return VAProfileMPEG4Main;
+                case AV_PROFILE_MPEG4_SIMPLE: return VAProfileMPEG4Simple;
+                case AV_PROFILE_MPEG4_ADVANCED_SIMPLE: return VAProfileMPEG4AdvancedSimple;
+                case AV_PROFILE_MPEG4_MAIN: return VAProfileMPEG4Main;
                 default: break;
             }
             break;
         case AV_CODEC_ID_H264:
             switch (Codec->profile)
             {
-                case FF_PROFILE_H264_CONSTRAINED_BASELINE: return VAProfileH264ConstrainedBaseline;
-                case FF_PROFILE_H264_MAIN: return VAProfileH264Main;
-                case FF_PROFILE_H264_HIGH: return VAProfileH264High;
+                case AV_PROFILE_H264_CONSTRAINED_BASELINE: return VAProfileH264ConstrainedBaseline;
+                case AV_PROFILE_H264_MAIN: return VAProfileH264Main;
+                case AV_PROFILE_H264_HIGH: return VAProfileH264High;
                 default: break;
             }
             break;
         case AV_CODEC_ID_HEVC:
-#if VA_CHECK_VERSION(0, 37, 0)
             switch (Codec->profile)
             {
-                case FF_PROFILE_HEVC_MAIN: return VAProfileHEVCMain;
-                case FF_PROFILE_HEVC_MAIN_10: return VAProfileHEVCMain10;
+                case AV_PROFILE_HEVC_MAIN: return VAProfileHEVCMain;
+                case AV_PROFILE_HEVC_MAIN_10: return VAProfileHEVCMain10;
                 default: break;
             }
-#endif
             break;
         case AV_CODEC_ID_MJPEG: return VAProfileJPEGBaseline;
         case AV_CODEC_ID_WMV3:
         case AV_CODEC_ID_VC1:
             switch (Codec->profile)
             {
-                case FF_PROFILE_VC1_SIMPLE: return VAProfileVC1Simple;
-                case FF_PROFILE_VC1_MAIN: return VAProfileVC1Main;
-                case FF_PROFILE_VC1_ADVANCED:
-                case FF_PROFILE_VC1_COMPLEX: return VAProfileVC1Advanced;
+                case AV_PROFILE_VC1_SIMPLE: return VAProfileVC1Simple;
+                case AV_PROFILE_VC1_MAIN: return VAProfileVC1Main;
+                case AV_PROFILE_VC1_ADVANCED:
+                case AV_PROFILE_VC1_COMPLEX: return VAProfileVC1Advanced;
                 default: break;
             }
             break;
@@ -100,12 +102,8 @@ VAProfile MythVAAPIContext::VAAPIProfileForCodec(const AVCodecContext* Codec)
         case AV_CODEC_ID_VP9:
             switch (Codec->profile)
             {
-#if VA_CHECK_VERSION(0, 38, 0)
-                case FF_PROFILE_VP9_0: return VAProfileVP9Profile0;
-#endif
-#if VA_CHECK_VERSION(0, 39, 0)
-                case FF_PROFILE_VP9_2: return VAProfileVP9Profile2;
-#endif
+                case AV_PROFILE_VP9_0: return VAProfileVP9Profile0;
+                case AV_PROFILE_VP9_2: return VAProfileVP9Profile2;
                 default: break;
             }
             break;
@@ -176,7 +174,7 @@ MythCodecID MythVAAPIContext::GetSupportedCodec(AVCodecContext** Context,
     auto mythprofile = MythCodecContext::FFmpegToMythProfile((*Context)->codec_id, (*Context)->profile);
     auto haveprofile = [&](MythCodecContext::CodecProfile Profile, QSize Size)
     {
-        return std::any_of(profiles.cbegin(), profiles.cend(),
+        return std::ranges::any_of(std::as_const(profiles),
                            [&Profile,Size](auto vaprofile)
                                { return vaprofile.first == Profile &&
                                         vaprofile.second.first.width() <= Size.width() &&
@@ -300,14 +298,7 @@ int MythVAAPIContext::InitialiseContext(AVCodecContext* Context)
     // This may need extending for AMD etc
 
     auto vendor = interop->GetVendor();
-    // Intel NUC
-    if (vendor.contains("iHD", Qt::CaseInsensitive) && vendor.contains("Intel", Qt::CaseInsensitive))
-    {
-        vaapi_frames_ctx->attributes = nullptr;
-        vaapi_frames_ctx->nb_attributes = 0;
-    }
-    // i965 series
-    else
+    if (vendor.contains("i965", Qt::CaseInsensitive))
     {
         int format = VA_FOURCC_NV12;
         if (vendor.contains("ironlake", Qt::CaseInsensitive))
@@ -322,9 +313,15 @@ int MythVAAPIContext::InitialiseContext(AVCodecContext* Context)
         }
 
         std::array<VASurfaceAttrib,3> prefs {{
-            { VASurfaceAttribPixelFormat, VA_SURFACE_ATTRIB_SETTABLE, { VAGenericValueTypeInteger, { format } } },
-            { VASurfaceAttribUsageHint,   VA_SURFACE_ATTRIB_SETTABLE, { VAGenericValueTypeInteger, { VA_SURFACE_ATTRIB_USAGE_HINT_DISPLAY } } },
-            { VASurfaceAttribMemoryType,  VA_SURFACE_ATTRIB_SETTABLE, { VAGenericValueTypeInteger, { VA_SURFACE_ATTRIB_MEM_TYPE_VA} } } }};
+            { .type=VASurfaceAttribPixelFormat,
+              .flags=VA_SURFACE_ATTRIB_SETTABLE,
+              .value={ VAGenericValueTypeInteger, { format } } },
+            { .type=VASurfaceAttribUsageHint,
+              .flags=VA_SURFACE_ATTRIB_SETTABLE,
+              .value={ VAGenericValueTypeInteger, { VA_SURFACE_ATTRIB_USAGE_HINT_DISPLAY } } },
+            { .type=VASurfaceAttribMemoryType,
+              .flags=VA_SURFACE_ATTRIB_SETTABLE,
+              .value={ VAGenericValueTypeInteger, { VA_SURFACE_ATTRIB_MEM_TYPE_VA} } } }};
         vaapi_frames_ctx->attributes = prefs.data();
         vaapi_frames_ctx->nb_attributes = 3;
     }
@@ -491,16 +488,10 @@ const VAAPIProfiles& MythVAAPIContext::GetProfiles()
             case VAProfileVC1Main:       return MythCodecContext::VC1Main;
             case VAProfileVC1Advanced:   return MythCodecContext::VC1Advanced;
             case VAProfileVP8Version0_3: return MythCodecContext::VP8;
-#if VA_CHECK_VERSION(0, 38, 0)
             case VAProfileVP9Profile0:   return MythCodecContext::VP9_0;
-#endif
-#if VA_CHECK_VERSION(0, 39, 0)
             case VAProfileVP9Profile2:   return MythCodecContext::VP9_2;
-#endif
-#if VA_CHECK_VERSION(0, 37, 0)
             case VAProfileHEVCMain:      return MythCodecContext::HEVCMain;
             case VAProfileHEVCMain10:    return MythCodecContext::HEVCMain10;
-#endif
             case VAProfileJPEGBaseline:  return MythCodecContext::MJPEG;
             default: break;
         }
@@ -639,9 +630,7 @@ int MythVAAPIContext::FilteredReceiveFrame(AVCodecContext* Context, AVFrame* Fra
             {
                 if (m_filterPriorPTS[0] && m_filterPTSUsed == m_filterPriorPTS[1])
                 {
-                    Frame->pts = m_filterPriorPTS[1] + (m_filterPriorPTS[1] - m_filterPriorPTS[0]) / 2;
-                    Frame->scte_cc_len = 0;
-                    Frame->atsc_cc_len = 0;
+                    Frame->pts = m_filterPriorPTS[1] + ((m_filterPriorPTS[1] - m_filterPriorPTS[0]) / 2);
                     av_frame_remove_side_data(Frame, AV_FRAME_DATA_A53_CC);
                 }
                 else
@@ -659,8 +648,8 @@ int MythVAAPIContext::FilteredReceiveFrame(AVCodecContext* Context, AVFrame* Fra
         if (ret == 0)
         {
             // preserve interlaced flags
-            m_lastInterlaced = Frame->interlaced_frame;
-            m_lastTopFieldFirst = (Frame->top_field_first != 0);
+            m_lastInterlaced = (Frame->flags & AV_FRAME_FLAG_INTERLACED) != 0;
+            m_lastTopFieldFirst = (Frame->flags & AV_FRAME_FLAG_TOP_FIELD_FIRST) != 0;
         }
 
         if (ret < 0)

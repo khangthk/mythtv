@@ -17,6 +17,7 @@ static inline void be_sd_notify(const char */*str*/) {};
 #include <unistd.h>
 
 // Qt
+#include <QtGlobal>
 #include <QCoreApplication>
 #include <QFileInfo>
 #include <QFile>
@@ -24,27 +25,27 @@ static inline void be_sd_notify(const char */*str*/) {};
 #include <QMap>
 
 // MythTV
-#include "libmyth/mythcontext.h"
 #include "libmythbase/compat.h"
 #include "libmythbase/dbutil.h"
 #include "libmythbase/exitcodes.h"
 #include "libmythbase/hardwareprofile.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythtimezone.h"
 #include "libmythbase/mythtranslation.h"
 #include "libmythbase/mythversion.h"
-#include "libmythbase/programinfo.h"
-#include "libmythbase/remoteutil.h"
-#include "libmythbase/signalhandling.h"
 #include "libmythbase/storagegroup.h"
 #include "libmythtv/dbcheck.h"
 #include "libmythtv/eitcache.h"
 #include "libmythtv/jobqueue.h"
 #include "libmythtv/mythsystemevent.h"
 #include "libmythtv/previewgenerator.h"
+#include "libmythtv/programinfo.h"
 #include "libmythtv/scheduledrecording.h"
 #include "libmythtv/tv_rec.h"
+#include "libmythupnp/ssdp.h"
+#include "libmythupnp/taskqueue.h"
 
 // MythBackend
 #include "autoexpire.h"
@@ -82,68 +83,68 @@ static JobQueue               *gJobQueue        { nullptr };
 static MythSystemEventHandler *gSysEventHandler { nullptr };
 static MediaServer            *g_pUPnp          { nullptr };
 static MainServer             *mainServer       { nullptr };
-static QString gPidFile;
 
-bool setupTVs(bool ismaster, bool &error)
+void doDatabaseHacks()
 {
-    error = false;
+    MSqlQuery query(MSqlQuery::InitCon());
+
+    // Hack to make sure recorded.basename gets set if the user
+    // downgrades to a prior version and creates new entries
+    // without it.
+    if (!query.exec("UPDATE recorded SET basename = CONCAT(chanid, '_', "
+                    "DATE_FORMAT(starttime, '%Y%m%d%H%i00'), '_', "
+                    "DATE_FORMAT(endtime, '%Y%m%d%H%i00'), '.nuv') "
+                    "WHERE basename = '';"))
+        MythDB::DBError("Updating record basename", query);
+
+    // Hack to make sure record.station gets set if the user
+    // downgrades to a prior version and creates new entries
+    // without it.
+    if (!query.exec("UPDATE channel SET callsign=chanid "
+                    "WHERE callsign IS NULL OR callsign='';"))
+        MythDB::DBError("Updating channel callsign", query);
+
+    if (query.exec("SELECT MIN(chanid) FROM channel;"))
+    {
+        query.first();
+        int min_chanid = query.value(0).toInt();
+        if (!query.exec(QString("UPDATE record SET chanid = %1 "
+                                "WHERE chanid IS NULL;").arg(min_chanid)))
+            MythDB::DBError("Updating record chanid", query);
+    }
+    else
+    {
+        MythDB::DBError("Querying minimum chanid", query);
+    }
+
+    MSqlQuery records_without_station(MSqlQuery::InitCon());
+    records_without_station.prepare("SELECT record.chanid,"
+            " channel.callsign FROM record LEFT JOIN channel"
+            " ON record.chanid = channel.chanid WHERE record.station='';");
+    if (records_without_station.exec())
+    {
+        MSqlQuery update_record(MSqlQuery::InitCon());
+        update_record.prepare("UPDATE record SET station = :CALLSIGN"
+                " WHERE chanid = :CHANID;");
+        while (records_without_station.next())
+        {
+            update_record.bindValue(":CALLSIGN",
+                    records_without_station.value(1));
+            update_record.bindValue(":CHANID",
+                    records_without_station.value(0));
+            if (!update_record.exec())
+            {
+                MythDB::DBError("Updating record station", update_record);
+            }
+        }
+    }
+}
+
+bool createTVRecorders(bool ismaster, bool retry)
+{
     QString localhostname = gCoreContext->GetHostName();
 
     MSqlQuery query(MSqlQuery::InitCon());
-
-    if (ismaster)
-    {
-        // Hack to make sure recorded.basename gets set if the user
-        // downgrades to a prior version and creates new entries
-        // without it.
-        if (!query.exec("UPDATE recorded SET basename = CONCAT(chanid, '_', "
-                        "DATE_FORMAT(starttime, '%Y%m%d%H%i00'), '_', "
-                        "DATE_FORMAT(endtime, '%Y%m%d%H%i00'), '.nuv') "
-                        "WHERE basename = '';"))
-            MythDB::DBError("Updating record basename", query);
-
-        // Hack to make sure record.station gets set if the user
-        // downgrades to a prior version and creates new entries
-        // without it.
-        if (!query.exec("UPDATE channel SET callsign=chanid "
-                        "WHERE callsign IS NULL OR callsign='';"))
-            MythDB::DBError("Updating channel callsign", query);
-
-        if (query.exec("SELECT MIN(chanid) FROM channel;"))
-        {
-            query.first();
-            int min_chanid = query.value(0).toInt();
-            if (!query.exec(QString("UPDATE record SET chanid = %1 "
-                                    "WHERE chanid IS NULL;").arg(min_chanid)))
-                MythDB::DBError("Updating record chanid", query);
-        }
-        else
-        {
-            MythDB::DBError("Querying minimum chanid", query);
-        }
-
-        MSqlQuery records_without_station(MSqlQuery::InitCon());
-        records_without_station.prepare("SELECT record.chanid,"
-                " channel.callsign FROM record LEFT JOIN channel"
-                " ON record.chanid = channel.chanid WHERE record.station='';");
-        if (records_without_station.exec() && records_without_station.next())
-        {
-            MSqlQuery update_record(MSqlQuery::InitCon());
-            update_record.prepare("UPDATE record SET station = :CALLSIGN"
-                    " WHERE chanid = :CHANID;");
-            do
-            {
-                update_record.bindValue(":CALLSIGN",
-                        records_without_station.value(1));
-                update_record.bindValue(":CHANID",
-                        records_without_station.value(0));
-                if (!update_record.exec())
-                {
-                    MythDB::DBError("Updating record station", update_record);
-                }
-            } while (records_without_station.next());
-        }
-    }
 
     if (!query.exec(
             "SELECT cardid, parentid, videodevice, hostname, sourceid "
@@ -165,7 +166,7 @@ bool setupTVs(bool ismaster, bool &error)
         uint    sourceid    = query.value(4).toUInt();
         QString cidmsg      = QString("Card[%1](%2)").arg(cardid).arg(videodevice);
 
-        if (hostname.isEmpty())
+        if (hostname.isEmpty() && !retry)
         {
             LOG(VB_GENERAL, LOG_ERR, cidmsg +
                 " does not have a hostname defined.\n"
@@ -176,11 +177,17 @@ bool setupTVs(bool ismaster, bool &error)
         // Skip all cards that do not have a video source
         if (sourceid == 0)
         {
-            if (parentid == 0)
+            if (parentid == 0 && !retry)
             {
                 LOG(VB_GENERAL, LOG_WARNING, cidmsg +
                     " does not have a video source");
             }
+            continue;
+        }
+
+        if (retry && (TVRec::GetTVRec(cardid) != nullptr))
+        {
+            // We're retrying, so ignore existing encoders
             continue;
         }
 
@@ -252,7 +259,7 @@ bool setupTVs(bool ismaster, bool &error)
         }
     }
 
-    if (gTVList.empty())
+    if (gTVList.empty() && !retry)
     {
         LOG(VB_GENERAL, LOG_WARNING, LOC +
                 "No valid capture cards are defined in the database.");
@@ -293,12 +300,6 @@ void cleanup(void)
     delete g_pUPnp;
     g_pUPnp = nullptr;
 
-    if (SSDP::Instance())
-    {
-        SSDP::Instance()->RequestTerminate();
-        SSDP::Instance()->wait();
-    }
-
     if (TaskQueue::Instance())
     {
         TaskQueue::Instance()->RequestTerminate();
@@ -311,23 +312,11 @@ void cleanup(void)
         delete rec;
     }
 
-
-    delete gContext;
-    gContext = nullptr;
-
     delete mainServer;
     mainServer = nullptr;
 
      delete gBackendContext;
      gBackendContext = nullptr;
-
-    if (!gPidFile.isEmpty())
-    {
-        QFile::remove(gPidFile);
-        gPidFile.clear();
-    }
-
-    SignalHandler::Done();
 }
 
 int handle_command(const MythBackendCommandLineParser &cmdline)
@@ -525,23 +514,6 @@ void print_warnings(const MythBackendCommandLineParser &cmdline)
 
 int run_backend(MythBackendCommandLineParser &cmdline)
 {
-    gPidFile = cmdline.toString("pidfile");
-    if (!gPidFile.isEmpty())
-    {
-        QFile file(gPidFile);
-        if (file.open(QIODevice::WriteOnly))
-        {
-            qint64 pid = QCoreApplication::applicationPid();
-            file.write(qPrintable(QString("%1\n").arg(pid)));
-            file.close();
-        }
-        else
-        {
-            LOG(VB_GENERAL, LOG_WARNING,
-                QString(LOC + "Cannot open pidfile named %1").arg(gPidFile));
-        }
-    }
-
     gBackendContext = new BackendContext();
 
     if (gCoreContext->IsDatabaseIgnored())
@@ -555,7 +527,7 @@ int run_backend(MythBackendCommandLineParser &cmdline)
             "Please install it and try again.  "
             "See 'mysql_tzinfo_to_sql' for assistance.");
         gCoreContext->GetDB()->IgnoreDatabase(true);
-        gContext->setWebOnly(MythContext::kWebOnlyDBTimezone);
+        V2Myth::s_WebOnlyStartup = V2Myth::kWebOnlyDBTimezone;
         return run_setup_webserver();
     }
     bool ismaster = gCoreContext->IsMasterHost();
@@ -565,16 +537,23 @@ int run_backend(MythBackendCommandLineParser &cmdline)
         LOG(VB_GENERAL, LOG_ERR,
             QString("Couldn't upgrade database to new schema on %1 backend.")
             .arg(ismaster ? "master" : "slave"));
-        gContext->setWebOnly(MythContext::kWebOnlySchemaUpdate);
+        V2Myth::s_WebOnlyStartup = V2Myth::kWebOnlySchemaUpdate;
         return run_setup_webserver();
     }
+#ifndef NDEBUG
+    if (cmdline.toBool("upgradedbonly"))
+    {
+        LOG(VB_GENERAL, LOG_ERR, "Exiting as requested.");
+        return GENERIC_EXIT_OK;
+    }
+#endif
 
     be_sd_notify("STATUS=Loading translation");
     MythTranslation::load("mythfrontend");
 
     if (cmdline.toBool("webonly"))
     {
-        gContext->setWebOnly(MythContext::kWebOnlyWebOnlyParm);
+        V2Myth::s_WebOnlyStartup = V2Myth::kWebOnlyWebOnlyParm;
         return run_setup_webserver();
     }
     if (!ismaster)
@@ -592,7 +571,7 @@ int run_backend(MythBackendCommandLineParser &cmdline)
         std::cerr << "No setting found for this machine's BackendServerAddr.\n"
                   << "MythBackend starting in Web App only mode for initial setup.\n"
                   << "Use http://<yourBackend>:6544 to perform setup.\n";
-        gContext->setWebOnly(MythContext::kWebOnlyIPAddress);
+        V2Myth::s_WebOnlyStartup = V2Myth::kWebOnlyIPAddress;
         return run_setup_webserver();
     }
 
@@ -614,10 +593,9 @@ int run_backend(MythBackendCommandLineParser &cmdline)
 
     print_warnings(cmdline);
 
-    bool fatal_error = false;
-    bool runsched = setupTVs(ismaster, fatal_error);
-    if (fatal_error)
-        return GENERIC_EXIT_SETUP_ERROR;
+    if (ismaster)
+        doDatabaseHacks();
+    bool runsched = createTVRecorders(ismaster);
 
     Scheduler *sched = nullptr;
     if (ismaster)
@@ -658,6 +636,7 @@ int run_backend(MythBackendCommandLineParser &cmdline)
             gHousekeeping->RegisterTask(new ThemeUpdateTask());
             gHousekeeping->RegisterTask(new ArtworkTask());
             gHousekeeping->RegisterTask(new MythFillDatabaseTask());
+            gHousekeeping->RegisterTask(new DBConnPurgeTask());
 
             // only run this task if MythMusic is installed and we have a new enough schema
             if (gCoreContext->GetNumSetting("MusicDBSchemaVer", 0) >= 1024)
@@ -665,11 +644,12 @@ int run_backend(MythBackendCommandLineParser &cmdline)
         }
 
         gHousekeeping->RegisterTask(new JobQueueRecoverTask());
-#ifdef __linux__
+#ifdef Q_OS_LINUX
  #ifdef CONFIG_BINDINGS_PYTHON
         gHousekeeping->RegisterTask(new HardwareProfileTask());
  #endif
 #endif
+        gHousekeeping->RegisterTask(new FindEncoders());
 
         gHousekeeping->Start();
     }
@@ -707,7 +687,7 @@ int run_backend(MythBackendCommandLineParser &cmdline)
         LOG(VB_GENERAL, LOG_INFO, "Main::Registering HttpStatus Extension");
         be_sd_notify("STATUS=Registering HttpStatus Extension");
 
-        httpStatus = new HttpStatus( &gTVList, sched, gExpirer, ismaster );
+        httpStatus = new HttpStatus( &gTVList, sched, ismaster );
         pHS->RegisterExtension( httpStatus );
     }
 
@@ -753,23 +733,25 @@ int run_backend(MythBackendCommandLineParser &cmdline)
     MythHTTPInstance::Addservices(be_services);
 
     // Send all unknown requests into the web app. make bookmarks and direct access work.
+    // Also all js files not found will be redirected to the apps/backend directory
     auto spa_index = [](auto && PH1) { return MythHTTPRewrite::RewriteToSPA(std::forward<decltype(PH1)>(PH1), "apps/backend/index.html"); };
     MythHTTPInstance::AddErrorPageHandler({ "=404", spa_index });
 
     // Serve components of the backend web app as if they were hosted at '/'
-    auto main_js = [](auto && PH1) { return MythHTTPRewrite::RewriteFile(std::forward<decltype(PH1)>(PH1), "apps/backend/main.js"); };
-    auto styles_css = [](auto && PH1) { return MythHTTPRewrite::RewriteFile(std::forward<decltype(PH1)>(PH1), "apps/backend/styles.css"); };
-    auto polyfills_js = [](auto && PH1) { return MythHTTPRewrite::RewriteFile(std::forward<decltype(PH1)>(PH1), "apps/backend/polyfills.js"); };
-    auto runtime_js = [](auto && PH1) { return MythHTTPRewrite::RewriteFile(std::forward<decltype(PH1)>(PH1), "apps/backend/runtime.js"); };
+    // These are no needed as the RewrtiteToSPA will handle redirects of js files
+    // auto main_js = [](auto && PH1) { return MythHTTPRewrite::RewriteFile(std::forward<decltype(PH1)>(PH1), "apps/backend/main.js"); };
+    // auto styles_css = [](auto && PH1) { return MythHTTPRewrite::RewriteFile(std::forward<decltype(PH1)>(PH1), "apps/backend/styles.css"); };
+    // auto polyfills_js = [](auto && PH1) { return MythHTTPRewrite::RewriteFile(std::forward<decltype(PH1)>(PH1), "apps/backend/polyfills.js"); };
+    // auto runtime_js = [](auto && PH1) { return MythHTTPRewrite::RewriteFile(std::forward<decltype(PH1)>(PH1), "apps/backend/runtime.js"); };
 
     // Default index page
     auto root = [](auto && PH1) { return MythHTTPRoot::RedirectRoot(std::forward<decltype(PH1)>(PH1), "apps/backend/index.html"); };
 
     const HTTPHandlers be_handlers = {
-        { "/main.js", main_js },
-        { "/styles.css", styles_css },
-        { "/polyfills.js", polyfills_js },
-        { "/runtime.js", runtime_js },
+        // { "/main.js", main_js },
+        // { "/styles.css", styles_css },
+        // { "/polyfills.js", polyfills_js },
+        // { "/runtime.js", runtime_js },
         { "/", root }
     };
 

@@ -21,6 +21,11 @@ set(MYTH_DEFAULT_LIBS_PREFIX
     CACHE PATH
           "Default library install prefix if not specified on the command line."
 )
+set(MYTH_RUN_PREFIX
+    ""
+    CACHE PATH
+          "The prefix where MythTV is expected to be at runtime, used by the Python bindings.  This may differ from MYTH_DEFAULT_PREFIX or CMAKE_INSTALL_PREFIX for packagers."
+)
 
 # Location for downloaded tarballs.
 #
@@ -99,6 +104,7 @@ option(ENABLE_MMAL "Enable hardware accelerated decoding on Raspberry Pi" ON)
 option(ENABLE_NVDEC "Enable (CUVID) hardware accelerated video decoding" ON)
 option(ENABLE_VAAPI "Enable VAAPI hardware accelerated video decoding" ON)
 option(ENABLE_VDPAU "Enable NVidia VDPAU hardware acceleration." ON)
+option(ENABLE_ALTIVEC "Enable AltiVec SIMD extension for PPC architecture." ON)
 
 #
 # Backend Video Collection Methods
@@ -162,9 +168,17 @@ option(ENABLE_MHEG "Enable MHEG support." ON)
 option(ENABLE_SDL2 "Enable SDL2 support." ON)
 option(ENABLE_SYSTEMD_JOURNAL "Enable systemd journal support." ON)
 option(ENABLE_SYSTEMD_NOTIFY "Enable systemd notify support." ON)
+option(ENABLE_QTWEBENGINE "Enable webengine support." ON)
+option(ENABLE_VALGRIND "Enable valgrind support." OFF)
+option(ENABLE_ASAN "Enable AddressSanitizer." OFF)
+option(ENABLE_TSAN "Enable ThreadSanitizer." OFF)
 option(
   ENABLE_EXIV2_DOWNLOAD
   "Build latest exiv2 instead of embedded copy.  This only afects native builds. Android/Windows builds will always downloded exiv2."
+  OFF)
+option(
+  CONFIG_FORCE_LOGLONG
+  "Use long loging format for the console (i.e. show file, line number, etc.)."
   OFF)
 
 #
@@ -194,6 +208,34 @@ option(MYTH_VERSIONED_EXTENSIONS
        ON)
 
 #
+# What to do with the outputs of the "build" stage.  Because the MythTV
+# build is an orchestration of a bunch of sub-builds, the "build" stage has
+# to store its results somewhere.  If this option is "OFF", the build stage
+# will place its outputs into CMAKE_INSTALL_PREFIX.  If this option is
+# "ON", the build stage will place its outputs into a temporary directory,
+# and then cmake will have to be invoked again to "install" everything into
+# CMAKE_INSTALL_PREFIX.
+#
+# This setting is meaningless on cross-compiled systems.  Unfortunately,
+# information about whether or not this is a cross-compile is not yet
+# available because the project() command hasn't yet been called.  After
+# that call there is a check of CMAKE_CROSSCOMPILING and if it is set then
+# this setting will be forcibly set to OFF.
+#
+# Setting this option to "ON" will override the LIBS options below.
+#
+if(UNIX AND NOT ANDROID)
+  set(_MYTH_USE_STAGING_DIR_DEFAULT ON)
+else()
+  set(_MYTH_USE_STAGING_DIR_DEFAULT OFF)
+endif()
+option(MYTH_USE_STAGING_DIR
+       "Use a temporary install directory to support a \"cmake --install\" command."
+       ${_MYTH_USE_STAGING_DIR_DEFAULT})
+unset(_MYTH_USE_STAGING_DIR_DEFAULT)
+
+
+#
 # Library build instructions
 #
 # The first option affect the cmake configuration stage, and the seconds affects
@@ -211,6 +253,8 @@ option(LIBS_ALWAYS_REBUILD "Rebuild libraries on every call to --build." OFF)
 # they only need to be compiled once.
 #
 option(LIBS_INSTALL_EXIV2 "Install the exiv2 library in the libs directory" ON)
+option(LIBS_INSTALL_MYTHDVDNAV
+       "Install the libmythdvdnav library in the libs directory" ON)
 option(LIBS_INSTALL_UDFREAD
        "Install the libudfread library in the libs directory" ON)
 option(LIBS_INSTALL_FFMPEG "Install the FFmpeg libraries in the libs directory"
@@ -230,10 +274,7 @@ option(MYTH_BUILD_THEMESTRING_TOOL
 #
 # Android Related Options
 #
-if(ANDROID
-   OR ARM64
-   OR SDK
-   OR CMAKE_ANDROID_ARCH_ABI)
+if(ANDROID)
   # As per:
   # https://cmake.org/cmake/help/latest/manual/cmake-toolchains.7.html#cross-compiling-for-android
   #
@@ -327,22 +368,36 @@ endif()
 # environment for the necessary commands if there isn't already a JDK_HOME
 # environment variable.
 #
-if(ANDROID)
-  foreach(DIR "jbr" "jre")
-    set(FILENAME "$ENV{HOME}/Android/android-studio/${DIR}")
-    if(EXISTS ${FILENAME})
-      set(MYTH_JAVA_HOME
-          ${FILENAME}
-          CACHE PATH "Path to JDK home directory")
-      break()
-    endif()
-  endforeach()
-else()
-  set(MYTH_JAVA_HOME
-      ""
-      CACHE PATH "Path to JDK home directory")
-endif()
+set(MYTH_JAVA_HOME
+    ""
+    CACHE
+      PATH
+      "Path to JDK home directory. This will be used if the JAVA_HOME environment variable isn't set."
+)
 
+#
+# Darwin Related Options
+#
+if(APPLE)
+  option(DARWIN_FRONTEND_BUNDLE
+         "Generate an application bundle for mythfrontend." OFF)
+  option(DARWIN_SIGNING_ID
+         "\
+The name of your Apple supplied code signing certificate \
+for the application. The name usually takes the form \
+Developer ID Application: [Name] or \
+3rd Party Mac Developer Application: [Name] \
+If this variable is not set the application will not be signed." "")
+  option(DARWIN_NOTARIZATION_KEYCHAIN
+         "\
+Keychain where valid apple notarization credentials are stored.\
+These include the apple-id, team-id, and the Apple Generated APP_PWD\
+These can be stored by running the following command:\
+  xcrun notarytool store-credentials KEYCHAIN_NAME \
+        --apple-id YOUR_APPLE_ID \
+        --team-id=YOUR_TEAM_ID \
+        --password YOUR_APP_PWD" "")
+endif()
 #
 # Load any user overrides to these values.
 #

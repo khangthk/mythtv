@@ -16,11 +16,11 @@
 * along with this program; if not, write to the Free Software
 * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 */
+#include "xmlplistSerializer.h"
 
 #include <QMetaClassInfo>
 #include <QDateTime>
-
-#include "xmlplistSerializer.h"
+#include <algorithm>
 
 static constexpr const char* XMLPLIST_SERIALIZER_VERSION { "1.0" };
 
@@ -157,12 +157,12 @@ void XmlPListSerializer::RenderList(const QString &sName,
     {
 #if QT_VERSION < QT_VERSION_CHECK(6,0,0)
         auto t = static_cast<QMetaType::Type>(list[0].type());
-        array = std::all_of(list.cbegin(), list.cend(),
+        array = std::ranges::all_of(std::as_const(list),
                             [t](const QVariant& v)
                                 { return t == static_cast<QMetaType::Type>(v.type()); } );
 #else
         auto t = list[0].typeId();
-        array = std::all_of(list.cbegin(), list.cend(),
+        array = std::ranges::all_of(std::as_const(list),
                             [t](const QVariant& v) { return t == v.typeId(); } );
 #endif
     }
@@ -171,9 +171,8 @@ void XmlPListSerializer::RenderList(const QString &sName,
     m_pXmlWriter->writeTextElement("key", sName);
     m_pXmlWriter->writeStartElement(array ? "array" : "dict");
 
-    QListIterator<QVariant> it(list);
-    while (it.hasNext())
-        RenderValue(sItemName, it.next(), !array);
+    for (const auto& variant : list)
+        RenderValue(sItemName, variant, !array);
 
     m_pXmlWriter->writeEndElement();
 }
@@ -184,9 +183,8 @@ void XmlPListSerializer::RenderStringList(const QString &sName,
     m_pXmlWriter->writeTextElement("key", sName);
     m_pXmlWriter->writeStartElement("array");
 
-    QListIterator<QString> it(list);
-    while (it.hasNext())
-        m_pXmlWriter->writeTextElement("string", it.next());
+    for (const QString& str : list)
+        m_pXmlWriter->writeTextElement("string", str);
 
     m_pXmlWriter->writeEndElement();
 }
@@ -198,12 +196,8 @@ void XmlPListSerializer::RenderMap(const QString &sName,
     m_pXmlWriter->writeTextElement("key", sItemName);
     m_pXmlWriter->writeStartElement("dict");
 
-    QMapIterator<QString,QVariant> it(map);
-    while (it.hasNext())
-    {
-        it.next();
+    for (auto it = map.cbegin(); it != map.cend(); ++it)
         RenderValue(it.key(), it.value());
-    }
 
     m_pXmlWriter->writeEndElement();
 }

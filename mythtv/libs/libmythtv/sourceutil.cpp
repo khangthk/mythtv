@@ -1,5 +1,8 @@
 // -*- Mode: c++ -*-
 
+// C++ headers
+#include <algorithm>
+
 // Qt Headers
 #include <QRegularExpression>
 
@@ -107,7 +110,13 @@ QString SourceUtil::GetChannelSeparator(uint sourceid)
         {
             const QString channum = query.value(0).toString();
             const int where = channum.indexOf(kSeparatorRE);
-            if (channum.right(2).startsWith("0"))
+            if (
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+                channum.rightRef(2).startsWith("0")
+#else
+                QStringView(channum).right(2).startsWith(QStringLiteral("0"))
+#endif
+                )
                 counts["0"]++;
             else
                 counts[(where < 0) ? "" : QString(channum.at(where))]++;
@@ -209,7 +218,9 @@ static QStringList get_inputtypes(uint sourceid)
     query.bindValue(":SOURCEID", sourceid);
 
     if (!query.exec() || !query.isActive())
+    {
         MythDB::DBError("get_inputtypes()", query);
+    }
     else
     {
         while (query.next())
@@ -309,7 +320,7 @@ bool SourceUtil::IsEncoder(uint sourceid, bool strict)
 {
     QStringList types = get_inputtypes(sourceid);
     auto isencoder = [](const auto & type){ return CardUtil::IsEncoder(type); };
-    bool encoder = std::all_of(types.cbegin(), types.cend(), isencoder);
+    bool encoder = std::ranges::all_of(std::as_const(types), isencoder);
 
     // Source is connected, go by input types for type determination
     if (!types.empty())
@@ -326,7 +337,9 @@ bool SourceUtil::IsEncoder(uint sourceid, bool strict)
 
     bool has_any_chan = false;
     if (!query.exec() || !query.isActive())
+    {
         MythDB::DBError("SourceUtil::IsEncoder", query);
+    }
     else
     {
         while (query.next())
@@ -345,7 +358,7 @@ bool SourceUtil::IsUnscanable(uint sourceid)
     if (types.empty())
         return true;
     auto unscannable = [](const auto & type) { return CardUtil::IsUnscanable(type); };
-    return std::all_of(types.cbegin(), types.cend(), unscannable);
+    return std::ranges::all_of(std::as_const(types), unscannable);
 }
 
 bool SourceUtil::IsCableCardPresent(uint sourceid)
@@ -354,7 +367,7 @@ bool SourceUtil::IsCableCardPresent(uint sourceid)
     auto ccpresent = [](uint input)
         { return CardUtil::IsCableCardPresent(input, CardUtil::GetRawInputType(input)) ||
                  CardUtil::GetRawInputType(input) == "HDHOMERUN"; };
-    return std::any_of(inputs.cbegin(), inputs.cend(), ccpresent);
+    return std::ranges::any_of(std::as_const(inputs), ccpresent);
 }
 
 bool SourceUtil::IsAnySourceScanable(void)

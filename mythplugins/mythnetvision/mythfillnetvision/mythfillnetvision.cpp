@@ -9,7 +9,6 @@
 #include <QEventLoop>
 
 // MythTV headers
-#include <mythconfig.h>
 #include <libmyth/mythcontext.h>
 #include <libmythbase/exitcodes.h>
 #include <libmythbase/mythcommandlineparser.h>
@@ -21,7 +20,6 @@
 #include <libmythbase/mythversion.h>
 #include <libmythbase/netgrabbermanager.h>
 #include <libmythbase/netutils.h>
-#include <libmythbase/remoteutil.h>
 #include <libmythbase/rssmanager.h>
 
 GrabberDownloadThread *gdt = nullptr;
@@ -86,11 +84,10 @@ int main(int argc, char *argv[])
     // Don't listen to console input
     close(0);
 
-    gContext = new MythContext(MYTH_BINARY_VERSION);
-    if (!gContext->Init(false))
+    MythContext context {MYTH_BINARY_VERSION};
+    if (!context.Init(false))
     {
         LOG(VB_GENERAL, LOG_ERR, "Failed to init MythContext, exiting.");
-        delete gContext;
         return GENERIC_EXIT_NO_MYTHCONTEXT;
     }
 
@@ -149,7 +146,6 @@ int main(int argc, char *argv[])
 
     delete gdt;
     delete rssMan;
-    delete gContext;
 
     LOG(VB_GENERAL, LOG_INFO, "MythFillNetvision run complete.");
 

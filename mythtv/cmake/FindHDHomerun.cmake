@@ -55,14 +55,17 @@ endif()
 #
 if(HDHomerun_FOUND)
   cmake_path(GET HDHomerun_LIBRARY PARENT_PATH LIB_DIR)
-  check_library_exists(hdhomerun hdhomerun_discover_find_devices LIB_DIR
-                       HDHOMERUN_V1)
-  check_library_exists(hdhomerun hdhomerun_discover_find_devices_v2 LIB_DIR
-                       HDHOMERUN_V2)
-  check_library_exists(hdhomerun hdhomerun_discover_find_devices_v3 LIB_DIR
-                       HDHOMERUN_V3)
-  check_library_exists(hdhomerun hdhomerun_device_selector_load_from_str
-                       LIB_DIR HDHOMERUN_DEVICE_SELECTOR_LOAD_FROM_STR)
+  check_library_exists(hdhomerun hdhomerun_discover_find_devices_custom_v2
+                       LIB_DIR _HDHOMERUN_DISCOVER1)
+  check_library_exists(hdhomerun hdhomerun_discover2_find_devices_broadcast
+                       LIB_DIR _HDHOMERUN_DISCOVER2)
+  if(_HDHOMERUN_DISCOVER2)
+    set(HDHOMERUN_VERSION 20221010)
+  elseif(_HDHOMERUN_DISCOVER1)
+    set(HDHOMERUN_VERSION 20190625)
+  else()
+    set(HDHOMERUN_VERSION 0)
+  endif()
 endif()
 
 #
@@ -72,10 +75,12 @@ include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(
   HDHomerun
   FOUND_VAR HDHomerun_FOUND
+  VERSION_VAR HDHOMERUN_VERSION
   REQUIRED_VARS HDHomerun_LIBRARY HDHomerun_INCLUDE_DIR)
 
 # Traditional variables
 if(HDHomerun_FOUND)
+  set(CONFIG_HDHOMERUN TRUE)
   set(HDHomerun_LIBRARIES ${HDHomerun_LIBRARY})
   set(HDHomerun_INCLUDE_DIRS ${HDHomerun_INCLUDE_DIR})
 endif()
@@ -89,10 +94,9 @@ if(HDHomerun_FOUND AND NOT TARGET HDHomerun::HDHomerun)
       IMPORTED_LOCATION "${HDHomerun_LIBRARY}"
       INTERFACE_INCLUDE_DIRECTORIES "${HDHomerun_INCLUDE_DIR}"
       INTERFACE_COMPILE_DEFINITIONS
-      "USING_HDHOMERUN;HDHOMERUN_HEADERFILE=\"${HDHomerun_H_FILE}\";$<$<BOOL:HDHOMERUN_V1>:HDHOMERUN_V1>;$<$<BOOL:HDHOMERUN_V2>:HDHOMERUN_V2>;$<$<BOOL:HDHOMERUN_V3>:HDHOMERUN_V3>;$<$<BOOL:HDHOMERUN_DEVICE_SELECTOR_LOAD_FROM_STR>:HDHOMERUN_DEVICE_SELECTOR_LOAD_FROM_STR>"
+      "HDHOMERUN_VERSION=${HDHOMERUN_VERSION};HDHOMERUN_HEADERFILE=\"${HDHomerun_H_FILE}\""
   )
 endif()
 
 mark_as_advanced(
-  HDHomerun_INCLUDE_DIR HDHomerun_LIBRARY HDHOMERUN_V1 HDHOMERUN_V2
-  HDHOMERUN_V3 HDHOMERUN_DEVICE_SELECTOR_LOAD_FROM_STR)
+  HDHomerun_INCLUDE_DIR HDHomerun_LIBRARY HDHOMERUN_VERSION)

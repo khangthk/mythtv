@@ -216,7 +216,7 @@ bool MythPainterVulkan::Ready()
         const auto & sizes = m_textureShader->GetPoolSizes(1);
         // match total number of individual descriptors with pool size
         std::vector<VkDescriptorPoolSize> adjsizes;
-        std::transform(sizes.cbegin(), sizes.cend(), std::back_inserter(adjsizes),
+        std::ranges::transform(sizes, std::back_inserter(adjsizes),
                        [](VkDescriptorPoolSize Size){ return VkDescriptorPoolSize { Size.type, MAX_TEXTURE_COUNT }; });
         VkDescriptorPoolCreateInfo pool { VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, nullptr,
                                           0, MAX_TEXTURE_COUNT, static_cast<uint32_t>(adjsizes.size()), adjsizes.data() };
@@ -400,10 +400,9 @@ void MythPainterVulkan::ClearCache()
 {
     LOG(VB_GENERAL, LOG_INFO, "Clearing Vulkan painter cache.");
 
-    QMapIterator<MythImage *, MythTextureVulkan*> it(m_imageToTextureMap);
-    while (it.hasNext())
+    for (auto it = m_imageToTextureMap.cbegin();
+         it != m_imageToTextureMap.cend(); ++it)
     {
-        it.next();
         m_texturesToDelete.push_back(m_imageToTextureMap[it.key()]);
         m_imageExpire.remove(it.key());
     }
@@ -538,3 +537,5 @@ void MythPainterVulkan::DeleteTextures()
         m_texturesToDelete.pop_front();
     }
 }
+
+#include "moc_mythpaintervulkan.cpp"

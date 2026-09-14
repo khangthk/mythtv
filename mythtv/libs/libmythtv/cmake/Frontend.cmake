@@ -8,7 +8,6 @@ if(NOT ENABLE_FRONTEND)
   return()
 endif()
 
-target_compile_definitions(mythtv PRIVATE USING_FRONTEND)
 target_sources(
   mythtv
   PRIVATE # DVD
@@ -124,6 +123,7 @@ target_sources(
           videoouttypes.h
           mythvideobounds.h
           mythvideocolourspace.h
+          visualisations/audiooutputgraph.h
           visualisations/videovisual.h
           visualisations/videovisualdefs.h
           visualisations/videovisualspectrum.h
@@ -139,6 +139,7 @@ target_sources(
           mythcodecid.cpp
           mythvideobounds.cpp
           mythvideocolourspace.cpp
+          visualisations/audiooutputgraph.cpp
           visualisations/videovisual.cpp
           visualisations/videovisualspectrum.cpp
           mythdeinterlacer.cpp
@@ -164,7 +165,7 @@ if(TARGET mythtv_mmal)
                                 decoders/mythmmalcontext.h)
 endif()
 
-if(TARGET PkgConfig::VDPAU AND TARGET X11::X11)
+if(TARGET PkgConfig::VDPAU)
   target_link_libraries(mythtv PUBLIC PkgConfig::VDPAU)
   target_sources(
     mythtv PRIVATE decoders/mythvdpaucontext.cpp decoders/mythvdpaucontext.h
@@ -173,7 +174,7 @@ endif()
 
 if(TARGET PkgConfig::DRM)
   target_link_libraries(mythtv PUBLIC PkgConfig::DRM)
-  if(TARGET Qt5::GuiPrivate) # Not completed for Qt6 yet.
+  if(TARGET Qt${QT_VERSION_MAJOR}::GuiPrivate)
     target_link_libraries(mythtv PUBLIC Qt${QT_VERSION_MAJOR}::GuiPrivate)
     target_sources(
       mythtv
@@ -220,25 +221,13 @@ if(TARGET Vulkan::Vulkan)
             visualisations/vulkan/mythvisualmonoscopevulkan.h)
 endif()
 
-if(TARGET Vulkan::Vulkan OR _HAVE_GL_OR_GLES)
+if(TARGET Vulkan::Vulkan OR TARGET any_opengl)
   target_sources(mythtv PRIVATE visualisations/videovisualmonoscope.cpp
                                 visualisations/videovisualmonoscope.h)
 endif()
 
-if(_HAVE_GL_OR_GLES)
-  if(TARGET OpenGL::GL)
-    target_link_libraries(mythtv PUBLIC Qt${QT_VERSION_MAJOR}::OpenGL
-                                        OpenGL::GL)
-    if(TARGET OpenGL::EGL)
-      target_link_libraries(mythtv PUBLIC OpenGL::EGL)
-    endif()
-  else()
-    target_link_libraries(mythtv PUBLIC Qt${QT_VERSION_MAJOR}::OpenGL
-                                        PkgConfig::GLES2)
-    if(TARGET PkgConfig::EGL)
-      target_link_libraries(mythtv PUBLIC PkgConfig::EGL)
-    endif()
-  endif()
+if(TARGET any_opengl)
+  target_link_libraries(mythtv PUBLIC any_opengl)
   target_sources(
     mythtv
     PRIVATE opengl/mythopenglvideo.h
@@ -258,15 +247,18 @@ if(_HAVE_GL_OR_GLES)
             visualisations/opengl/mythvisualmonoscopeopengl.cpp
             visualisations/opengl/mythvisualmonoscopeopengl.h)
   if(TARGET PkgConfig::VAAPI)
-    target_sources(
-      mythtv PRIVATE opengl/mythvaapiinterop.h opengl/mythvaapiglxinterop.h
-                     opengl/mythvaapiinterop.cpp opengl/mythvaapiglxinterop.cpp)
-    if(TARGET PkgConfig::VDPAU AND TARGET X11::X11)
-      target_sources(mythtv PRIVATE opengl/mythvdpauinterop.h
-                                    opengl/mythvdpauinterop.cpp)
+    target_sources(mythtv PRIVATE opengl/mythvaapiinterop.h
+                                  opengl/mythvaapiinterop.cpp)
+    if(TARGET PkgConfig::VAAPI-GLX)
+      target_sources(mythtv PRIVATE opengl/mythvaapiglxinterop.h
+                                    opengl/mythvaapiglxinterop.cpp)
     endif()
   endif()
 
+  if(TARGET PkgConfig::VDPAU)
+    target_sources(mythtv PRIVATE opengl/mythvdpauinterop.h
+                                  opengl/mythvdpauinterop.cpp)
+  endif()
   if(TARGET mediacodec)
     target_sources(mythtv PRIVATE opengl/mythmediacodecinterop.cpp
                                   opengl/mythmediacodecinterop.h)
@@ -275,7 +267,7 @@ if(_HAVE_GL_OR_GLES)
     target_sources(mythtv PRIVATE opengl/mythnvdecinterop.cpp
                                   opengl/mythnvdecinterop.h)
   endif()
-  if(TARGET APPLE_VIDEOTOOLBOX_LIBRARY)
+  if(APPLE_VIDEOTOOLBOX_LIBRARY)
     target_sources(mythtv PRIVATE opengl/mythvtbinterop.cpp
                                   opengl/mythvtbinterop.h)
   endif()
@@ -289,7 +281,7 @@ if(_HAVE_GL_OR_GLES)
       target_sources(mythtv PRIVATE opengl/mythmmalinterop.cpp
                                     opengl/mythmmalinterop.h)
     endif()
-    if(TARGET PkgConfig::VAAPI)
+    if(TARGET PkgConfig::VAAPI-DRM)
       target_sources(mythtv PRIVATE opengl/mythvaapidrminterop.cpp
                                     opengl/mythvaapidrminterop.h)
     endif()
@@ -323,7 +315,7 @@ if(_HAVE_GL_OR_GLES)
             visualisations/goom/zoom_filter_mmx.cpp
             visualisations/goom/zoom_filter_xmmx.cpp
             visualisations/videovisualgoom.cpp)
-endif(_HAVE_GL_OR_GLES)
+endif(TARGET any_opengl)
 
 if(TARGET PkgConfig::LIBDNS_SD)
   target_link_libraries(mythtv PUBLIC PkgConfig::LIBDNS_SD)

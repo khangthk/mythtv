@@ -6,6 +6,7 @@
 #include <QRegularExpression>
 
 // MythTV
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythlogging.h"
@@ -171,7 +172,9 @@ bool MythVideoProfileItem::CheckRange(const QString& Key,
                         // Other operators == > < >= <=
                         // Convert to a range
                         if (oper == "==")
+                        {
                             value1 = value2;
+                        }
                         else if (oper == ">")
                         {
                             value1 = value2 + 1;
@@ -286,7 +289,7 @@ QString MythVideoProfileItem::toString() const
         .arg(width, height, framerate, codecs);
     QString str =  QString("cmp(%1%2) %7 dec(%3) cpus(%4) skiploop(%5) rend(%6) ")
         .arg(cmp0, QString(cmp1.isEmpty() ? "" : ",") + cmp1,
-             decoder, QString::number(max_cpus), (skiploop) ? "enabled" : "disabled",
+             decoder, QString::number(max_cpus), skiploop ? "enabled" : "disabled",
              renderer, cond);
     str += QString("deint(%1,%2) upscale(%3)").arg(deint0, deint1, upscale);
     return str;
@@ -549,7 +552,7 @@ std::vector<MythVideoProfileItem> MythVideoProfile::LoadDB(uint GroupId)
                 .arg(profileid).arg(error));
     }
 
-    sort(list.begin(), list.end());
+    std::ranges::sort(list);
     return list;
 }
 
@@ -977,7 +980,7 @@ void MythVideoProfile::CreateProfile(uint GroupId, uint Priority,
     queryData  += QString::number(MaxCpus);
 
     queryValue += PREF_LOOP;
-    queryData  += (SkipLoop) ? "1" : "0";
+    queryData  += SkipLoop ? "1" : "0";
 
     queryValue += PREF_RENDER;
     queryData  += VideoRenderer;
@@ -1084,7 +1087,7 @@ void MythVideoProfile::CreateProfiles(const QString &HostName)
 {
     QStringList profiles = GetProfiles(HostName);
 
-#ifdef USING_OPENGL
+#if CONFIG_OPENGL
     if (!profiles.contains("OpenGL High Quality"))
     {
         (void)tr("OpenGL High Quality",
@@ -1114,7 +1117,7 @@ void MythVideoProfile::CreateProfiles(const QString &HostName)
     }
 #endif
 
-#ifdef USING_VAAPI
+#if CONFIG_VAAPI
     if (!profiles.contains("VAAPI Normal"))
     {
         (void)tr("VAAPI Normal", "Sample: VAAPI average quality");
@@ -1128,7 +1131,7 @@ void MythVideoProfile::CreateProfiles(const QString &HostName)
     }
 #endif
 
-#ifdef USING_VDPAU
+#if CONFIG_VDPAU
     if (!profiles.contains("VDPAU Normal"))
     {
         (void)tr("VDPAU Normal", "Sample: VDPAU medium quality");
@@ -1142,7 +1145,7 @@ void MythVideoProfile::CreateProfiles(const QString &HostName)
     }
 #endif
 
-#ifdef USING_MEDIACODEC
+#if CONFIG_MEDIACODEC
     if (!profiles.contains("MediaCodec Normal"))
     {
         (void)tr("MediaCodec Normal",
@@ -1158,7 +1161,7 @@ void MythVideoProfile::CreateProfiles(const QString &HostName)
     }
 #endif
 
-#if defined(USING_NVDEC) && defined(USING_OPENGL)
+#if CONFIG_NVDEC && CONFIG_OPENGL
     if (!profiles.contains("NVDEC Normal"))
     {
         (void)tr("NVDEC Normal", "Sample: NVDEC Normal");
@@ -1172,7 +1175,7 @@ void MythVideoProfile::CreateProfiles(const QString &HostName)
     }
 #endif
 
-#if defined(USING_VTB) && defined(USING_OPENGL)
+#if CONFIG_VIDEOTOOLBOX && CONFIG_OPENGL
     if (!profiles.contains("VideoToolBox Normal")) {
         (void)tr("VideoToolBox Normal", "Sample: VideoToolBox Normal");
         uint groupid = CreateProfileGroup("VideoToolBox Normal", HostName);
@@ -1185,7 +1188,7 @@ void MythVideoProfile::CreateProfiles(const QString &HostName)
     }
 #endif
 
-#if defined(USING_MMAL) && defined(USING_OPENGL)
+#if CONFIG_MMAL && CONFIG_OPENGL
     if (!profiles.contains("MMAL"))
     {
         (void)tr("MMAL", "Sample: MMAL");
@@ -1199,7 +1202,7 @@ void MythVideoProfile::CreateProfiles(const QString &HostName)
     }
 #endif
 
-#if defined(USING_V4L2)
+#if CONFIG_V4L2
     if (!profiles.contains("V4L2 Codecs"))
     {
         (void)tr("V4L2 Codecs", "Sample: V4L2");
@@ -1332,7 +1335,10 @@ void MythVideoProfile::InitStatics(bool Reinit /*= false*/)
 
     if (!HasMythMainWindow())
     {
-        LOG(VB_GENERAL, LOG_ERR, LOC + "No window!");
+        if (gCoreContext->IsFrontend())
+        {
+            LOG(VB_GENERAL, LOG_ERR, LOC + "No window!");
+        }
         return;
     }
 
@@ -1376,3 +1382,5 @@ void MythVideoProfile::InitStatics(bool Reinit /*= false*/)
             .arg(decoder, -12).arg(GetVideoRenderers(decoder).join(" ")));
     }
 }
+
+#include "moc_mythvideoprofile.cpp"

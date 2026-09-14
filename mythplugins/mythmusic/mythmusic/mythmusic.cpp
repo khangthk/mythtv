@@ -1,8 +1,8 @@
 // C++ headers
 #include <cstdlib>
+#include <thread>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <unistd.h>
 
 // Qt headers
 #include <QApplication>
@@ -10,12 +10,12 @@
 #include <QScopedPointer>
 
 // MythTV headers
-#include <libmyth/mythcontext.h>
-#include <libmyth/mythmediamonitor.h>
 #include <libmythbase/compat.h>
 #include <libmythbase/lcddevice.h>
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythdb.h>
 #include <libmythbase/mythdbcon.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythbase/mythplugin.h>
 #include <libmythbase/mythpluginapi.h>
 #include <libmythbase/mythversion.h>
@@ -23,6 +23,7 @@
 #include <libmythmetadata/musicfilescanner.h>
 #include <libmythmetadata/musicmetadata.h>
 #include <libmythmetadata/musicutils.h>
+#include <libmythui/mediamonitor.h>
 #include <libmythui/mythprogressdialog.h>
 #include <libmythui/myththemedmenu.h>
 #include <libmythui/mythuihelper.h>
@@ -50,7 +51,7 @@
 #include "cdrip.h"
 #endif
 
-#if defined HAVE_CDIO
+#ifdef HAVE_CDIO
 /**
  * \brief Work out the best CD drive to use at this time
  */
@@ -77,7 +78,9 @@ static bool checkStorageGroup(void)
                   "FROM storagegroup "
                   "WHERE groupname = 'Music'";
     if (!query.exec(sql) || !query.isActive())
+    {
         MythDB::DBError("checkStorageGroup get host list", query);
+    }
     else
     {
         while(query.next())
@@ -100,7 +103,9 @@ static bool checkStorageGroup(void)
                   "FROM storagegroup "
                   "WHERE groupname = 'MusicArt'";
     if (!query.exec(sql) || !query.isActive())
+    {
         MythDB::DBError("checkStorageGroup get host list", query);
+    }
     else
     {
         while(query.next())
@@ -196,7 +201,7 @@ static void startDatabaseTree(void)
 
 static void startRipper(void)
 {
-#if defined HAVE_CDIO
+#ifdef HAVE_CDIO
     if (!checkStorageGroup())
         return;
 
@@ -267,11 +272,17 @@ static void MusicCallback([[maybe_unused]] void *data, QString &selection)
 {
     QString sel = selection.toLower();
     if (sel == "music_create_playlist")
+    {
         startDatabaseTree();
+    }
     else if (sel == "music_play")
+    {
         startPlayback();
+    }
     else if (sel == "stream_play")
+    {
         startStreamPlayback();
+    }
     else if (sel == "music_rip")
     {
         startRipper();
@@ -416,13 +427,15 @@ static void runRipCD(void)
 {
     gMusicData->loadMusic();
 
-#if defined HAVE_CDIO
+#ifdef HAVE_CDIO
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
     auto *rip = new Ripper(mainStack, chooseCD());
 
     if (rip->Create())
+    {
         mainStack->AddScreen(rip);
+    }
     else
     {
         delete rip;
@@ -485,7 +498,7 @@ static QStringList BuildFileList(const QString &dir, const QStringList &filters)
     return ret;
 }
 
-static void handleMedia(MythMediaDevice *cd)
+static void handleMedia(MythMediaDevice *cd, bool forcePlayback)
 {
     static QString s_mountPath;
 
@@ -526,7 +539,7 @@ static void handleMedia(MythMediaDevice *cd)
     s_mountPath.clear();
 
     // don't show the music screen if AutoPlayCD is off
-    if (!gCoreContext->GetBoolSetting("AutoPlayCD", false))
+    if (!forcePlayback && !gCoreContext->GetBoolSetting("AutoPlayCD", false))
         return;
 
     if (!gMusicData->m_initialized)
@@ -544,7 +557,9 @@ static void handleMedia(MythMediaDevice *cd)
                                       "Searching for music files...");
     auto *busy = new MythUIBusyDialog( message, popupStack, "musicscanbusydialog");
     if (busy->Create())
+    {
         popupStack->AddScreen(busy, false);
+    }
     else
     {
         delete busy;
@@ -603,6 +618,7 @@ static void handleMedia(MythMediaDevice *cd)
     // Create list of new tracks
     QList<int> songList;
     const int tracks = gMusicData->m_all_music->getCDTrackCount();
+    songList.reserve(tracks);
     for (track = 1; track <= tracks; track++)
     {
         MusicMetadata *mdata = gMusicData->m_all_music->getCDMetadata(track);
@@ -631,7 +647,7 @@ static void handleMedia(MythMediaDevice *cd)
 }
 
 #ifdef HAVE_CDIO
-static void handleCDMedia(MythMediaDevice *cd)
+static void handleCDMedia(MythMediaDevice *cd, bool forcePlayback)
 {
 
     if (!cd)
@@ -686,7 +702,7 @@ static void handleCDMedia(MythMediaDevice *cd)
            || !gMusicData->m_all_music->doneLoading())
     {
         QCoreApplication::processEvents();
-        usleep(50000);
+        std::this_thread::sleep_for(50ms);
     }
 
     // remove any existing CD tracks
@@ -718,7 +734,9 @@ static void handleCDMedia(MythMediaDevice *cd)
                 }
 
                 if (track->Album().length() > 0)
+                {
                     parenttitle += track->Album();
+                }
                 else
                 {
                     parenttitle = " " + QCoreApplication::translate("(MythMusicMain)",
@@ -743,17 +761,18 @@ static void handleCDMedia(MythMediaDevice *cd)
 
     // if the AutoPlayCD setting is set we remove all the existing tracks
     // from the playlist and replace them with the new CD tracks found
-    if (gCoreContext->GetBoolSetting("AutoPlayCD", false))
+    if (forcePlayback || gCoreContext->GetBoolSetting("AutoPlayCD", false))
     {
         gMusicData->m_all_playlists->getActive()->removeAllTracks();
 
         QList<int> songList;
 
+        songList.reserve(gMusicData->m_all_music->getCDTrackCount());
         for (int x = 1; x <= gMusicData->m_all_music->getCDTrackCount(); x++)
         {
             MusicMetadata *mdata = gMusicData->m_all_music->getCDMetadata(x);
             if (mdata)
-                songList.append((mdata)->ID());
+                songList.append(mdata->ID());
         }
 
         if (!songList.isEmpty())
@@ -780,7 +799,7 @@ static void handleCDMedia(MythMediaDevice *cd)
     }
 }
 #else
-static void handleCDMedia([[maybe_unused]] MythMediaDevice *cd)
+static void handleCDMedia([[maybe_unused]] MythMediaDevice *cd, [[maybe_unused]] bool forcePlayback)
 {
     LOG(VB_GENERAL, LOG_NOTICE, "MythMusic got a media changed event"
                                 "but cdio support is not compiled in");

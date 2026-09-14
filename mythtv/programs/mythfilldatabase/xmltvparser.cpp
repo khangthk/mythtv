@@ -8,19 +8,20 @@
 #include <QDateTime>
 #include <QDomDocument>
 #include <QFile>
+#include <QFileInfo>
 #include <QStringList>
 #include <QUrl>
 #include <QXmlStreamReader>
 
 // MythTV headers
 #include "libmythbase/exitcodes.h"
-#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
-#include "libmythbase/programinfo.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythmetadata/metadatadownload.h"
 #include "libmythtv/channelinfo.h"
 #include "libmythtv/mpeg/dvbdescriptors.h"
 #include "libmythtv/programdata.h"
+#include "libmythtv/programinfo.h"
 
 // filldata headers
 #include "channeldata.h"
@@ -148,7 +149,11 @@ static void fromXMLTVDate(QString &timestr, QDateTime &dt)
         }
     }
 
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     QDateTime tmpDT = QDateTime(tmpDate, tmpTime, Qt::UTC);
+#else
+    QDateTime tmpDT = QDateTime(tmpDate, tmpTime, QTimeZone(QTimeZone::UTC));
+#endif
     if (!tmpDT.isValid())
     {
         LOG(VB_XMLTV, LOG_ERR,
@@ -198,6 +203,18 @@ bool XMLTVParser::parseFile(
         LOG(VB_GENERAL, LOG_ERR,
             QString("Error unable to open '%1' for reading.") .arg(filename));
         return false;
+    }
+
+    if (filename != "-")
+    {
+        QFileInfo info(f);
+        if (info.size() == 0)
+        {
+            LOG(VB_GENERAL, LOG_WARNING,
+                QString("File %1 exists but is empty. Did the grabber fail?").arg(filename));
+            f.close();
+            return false;
+        }
     }
 
     QXmlStreamReader xml(&f);
@@ -269,7 +286,7 @@ bool XMLTVParser::parseFile(
                 chaninfo->m_tvFormat = "Default";
 
                 //readNextStartElement says it reads for the next start element WITHIN the current element; but it doesnt; so we use readNext()
-                do
+                while (!xml.isEndElement() || (xml.name() != QString("channel")))
                 {
                     if (!readNextWithErrorCheck(xml))
                     {
@@ -317,7 +334,6 @@ bool XMLTVParser::parseFile(
                         }
                     }
                 }
-                while (! (xml.isEndElement() && xml.name() == QString("channel")));
                 chaninfo->m_freqId = chaninfo->m_chanNum;
                 //TODO optimize this, no use to do al this parsing if xmltvid is empty; but make sure you will read until the next channel!!
                 if (!chaninfo->m_xmltvId.isEmpty())
@@ -359,7 +375,7 @@ bool XMLTVParser::parseFile(
                     pginfo->m_clumpmax = split[1];
                 }
 
-                do
+                while (!xml.isEndElement() || (xml.name() != QString("programme")))
                 {
                     if (!readNextWithErrorCheck(xml))
                     {
@@ -422,7 +438,11 @@ bool XMLTVParser::parseFile(
                     {
                         // Movie production year
                         QString date = xml.readElementText(QXmlStreamReader::SkipChildElements);
-                        pginfo->m_airdate = date.left(4).toUInt();
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+                        pginfo->m_airdate = date.leftRef(4).toUInt();
+#else
+                        pginfo->m_airdate = QStringView(date).left(4).toUInt();
+#endif
                     }
                     else if (xml.name() == QString("star-rating"))
                     {
@@ -447,7 +467,7 @@ bool XMLTVParser::parseFile(
                         // 0 signals no rating!
                         // See http://xmltv.cvs.sourceforge.net/viewvc/xmltv/xmltv/xmltv.dtd?revision=1.47&view=markup#l539
                         stars = "0"; //no rating
-                        do
+                        while (!xml.isEndElement() || (xml.name() != QString("star-rating")))
                         {
                             if (!readNextWithErrorCheck(xml))
                                 return false;
@@ -459,7 +479,6 @@ bool XMLTVParser::parseFile(
                                 }
                             }
                         }
-                        while (! (xml.isEndElement() && xml.name() == QString("star-rating")));
                         if (pginfo->m_stars == 0.0F)
                         {
                             float num = stars.section('/', 0, 0).toFloat() + 1;
@@ -478,7 +497,7 @@ bool XMLTVParser::parseFile(
                         if (rating_system == nullptr)
                             rating_system = "";
 
-                        do
+                        while (!xml.isEndElement() || (xml.name() != QString("rating")))
                         {
                             if (!readNextWithErrorCheck(xml))
                                 return false;
@@ -490,7 +509,6 @@ bool XMLTVParser::parseFile(
                                 }
                             }
                         }
-                        while (! (xml.isEndElement() && xml.name() == QString("rating")));
 
                         if (!rat.isEmpty())
                         {
@@ -514,7 +532,7 @@ bool XMLTVParser::parseFile(
                     else if (xml.name() == QString("credits"))
                     {
                         int priority = 1;
-                        do
+                        while (!xml.isEndElement() || (xml.name() != QString("credits")))
                         {
                             if (!readNextWithErrorCheck(xml))
                                 return false;
@@ -552,11 +570,10 @@ bool XMLTVParser::parseFile(
                                 }
                             }
                         }
-                        while (! (xml.isEndElement() && xml.name() == QString("credits")));
                     }
                     else if (xml.name() == QString("audio"))
                     {
-                        do
+                        while (!xml.isEndElement() || (xml.name() != QString("audio")))
                         {
                             if (!readNextWithErrorCheck(xml))
                                 return false;
@@ -584,11 +601,10 @@ bool XMLTVParser::parseFile(
                                 }
                             }
                         }
-                        while (! (xml.isEndElement() && xml.name() == QString("audio")));
                     }
                     else if (xml.name() == QString("video"))
                     {
-                        do
+                        while (!xml.isEndElement() || (xml.name() != QString("video")))
                         {
                             if (!readNextWithErrorCheck(xml))
                                 return false;
@@ -606,7 +622,6 @@ bool XMLTVParser::parseFile(
                                 }
                             }
                         }
-                        while (! (xml.isEndElement() && xml.name() == QString("video")));
                     }
                     else if (xml.name() == QString("episode-num"))
                     {
@@ -659,7 +674,7 @@ bool XMLTVParser::parseFile(
                             {
                                 bool ok = false;
                                 partno = partnumber.toUInt(&ok) + 1;
-                                partno = (ok) ? partno : 0;
+                                partno = ok ? partno : 0;
                             }
                             if (!parttotal.isEmpty() && partno > 0)
                             {
@@ -726,7 +741,6 @@ bool XMLTVParser::parseFile(
                         }
                     }//episode-num
                 }
-                while (! (xml.isEndElement() && xml.name() == QString("programme")));
 
                 if (pginfo->m_category.isEmpty() && pginfo->m_categoryType != ProgramInfo::kCategoryNone)
                     pginfo->m_category = myth_category_type_to_string(pginfo->m_categoryType);
@@ -800,7 +814,9 @@ bool XMLTVParser::parseFile(
                 {
                     // so we have a (relatively) clean program element now, which is good enough to process or to store
                     if (pginfo->m_clumpidx.isEmpty())
+                    {
                         (*proglist)[pginfo->m_channel].push_back(*pginfo);
+                    }
                     else
                     {
                         /* append all titles/descriptions from one clump */

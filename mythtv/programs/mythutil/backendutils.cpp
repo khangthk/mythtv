@@ -1,14 +1,11 @@
 
 // C++ includes
-#include <iostream> // for cout
-using std::cout;
-using std::endl;
+#include <iostream> // for std::cout
 
 // MythTV
 #include "libmythbase/exitcodes.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
-#include "libmythbase/remoteutil.h"
 #include "libmythmetadata/videometadata.h"
 #include "libmythtv/scheduledrecording.h"
 
@@ -70,6 +67,19 @@ static int Reschedule(const MythUtilCommandLineParser &/*cmdline*/)
     return GENERIC_EXIT_CONNECT_ERROR;
 }
 
+static int ScanImages(const MythUtilCommandLineParser &/*cmdline*/)
+{
+    if (gCoreContext->ConnectToMasterServer(false, false))
+    {
+        gCoreContext->SendReceiveStringList(QStringList() << "IMAGE_SCAN");
+        LOG(VB_GENERAL, LOG_INFO, "Requested image scan");
+        return GENERIC_EXIT_OK;
+    }
+
+    LOG(VB_GENERAL, LOG_ERR, "Cannot connect to master for iamge scan");
+    return GENERIC_EXIT_CONNECT_ERROR;
+}
+
 static int ScanVideos(const MythUtilCommandLineParser &/*cmdline*/)
 {
     if (gCoreContext->ConnectToMasterServer(false, false))
@@ -86,14 +96,14 @@ static int ScanVideos(const MythUtilCommandLineParser &/*cmdline*/)
 static int ParseVideoFilename(const MythUtilCommandLineParser &cmdline)
 {
     QString filename = cmdline.toString("parsevideo");
-    cout << "Title:    " << VideoMetadata::FilenameToMeta(filename, 1)
-                                            .toLocal8Bit().constData() << endl
+    std::cout << "Title:    " << VideoMetadata::FilenameToMeta(filename, 1)
+                                            .toLocal8Bit().constData() << '\n'
          << "Season:   " << VideoMetadata::FilenameToMeta(filename, 2)
-                                            .toLocal8Bit().constData() << endl
+                                            .toLocal8Bit().constData() << '\n'
          << "Episode:  " << VideoMetadata::FilenameToMeta(filename, 3)
-                                            .toLocal8Bit().constData() << endl
+                                            .toLocal8Bit().constData() << '\n'
          << "Subtitle: " << VideoMetadata::FilenameToMeta(filename, 4)
-                                            .toLocal8Bit().constData() << endl;
+                                            .toLocal8Bit().constData() << '\n';
 
     return GENERIC_EXIT_OK;
 }
@@ -103,6 +113,7 @@ void registerBackendUtils(UtilMap &utilMap)
     utilMap["clearcache"]           = &ClearSettingsCache;
     utilMap["event"]                = &SendEvent;
     utilMap["resched"]              = &Reschedule;
+    utilMap["scanimages"]           = &ScanImages;
     utilMap["scanvideos"]           = &ScanVideos;
     utilMap["systemevent"]          = &SendSystemEvent;
     utilMap["parsevideo"]           = &ParseVideoFilename;

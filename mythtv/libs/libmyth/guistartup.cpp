@@ -22,9 +22,6 @@
 //
 //////////////////////////////////////////////////////////////////////////////
 
-
-#include "langsettings.h"
-
 // C++
 #include <chrono>
 
@@ -36,7 +33,6 @@
 // libmythbase
 #include "libmythbase/iso3166.h"
 #include "libmythbase/iso639.h"
-#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdirs.h"
 #include "libmythbase/mythlocale.h"
 #include "libmythbase/mythlogging.h"
@@ -45,6 +41,7 @@
 #include "libmythbase/mythtranslation.h"
 
 // libmythui
+#include "libmythui/langsettings.h"
 #include "libmythui/mythdialogbox.h"
 #include "libmythui/mythmainwindow.h"
 #include "libmythui/mythscreenstack.h"
@@ -241,3 +238,4 @@ void GUIStartup::Setup(void)
         m_loop->exit();
 }
 
+#include "moc_guistartup.cpp"

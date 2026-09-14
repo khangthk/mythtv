@@ -6,9 +6,10 @@
 #include <QKeyEvent>
 
 // MythTV
-#include <libmyth/mythcontext.h>
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythdbcon.h>
 #include <libmythbase/mythdirs.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythmetadata/musicutils.h>
 #include <libmythui/mythdialogbox.h>
 #include <libmythui/mythmainwindow.h>
@@ -1383,7 +1384,7 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
             // only show the Compilation Artists node if we are one the Compilations branch
             bool showCompArtists = false;
             MusicGenericTree *mnode = node;
-            do
+            while (mnode)
             {
                 if (mnode->getAction() == "compilations")
                 {
@@ -1392,8 +1393,7 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
                 }
 
                 mnode = dynamic_cast<MusicGenericTree *>(mnode->getParent());
-
-            } while (mnode);
+            }
 
             // only show the Comp. Artist if it differs from the Artist
             bool found = false;
@@ -1806,3 +1806,5 @@ void PlaylistEditorView::deletePlaylist(bool ok)
         }
     }
 }
+
+#include "moc_playlisteditorview.cpp"

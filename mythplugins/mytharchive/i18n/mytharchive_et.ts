@@ -14,19 +14,19 @@ Sisestasid seadistustes ikka õige asukoha?</translation>
 <context>
     <name>(MythArchiveMain)</name>
     <message>
-        <location filename="../mytharchive/mytharchive.cpp" line="100"/>
+        <location filename="../mytharchive/mytharchive.cpp" line="105"/>
         <source>Found a lock file but the owning process isn&apos;t running!
 Removing stale lock file.</source>
         <translation>Leidsin lukustusfaili, kuid seda omavat protsessi pole enam!
 Eemaldan faili.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mytharchive.cpp" line="211"/>
+        <location filename="../mytharchive/mytharchive.cpp" line="216"/>
         <source>Last run did not create a playable DVD.</source>
         <translation>Viimane käivitus ei loonud esitatavat DVD-d.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mytharchive.cpp" line="218"/>
+        <location filename="../mytharchive/mytharchive.cpp" line="223"/>
         <source>Last run failed to create a DVD.</source>
         <translation>Viimasel käivitusel DVD loomine ebaõnnestus.</translation>
     </message>
@@ -34,12 +34,12 @@ Eemaldan faili.</translation>
 <context>
     <name>ArchiveFileSelector</name>
     <message>
-        <location filename="../mytharchive/importnative.cpp" line="205"/>
+        <location filename="../mytharchive/importnative.cpp" line="206"/>
         <source>Find File To Import</source>
         <translation>Vali importimiseks fail</translation>
     </message>
     <message>
-        <location filename="../mytharchive/importnative.cpp" line="265"/>
+        <location filename="../mytharchive/importnative.cpp" line="266"/>
         <source>The selected item is not a valid archive file!</source>
         <translation>Valitud fail pole arhiivifail!</translation>
     </message>
@@ -47,333 +47,333 @@ Eemaldan faili.</translation>
 <context>
     <name>ArchiveSettings</name>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="20"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="19"/>
         <source>MythArchive Temp Directory</source>
         <translation>MythArchive ajutine kataloog</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="23"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="22"/>
         <source>Location where MythArchive should create its temporary work files. LOTS of free space required here.</source>
         <translation>Siia kataloogi tekitab MythArchive ajutised tööfailid. Siin peab olema VÄGA PALJU ruumi.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="35"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="34"/>
         <source>MythArchive Share Directory</source>
         <translation>Myth arhiveerija jagatud kataloog</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="38"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="37"/>
         <source>Location where MythArchive stores its scripts, intro movies and theme files</source>
         <translation>Siin kataloogis hoiab MythArchive skripte, klippe ning kujundusfaile</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="50"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="49"/>
         <source>Video format</source>
         <translation>Videoformaat</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="55"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="54"/>
         <source>Video format for DVD recordings, PAL or NTSC.</source>
         <translation>DVD salvestiste videoformaat. PAL või NTSC.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="64"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="63"/>
         <source>File Selector Filter</source>
         <translation>Failivalija filter</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="67"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="66"/>
         <source>The file name filter to use in the file selector.</source>
         <translation>Valimisel kasutatav failinime filter.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="76"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="75"/>
         <source>Location of DVD</source>
         <translation>DVD asukoht</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="79"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="78"/>
         <source>Which DVD drive to use when burning discs.</source>
         <translation>DVD-de kirjutamiseks kasutatav seade.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="89"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="88"/>
         <source>DVD Drive Write Speed</source>
         <translation>DVD kirjutamise kiirus</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="92"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="91"/>
         <source>This is the write speed to use when burning a DVD. Set to 0 to allow growisofs to choose the fastest available speed.</source>
         <translation>See on DVD kirjutamise kiirus. Kui on 0 valib growisofs ise kiireima võimaliku.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="103"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="102"/>
         <source>Command to play DVD</source>
         <translation>DVD esitamise käsk</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="106"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="105"/>
         <source>Command to run when test playing a created DVD. &apos;Internal&apos; will use the internal MythTV player. %f will be replaced with the path to the created DVD structure eg. &apos;xine -pfhq --no-splash dvd:/%f&apos;.</source>
         <translation>Käsk, mida kasutatakse loodud DVD testimiseks. &apos;Sisemine&apos; kasutab MythTV sisemist mängijat. %f asendatakse loodud DVD struktuuri asukohaga. Näiteks &apos;xine -pfhg --no-splash dvd:/%f&apos;.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="119"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="118"/>
         <source>Copy remote files</source>
         <translation>Võrgufailide kopeerimine</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="122"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="121"/>
         <source>If set files on remote filesystems will be copied over to the local filesystem before processing. Speeds processing and reduces bandwidth on the network</source>
         <translation>Määramisel kopeeritakse võrgufailid enne töötlemist kohalikule kettale. See kiirendab töötlust ning vähendab võrgu koormust</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="134"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="133"/>
         <source>Always Use Mythtranscode</source>
         <translation>Kasuta alati Mythtranscode-t</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="137"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="136"/>
         <source>If set mpeg2 files will always be passed though mythtranscode to clean up any errors. May help to fix some audio problems. Ignored if &apos;Use ProjectX&apos; is set.</source>
         <translation>Valides läbivad mpeg2 failid alati vigade eemaldamiseks mythtranscode. Aitab parandada audio probleeme. Ignoreeritakse kui &apos;Kasuta ProjectX-i&apos; on valitud.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="149"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="148"/>
         <source>Use ProjectX</source>
         <translation>Kasuta ProjectX-i</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="152"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="151"/>
         <source>If set ProjectX will be used to cut commercials and split mpeg2 files instead of mythtranscode and mythreplex.</source>
         <translation>Valides kasutatakse mythtranscode ja mythreplex-i asemel reklaamide eemaldamiseks mpeg2 failide tükeldamiseks ProjectX-1.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="163"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="162"/>
         <source>Use FIFOs</source>
         <translation>Kasutatakse FIFO puhvreid</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="166"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="165"/>
         <source>The script will use FIFOs to pass the output of mplex into dvdauthor rather than creating intermediate files. Saves time and disk space during multiplex operations but not supported on Windows platform</source>
         <translation>Skript kasutab mplex-i väljundi saatmiseks dvdauthor-sse vahefailide asemel FIFO-t. Säästab aega ja kettaruumi, kuid pole toetatud Windowsis</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="179"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="178"/>
         <source>Add Subtitles</source>
         <translation>Lisa subtiitrid</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="182"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="181"/>
         <source>If available this option will add subtitles to the final DVD. Requires &apos;Use ProjectX&apos; to be on.</source>
         <translation>See valik lisab olemasolu korral DVD-le ka subtiitrid. Vajalik on ka &apos;Kasuta ProjectX-i&apos; sisse lülitamine.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="192"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="191"/>
         <source>Main Menu Aspect Ratio</source>
         <translation>Peamenüü kuvasuhe</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="194"/>
-        <location filename="../mytharchive/archivesettings.cpp" line="210"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="193"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="209"/>
         <source>4:3</source>
         <comment>Aspect ratio</comment>
         <translation>4:3</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="195"/>
-        <location filename="../mytharchive/archivesettings.cpp" line="211"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="194"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="210"/>
         <source>16:9</source>
         <comment>Aspect ratio</comment>
         <translation>16:9</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="199"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="198"/>
         <source>Aspect ratio to use when creating the main menu.</source>
         <translation>Peamenüü valmistamisel kasutatav kuvasuhe.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="208"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="207"/>
         <source>Chapter Menu Aspect Ratio</source>
         <translation>Peatükkide menüü kuvasuhe</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="212"/>
-        <location filename="../mytharchive/archivesettings.cpp" line="221"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="211"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="220"/>
         <source>Video</source>
         <translation>Video</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="217"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="216"/>
         <source>Aspect ratio to use when creating the chapter menu. &apos;%1&apos; means use the same aspect ratio as the associated video.</source>
         <extracomment>%1 is the translation of the &quot;Video&quot; combo box choice</extracomment>
         <translation>Peatükkide menüü valmistamisel kasutatav kuvasuhe. &apos;%1&apos; valiku puhul kasutatakse videoga sama kuvasuhet.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="228"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="227"/>
         <source>Date format</source>
         <translation>Kuupäeva formaat</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="231"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="230"/>
         <source>Samples are shown using today&apos;s date.</source>
         <translation>Näidetes kasutatakse tänast kuupäeva.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="237"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="236"/>
         <source>Samples are shown using tomorrow&apos;s date.</source>
         <translation>Näidetes kasutatakse homset kuupäeva.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="255"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="254"/>
         <source>Your preferred date format to use on DVD menus. %1</source>
         <extracomment>%1 gives additional info on the date used</extracomment>
         <translation>Eelistatud DVD menüüdes kasutatav kuupäevaformaat. %1</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="264"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="263"/>
         <source>Time format</source>
         <translation>Ajaformaat</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="271"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="270"/>
         <source>Your preferred time format to display on DVD menus. You must choose a format with &quot;AM&quot; or &quot;PM&quot; in it, otherwise your time display will be 24-hour or &quot;military&quot; time.</source>
         <translation>DVD menüüdes kasutatav ajaformaat. Valida on 12-tunnise AM/PM ja 24-tunnise formaadi vahel.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="282"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="281"/>
         <source>Default Encoder Profile</source>
         <translation>Vaikimisi kodeerimise profiil</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="284"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="283"/>
         <source>HQ</source>
         <comment>Encoder profile</comment>
         <translation>HQ</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="285"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="284"/>
         <source>SP</source>
         <comment>Encoder profile</comment>
         <translation>SP</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="286"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="285"/>
         <source>LP</source>
         <comment>Encoder profile</comment>
         <translation>LP</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="287"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="286"/>
         <source>EP</source>
         <comment>Encoder profile</comment>
         <translation>EP</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="291"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="290"/>
         <source>Default encoding profile to use if a file needs re-encoding.</source>
         <translation>Vaikimisi kodeerimis profiil mida kasutatakse kui fail nõuab transkodeerimist.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="300"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="299"/>
         <source>mplex Command</source>
         <translation>mplex käsk</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="304"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="303"/>
         <source>Command to run mplex</source>
         <translation>Käsk mplex-i käivitamiseks</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="313"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="312"/>
         <source>dvdauthor command</source>
         <translation>dvdauthor käsk</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="317"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="316"/>
         <source>Command to run dvdauthor.</source>
         <translation>Käsk dvdauthor-i käivitamiseks.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="326"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="325"/>
         <source>mkisofs command</source>
         <translation>mkisofs käsk</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="330"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="329"/>
         <source>Command to run mkisofs. (Used to create ISO images)</source>
         <translation>Käsk mkisofs-i käivitamiseks. (Kasutatakse ISO tõmmiste valmistamiseks)</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="339"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="338"/>
         <source>growisofs command</source>
         <translation>growisofs käsk</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="343"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="342"/>
         <source>Command to run growisofs. (Used to burn DVDs)</source>
         <translation>Käsk growisofs-i käivitamiseks. (Kasutatakse DVD-de kirjutamiseks)</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="352"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="351"/>
         <source>M2VRequantiser command</source>
         <translation>M2VRequantiser käsk</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="356"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="355"/>
         <source>Command to run M2VRequantiser. Optional - leave blank if you don&apos;t have M2VRequantiser installed.</source>
         <translation>Käsk M2VRequantiser-i käivitamiseks. Mittekohustuslik - kui M2VRequantiser pole paigaldatud, jäta vahele.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="366"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="365"/>
         <source>jpeg2yuv command</source>
         <translation>jpeg2yuv käsk</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="370"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="369"/>
         <source>Command to run jpeg2yuv. Part of mjpegtools package</source>
         <translation>Käsk jpeg2yuv käivitamiseks. mjpegtools paki koosseisus</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="379"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="378"/>
         <source>spumux command</source>
         <translation>spumux käsk</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="383"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="382"/>
         <source>Command to run spumux. Part of dvdauthor package</source>
         <translation>Käsk spumux-i käivitamiseks (dvdauthor pakist)</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="392"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="391"/>
         <source>mpeg2enc command</source>
         <translation>mpeg2enc käsk</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="396"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="395"/>
         <source>Command to run mpeg2enc. Part of mjpegtools package</source>
         <translation>Käsk mpeg2enc-i käivitamiseks (mjpegtools pakist)</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="405"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="404"/>
         <source>projectx command</source>
         <translation>projectx käsk</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="409"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="408"/>
         <source>Command to run ProjectX. Will be used to cut commercials and split mpegs files instead of mythtranscode and mythreplex.</source>
         <translation>Käsk ProjectX-i käivitamiseks. Kasutatakse mythtranscode ja mythreplex asemel reklaamide eemaldamiseks ja mpeg failide tükeldamiseks.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="418"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="417"/>
         <source>MythArchive Settings</source>
         <translation>MythArchive seaded</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="442"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="441"/>
         <source>MythArchive External Commands</source>
         <translation>MythArchive välised käsud</translation>
     </message>
     <message>
-        <location filename="../mytharchive/archivesettings.cpp" line="434"/>
+        <location filename="../mytharchive/archivesettings.cpp" line="433"/>
         <source>DVD Menu Settings</source>
         <translation>DVD menüü seaded</translation>
     </message>
@@ -381,37 +381,37 @@ Eemaldan faili.</translation>
 <context>
     <name>BurnMenu</name>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="1091"/>
+        <location filename="../mytharchive/mythburn.cpp" line="1096"/>
         <source>Cannot burn a DVD.
 The last run failed to create a DVD.</source>
         <translation>Ei saa DVD-d kirjutada.
 Viimasel käivitusel DVD loomine ebaõnnestus.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="1097"/>
-        <location filename="../mytharchive/mythburn.cpp" line="1109"/>
+        <location filename="../mytharchive/mythburn.cpp" line="1102"/>
+        <location filename="../mytharchive/mythburn.cpp" line="1114"/>
         <source>Burn DVD</source>
         <translation>Kirjuta DVD</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="1098"/>
+        <location filename="../mytharchive/mythburn.cpp" line="1103"/>
         <source>
 Place a blank DVD in the drive and select an option below.</source>
         <translation>
 Aseta DVD toorik seadmesseja tee allpool valik.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="1110"/>
+        <location filename="../mytharchive/mythburn.cpp" line="1115"/>
         <source>Burn DVD Rewritable</source>
         <translation>Kirjuta ülekirjutatav DVD</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="1111"/>
+        <location filename="../mytharchive/mythburn.cpp" line="1116"/>
         <source>Burn DVD Rewritable (Force Erase)</source>
         <translation>Kirjuta ülekirjutatav DVD (kustuta enne)</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="1165"/>
+        <location filename="../mytharchive/mythburn.cpp" line="1170"/>
         <source>It was not possible to run mytharchivehelper to burn the DVD.</source>
         <translation>Pole võimalik  mytharchivehelper-it DVD kirjutamiseks käivitada.</translation>
     </message>
@@ -467,18 +467,18 @@ Aseta DVD toorik seadmesseja tee allpool valik.</translation>
 <context>
     <name>DVDThemeSelector</name>
     <message>
-        <location filename="../mytharchive/themeselector.cpp" line="201"/>
-        <location filename="../mytharchive/themeselector.cpp" line="212"/>
+        <location filename="../mytharchive/themeselector.cpp" line="205"/>
+        <location filename="../mytharchive/themeselector.cpp" line="217"/>
         <source>No theme description file found!</source>
         <translation>Teema kirjeldusfaili ei leitud!</translation>
     </message>
     <message>
-        <location filename="../mytharchive/themeselector.cpp" line="225"/>
+        <location filename="../mytharchive/themeselector.cpp" line="230"/>
         <source>Empty theme description!</source>
         <translation>Tühi teema kirjeldus!</translation>
     </message>
     <message>
-        <location filename="../mytharchive/themeselector.cpp" line="230"/>
+        <location filename="../mytharchive/themeselector.cpp" line="235"/>
         <source>Unable to open theme description file!</source>
         <translation>Ei suuda teema kirjeldusfaili avada!</translation>
     </message>
@@ -486,27 +486,27 @@ Aseta DVD toorik seadmesseja tee allpool valik.</translation>
 <context>
     <name>ExportNative</name>
     <message>
-        <location filename="../mytharchive/exportnative.cpp" line="198"/>
+        <location filename="../mytharchive/exportnative.cpp" line="199"/>
         <source>You need to add at least one item to archive!</source>
         <translation>Pead arhiveerimiseks midagi valima!</translation>
     </message>
     <message>
-        <location filename="../mytharchive/exportnative.cpp" line="350"/>
+        <location filename="../mytharchive/exportnative.cpp" line="351"/>
         <source>Remove Item</source>
         <translation>Eemalda element</translation>
     </message>
     <message>
-        <location filename="../mytharchive/exportnative.cpp" line="442"/>
+        <location filename="../mytharchive/exportnative.cpp" line="443"/>
         <source>It was not possible to create the DVD. An error occured when running the scripts</source>
         <translation>DVD-d ei olnud võimalik luua. Skripti töös ilmnesid vead</translation>
     </message>
     <message>
-        <location filename="../mytharchive/exportnative.cpp" line="478"/>
+        <location filename="../mytharchive/exportnative.cpp" line="479"/>
         <source>You don&apos;t have any videos!</source>
         <translation>Sul pole ühtegi videot!</translation>
     </message>
     <message>
-        <location filename="../mytharchive/exportnative.cpp" line="343"/>
+        <location filename="../mytharchive/exportnative.cpp" line="344"/>
         <source>Menu</source>
         <translation>Menüü</translation>
     </message>
@@ -514,7 +514,7 @@ Aseta DVD toorik seadmesseja tee allpool valik.</translation>
 <context>
     <name>FileSelector</name>
     <message>
-        <location filename="../mytharchive/fileselector.cpp" line="280"/>
+        <location filename="../mytharchive/fileselector.cpp" line="282"/>
         <source>The selected item is not a directory!</source>
         <translation>valitud element pole kataloog!</translation>
     </message>
@@ -537,32 +537,32 @@ Aseta DVD toorik seadmesseja tee allpool valik.</translation>
 <context>
     <name>ImportNative</name>
     <message>
-        <location filename="../mytharchive/importnative.cpp" line="389"/>
+        <location filename="../mytharchive/importnative.cpp" line="395"/>
         <source>You need to select a valid channel id!</source>
         <translation>Sa pead valima sobiva kanali!</translation>
     </message>
     <message>
-        <location filename="../mytharchive/importnative.cpp" line="420"/>
+        <location filename="../mytharchive/importnative.cpp" line="426"/>
         <source>It was not possible to import the Archive.  An error occured when running &apos;mytharchivehelper&apos;</source>
         <translation>Arhiivi importimine pole võimalik. mytharchivehelper-i töös tekkis viga</translation>
     </message>
     <message>
-        <location filename="../mytharchive/importnative.cpp" line="550"/>
+        <location filename="../mytharchive/importnative.cpp" line="556"/>
         <source>Select a channel id</source>
         <translation>Vali kanali ID</translation>
     </message>
     <message>
-        <location filename="../mytharchive/importnative.cpp" line="576"/>
+        <location filename="../mytharchive/importnative.cpp" line="582"/>
         <source>Select a channel number</source>
         <translation>Vali kanali number</translation>
     </message>
     <message>
-        <location filename="../mytharchive/importnative.cpp" line="602"/>
+        <location filename="../mytharchive/importnative.cpp" line="608"/>
         <source>Select a channel name</source>
         <translation>Vali kanali nimi</translation>
     </message>
     <message>
-        <location filename="../mytharchive/importnative.cpp" line="628"/>
+        <location filename="../mytharchive/importnative.cpp" line="634"/>
         <source>Select a Callsign</source>
         <translation>Vali kanali kutsung</translation>
     </message>
@@ -570,39 +570,39 @@ Aseta DVD toorik seadmesseja tee allpool valik.</translation>
 <context>
     <name>LogViewer</name>
     <message>
-        <location filename="../mytharchive/logviewer.cpp" line="340"/>
+        <location filename="../mytharchive/logviewer.cpp" line="354"/>
         <source>Show Progress Log</source>
         <translation>Näita toimingu logi</translation>
     </message>
     <message>
-        <location filename="../mytharchive/logviewer.cpp" line="341"/>
+        <location filename="../mytharchive/logviewer.cpp" line="355"/>
         <source>Show Full Log</source>
         <translation>Näita kogu logi</translation>
     </message>
     <message>
-        <location filename="../mytharchive/logviewer.cpp" line="336"/>
+        <location filename="../mytharchive/logviewer.cpp" line="350"/>
         <source>Don&apos;t Auto Update</source>
         <translation>Ära uuenda automaatselt</translation>
     </message>
     <message>
-        <location filename="../mytharchive/logviewer.cpp" line="75"/>
+        <location filename="../mytharchive/logviewer.cpp" line="78"/>
         <source>Cannot find any logs to show!</source>
         <translation>Ei leia ühtegi logi mida näidata!</translation>
     </message>
     <message>
-        <location filename="../mytharchive/logviewer.cpp" line="189"/>
+        <location filename="../mytharchive/logviewer.cpp" line="201"/>
         <source>Background creation has been asked to stop.
 This may take a few minutes.</source>
         <translation>Tausta loomine paluti peatada.
 Selleks võib kuluda mõni minut.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/logviewer.cpp" line="338"/>
+        <location filename="../mytharchive/logviewer.cpp" line="352"/>
         <source>Auto Update</source>
         <translation>Uuenda automaatselt</translation>
     </message>
     <message>
-        <location filename="../mytharchive/logviewer.cpp" line="328"/>
+        <location filename="../mytharchive/logviewer.cpp" line="342"/>
         <source>Menu</source>
         <translation>Menüü</translation>
     </message>
@@ -610,80 +610,80 @@ Selleks võib kuluda mõni minut.</translation>
 <context>
     <name>MythBurn</name>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="317"/>
-        <location filename="../mytharchive/mythburn.cpp" line="437"/>
+        <location filename="../mytharchive/mythburn.cpp" line="320"/>
+        <location filename="../mytharchive/mythburn.cpp" line="442"/>
         <source>Using Cut List</source>
         <translation>Kasutan lõikeloendit</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="322"/>
-        <location filename="../mytharchive/mythburn.cpp" line="442"/>
+        <location filename="../mytharchive/mythburn.cpp" line="325"/>
+        <location filename="../mytharchive/mythburn.cpp" line="447"/>
         <source>Not Using Cut List</source>
         <translation>Ei kasuta lõikeloendit</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="328"/>
-        <location filename="../mytharchive/mythburn.cpp" line="448"/>
+        <location filename="../mytharchive/mythburn.cpp" line="331"/>
+        <location filename="../mytharchive/mythburn.cpp" line="453"/>
         <source>No Cut List</source>
         <translation>Lõikeloendit pole</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="339"/>
+        <location filename="../mytharchive/mythburn.cpp" line="342"/>
         <source>You need to add at least one item to archive!</source>
         <translation>Pead midagi arhiveerimiseks valima!</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="385"/>
+        <location filename="../mytharchive/mythburn.cpp" line="390"/>
         <source>Retrieving File Information. Please Wait...</source>
         <translation>Uuendan faili infot. Palun oota...</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="451"/>
+        <location filename="../mytharchive/mythburn.cpp" line="456"/>
         <source>Encoder: </source>
         <translation>Enkooder:</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="763"/>
+        <location filename="../mytharchive/mythburn.cpp" line="768"/>
         <source>Menu</source>
         <translation>Menüü</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="774"/>
+        <location filename="../mytharchive/mythburn.cpp" line="779"/>
         <source>Don&apos;t Use Cut List</source>
         <translation>Ära kasuta lõikeloendit</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="779"/>
+        <location filename="../mytharchive/mythburn.cpp" line="784"/>
         <source>Use Cut List</source>
         <translation>Kasuta lõikeloendit</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="784"/>
+        <location filename="../mytharchive/mythburn.cpp" line="789"/>
         <source>Remove Item</source>
         <translation>Eemalda element</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="785"/>
+        <location filename="../mytharchive/mythburn.cpp" line="790"/>
         <source>Edit Details</source>
         <translation>Muuda üksikasju</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="786"/>
+        <location filename="../mytharchive/mythburn.cpp" line="791"/>
         <source>Change Encoding Profile</source>
         <translation>Muuda kodeerimisprofiili</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="787"/>
+        <location filename="../mytharchive/mythburn.cpp" line="792"/>
         <source>Edit Thumbnails</source>
         <translation>Muuda pisipilte</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="922"/>
+        <location filename="../mytharchive/mythburn.cpp" line="927"/>
         <source>It was not possible to create the DVD.  An error occured when running the scripts</source>
         <translation>DVD valmistamine pole võimalik. Skriptide töös tekkis viga</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mythburn.cpp" line="964"/>
+        <location filename="../mytharchive/mythburn.cpp" line="969"/>
         <source>You don&apos;t have any videos!</source>
         <translation>Sul pole ühtegi videot!</translation>
     </message>
@@ -691,37 +691,37 @@ Selleks võib kuluda mõni minut.</translation>
 <context>
     <name>MythControls</name>
     <message>
-        <location filename="../mytharchive/mytharchive.cpp" line="329"/>
+        <location filename="../mytharchive/mytharchive.cpp" line="334"/>
         <source>Toggle use cut list state for selected program</source>
         <translation>Vaheta lõikeloendi kasutamise valikut valitud saate jaoks</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mytharchive.cpp" line="332"/>
+        <location filename="../mytharchive/mytharchive.cpp" line="337"/>
         <source>Create DVD</source>
         <translation>Loo DVD</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mytharchive.cpp" line="334"/>
+        <location filename="../mytharchive/mytharchive.cpp" line="339"/>
         <source>Create Archive</source>
         <translation>Loo arhiiv</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mytharchive.cpp" line="336"/>
+        <location filename="../mytharchive/mytharchive.cpp" line="341"/>
         <source>Import Archive</source>
         <translation>Impordi arhiiv</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mytharchive.cpp" line="338"/>
+        <location filename="../mytharchive/mytharchive.cpp" line="343"/>
         <source>View Archive Log</source>
         <translation>Vaata arhiivi logi</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mytharchive.cpp" line="340"/>
+        <location filename="../mytharchive/mytharchive.cpp" line="345"/>
         <source>Play Created DVD</source>
         <translation>Esita loodud DVD</translation>
     </message>
     <message>
-        <location filename="../mytharchive/mytharchive.cpp" line="342"/>
+        <location filename="../mytharchive/mytharchive.cpp" line="347"/>
         <source>Burn DVD</source>
         <translation>Kirjuta DVD</translation>
     </message>
@@ -729,36 +729,36 @@ Selleks võib kuluda mõni minut.</translation>
 <context>
     <name>RecordingSelector</name>
     <message>
-        <location filename="../mytharchive/recordingselector.cpp" line="110"/>
+        <location filename="../mytharchive/recordingselector.cpp" line="109"/>
         <source>Retrieving Recording List.
 Please Wait...</source>
         <translation>Hangin salvestiste loendit.
 Palun oota...</translation>
     </message>
     <message>
-        <location filename="../mytharchive/recordingselector.cpp" line="189"/>
+        <location filename="../mytharchive/recordingselector.cpp" line="190"/>
         <source>Clear All</source>
         <translation>Puhasta kõik</translation>
     </message>
     <message>
-        <location filename="../mytharchive/recordingselector.cpp" line="190"/>
+        <location filename="../mytharchive/recordingselector.cpp" line="191"/>
         <source>Select All</source>
         <translation>Vali kõik</translation>
     </message>
     <message>
-        <location filename="../mytharchive/recordingselector.cpp" line="89"/>
-        <location filename="../mytharchive/recordingselector.cpp" line="374"/>
-        <location filename="../mytharchive/recordingselector.cpp" line="479"/>
+        <location filename="../mytharchive/recordingselector.cpp" line="88"/>
+        <location filename="../mytharchive/recordingselector.cpp" line="375"/>
+        <location filename="../mytharchive/recordingselector.cpp" line="480"/>
         <source>All Recordings</source>
         <translation>Kõik salvestised</translation>
     </message>
     <message>
-        <location filename="../mytharchive/recordingselector.cpp" line="134"/>
+        <location filename="../mytharchive/recordingselector.cpp" line="133"/>
         <source>Either you don&apos;t have any recordings or no recordings are available locally!</source>
         <translation>Sul pole kas ühtegi salvestist või pole need lokaalselt kätte saadavad!</translation>
     </message>
     <message>
-        <location filename="../mytharchive/recordingselector.cpp" line="182"/>
+        <location filename="../mytharchive/recordingselector.cpp" line="183"/>
         <source>Menu</source>
         <translation>Menüü</translation>
     </message>
@@ -806,8 +806,8 @@ Palun oota...</translation>
         <translation>Suvaline fail failisüsteemist.</translation>
     </message>
     <message>
-        <location filename="../mytharchive/selectdestination.cpp" line="262"/>
-        <location filename="../mytharchive/selectdestination.cpp" line="318"/>
+        <location filename="../mytharchive/selectdestination.cpp" line="264"/>
+        <location filename="../mytharchive/selectdestination.cpp" line="321"/>
         <source>Unknown</source>
         <translation>Tundmatu</translation>
     </message>
@@ -845,13 +845,9 @@ Palun oota...</translation>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="8"/>
-        <source>%date% / %profile%</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="themestrings.h" line="9"/>
         <source>%size% (%profile%)</source>
+        <oldsource>%date% / %profile%</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -900,6 +896,45 @@ Palun oota...</translation>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location filename="themestrings.h" line="37"/>
+        <source>Archive Item Details</source>
+        <oldsource>Archive Callsign:</oldsource>
+        <translation type="unfinished">Arhiivi elementide üksikasjad</translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="39"/>
+        <source>Archive Items</source>
+        <oldsource>Archive Chan ID:</oldsource>
+        <translation type="unfinished">Arhiivi elemendid</translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="40"/>
+        <source>Archive Items to DVD</source>
+        <oldsource>Archive Chan No:</oldsource>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="36"/>
+        <source>Archive Files</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="45"/>
+        <source>Archived Channel</source>
+        <oldsource>Archive Item:</oldsource>
+        <translation type="unfinished">Arhiveeritud kanal</translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="41"/>
+        <source>Archive Log Viewer</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="8"/>
+        <source>%date% / %profile%</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="themestrings.h" line="33"/>
         <source>Archive Callsign:</source>
         <translation type="unfinished"></translation>
@@ -915,23 +950,8 @@ Palun oota...</translation>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="36"/>
-        <source>Archive Files</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="themestrings.h" line="38"/>
         <source>Archive Item:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="40"/>
-        <source>Archive Items to DVD</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="41"/>
-        <source>Archive Log Viewer</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1223,53 +1243,8 @@ Palun oota...</translation>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="128"/>
-        <source>Filesize</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="132"/>
-        <source>Find Location</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="134"/>
-        <source>First, select the thumb image you want to change from the overview. Second, press the &apos;tab&apos; key to move to the select thumb frame button to change the image.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="135"/>
-        <source>Force Overwrite of DVD-RW Media</source>
-        <translation>DVD-RW üle kirjutamine</translation>
-    </message>
-    <message>
         <location filename="themestrings.h" line="136"/>
         <source>Force Overwrite of DVD-RW Media:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="140"/>
-        <source>Import</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="142"/>
-        <source>Import an</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="143"/>
-        <source>Import recordings from a native archive</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="144"/>
-        <source>Import videos from an Archive</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="146"/>
-        <source>Intro --&gt;</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1298,13 +1273,64 @@ Palun oota...</translation>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="153"/>
-        <source>Log</source>
+        <location filename="themestrings.h" line="155"/>
+        <source>Log viewer</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="155"/>
-        <source>Log viewer</source>
+        <location filename="themestrings.h" line="157"/>
+        <source>Main Menu</source>
+        <oldsource>Filename:</oldsource>
+        <translation type="unfinished">Peamenüü</translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="128"/>
+        <source>Filesize</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="132"/>
+        <source>Find Location</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="134"/>
+        <source>First, select the thumb image you want to change from the overview. Second, press the &apos;tab&apos; key to move to the select thumb frame button to change the image.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="135"/>
+        <source>Force Overwrite of DVD-RW Media</source>
+        <translation>DVD-RW üle kirjutamine</translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="140"/>
+        <source>Import</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="142"/>
+        <source>Import an</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="143"/>
+        <source>Import recordings from a native archive</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="144"/>
+        <source>Import videos from an Archive</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="146"/>
+        <source>Intro --&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="153"/>
+        <source>Log</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1555,6 +1581,36 @@ When the preview image has focus, UP/DOWN changes the seek amount, LEFT/RIGHT ju
         <translation>Näita salvestisi</translation>
     </message>
     <message>
+        <location filename="themestrings.h" line="274"/>
+        <source>Video category:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="276"/>
+        <source>View progress of your archive or image</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="279"/>
+        <source>decrease seek amount</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="282"/>
+        <source>increase seek amount</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="283"/>
+        <source>move left</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="themestrings.h" line="284"/>
+        <source>move right</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="themestrings.h" line="293"/>
         <source>~</source>
         <translation type="unfinished"></translation>
@@ -1683,18 +1739,8 @@ When the preview image has focus, UP/DOWN changes the seek amount, LEFT/RIGHT ju
         <translation>Video kategooria</translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="274"/>
-        <source>Video category:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="themestrings.h" line="275"/>
         <source>Videos</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="276"/>
-        <source>View progress of your archive or image</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1708,28 +1754,8 @@ When the preview image has focus, UP/DOWN changes the seek amount, LEFT/RIGHT ju
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="279"/>
-        <source>decrease seek amount</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="themestrings.h" line="281"/>
         <source>frame</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="282"/>
-        <source>increase seek amount</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="283"/>
-        <source>move left</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="284"/>
-        <source>move right</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
@@ -1786,11 +1812,6 @@ When the preview image has focus, UP/DOWN changes the seek amount, LEFT/RIGHT ju
         <translation>Intro</translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="157"/>
-        <source>Main Menu</source>
-        <translation>Peamenüü</translation>
-    </message>
-    <message>
         <location filename="themestrings.h" line="73"/>
         <source>Chapter Menu</source>
         <translation>Peatüki menüü</translation>
@@ -1809,11 +1830,6 @@ When the preview image has focus, UP/DOWN changes the seek amount, LEFT/RIGHT ju
         <location filename="themestrings.h" line="175"/>
         <source>No files are selected for archive</source>
         <translation>Arhiivi pole midagi valitud</translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="37"/>
-        <source>Archive Item Details</source>
-        <translation>Arhiivi elementide üksikasjad</translation>
     </message>
     <message>
         <location filename="themestrings.h" line="78"/>
@@ -2051,11 +2067,6 @@ When the preview image has focus, UP/DOWN changes the seek amount, LEFT/RIGHT ju
         <translation>Vali seotud kanal</translation>
     </message>
     <message>
-        <location filename="themestrings.h" line="45"/>
-        <source>Archived Channel</source>
-        <translation>Arhiveeritud kanal</translation>
-    </message>
-    <message>
         <location filename="themestrings.h" line="60"/>
         <source>Chan. ID:</source>
         <translation>Kanali ID:</translation>
@@ -2149,11 +2160,6 @@ When the preview image has focus, UP/DOWN changes the seek amount, LEFT/RIGHT ju
         <location filename="themestrings.h" line="190"/>
         <source>Parental Level: %1</source>
         <translation>Vanemlik tase: %1</translation>
-    </message>
-    <message>
-        <location filename="themestrings.h" line="39"/>
-        <source>Archive Items</source>
-        <translation>Arhiivi elemendid</translation>
     </message>
     <message>
         <location filename="themestrings.h" line="200"/>
@@ -2287,17 +2293,17 @@ When the preview image has focus, UP/DOWN changes the seek amount, LEFT/RIGHT ju
 <context>
     <name>ThumbFinder</name>
     <message>
-        <location filename="../mytharchive/thumbfinder.cpp" line="858"/>
+        <location filename="../mytharchive/thumbfinder.cpp" line="870"/>
         <source>Exit, Save Thumbnails</source>
         <translation>Välju, salvesta pisipildid</translation>
     </message>
     <message>
-        <location filename="../mytharchive/thumbfinder.cpp" line="859"/>
+        <location filename="../mytharchive/thumbfinder.cpp" line="871"/>
         <source>Exit, Don&apos;t Save Thumbnails</source>
         <translation>Välju, ära salvesta pisipilte</translation>
     </message>
     <message>
-        <location filename="../mytharchive/thumbfinder.cpp" line="851"/>
+        <location filename="../mytharchive/thumbfinder.cpp" line="863"/>
         <source>Menu</source>
         <translation>Menüü</translation>
     </message>
@@ -2305,28 +2311,28 @@ When the preview image has focus, UP/DOWN changes the seek amount, LEFT/RIGHT ju
 <context>
     <name>VideoSelector</name>
     <message>
-        <location filename="../mytharchive/videoselector.cpp" line="148"/>
+        <location filename="../mytharchive/videoselector.cpp" line="151"/>
         <source>Clear All</source>
         <translation>Puhasta kõik</translation>
     </message>
     <message>
-        <location filename="../mytharchive/videoselector.cpp" line="149"/>
+        <location filename="../mytharchive/videoselector.cpp" line="152"/>
         <source>Select All</source>
         <translation>Vali kõik</translation>
     </message>
     <message>
-        <location filename="../mytharchive/videoselector.cpp" line="331"/>
-        <location filename="../mytharchive/videoselector.cpp" line="497"/>
+        <location filename="../mytharchive/videoselector.cpp" line="334"/>
+        <location filename="../mytharchive/videoselector.cpp" line="502"/>
         <source>All Videos</source>
         <translation>Kõik videod</translation>
     </message>
     <message>
-        <location filename="../mytharchive/videoselector.cpp" line="549"/>
+        <location filename="../mytharchive/videoselector.cpp" line="555"/>
         <source>You need to enter a valid password for this parental level</source>
         <translation>Selle vanemliku taseme jaoks on vajalik sisestada salasõna</translation>
     </message>
     <message>
-        <location filename="../mytharchive/videoselector.cpp" line="141"/>
+        <location filename="../mytharchive/videoselector.cpp" line="144"/>
         <source>Menu</source>
         <translation>Menüü</translation>
     </message>

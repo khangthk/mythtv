@@ -1,11 +1,18 @@
 // -*- Mode: c++ -*-
 
 // C++ headers
+#include <algorithm>
 #include <utility>
 
 // MythTV headers
 #include "streamhandler.h"
 
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
+
+#include "libmythbase/mythlogging.h"
 #include "libmythbase/threadedfilewriter.h"
 
 #ifndef O_LARGEFILE
@@ -272,7 +279,7 @@ void StreamHandler::UpdateListeningForEIT(void)
             for (uint eit : del_eit)
             {
                 uint_vec_t::iterator it2;
-                it2 = find(m_eitPids.begin(), m_eitPids.end(), eit);
+                it2 = std::ranges::find(m_eitPids, eit);
                 if (it2 != m_eitPids.end())
                     m_eitPids.erase(it2);
                 sd->RemoveListeningPID(eit);
@@ -308,7 +315,7 @@ bool StreamHandler::UpdateFiltersFromStreamData(void)
         // PIDs that need to be added..
         for (auto lit = pids.constBegin(); lit != pids.constEnd(); ++lit)
         {
-            if ((*lit != 0U) && (m_pidInfo.find(lit.key()) == m_pidInfo.end()))
+            if ((*lit != 0U) && (!m_pidInfo.contains(lit.key())))
             {
                 add_pids[lit.key()] = CreatePIDInfo(
                     lit.key(), StreamID::PrivSec, 0);
@@ -318,7 +325,7 @@ bool StreamHandler::UpdateFiltersFromStreamData(void)
         // PIDs that need to be removed..
         for (auto fit = m_pidInfo.cbegin(); fit != m_pidInfo.cend(); ++fit)
         {
-            bool in_pids = pids.find(fit.key()) != pids.end();
+            bool in_pids = pids.contains(fit.key());
             if (!in_pids)
                 del_pids.push_back(fit.key());
         }
@@ -361,7 +368,7 @@ void StreamHandler::WriteMPTS(const unsigned char * buffer, uint len)
 
 bool StreamHandler::AddNamedOutputFile([[maybe_unused]] const QString &file)
 {
-#if !defined( USING_MINGW ) && !defined( _MSC_VER )
+#ifndef Q_OS_WINDOWS
     QMutexLocker lk(&m_mptsLock);
 
     m_mptsFiles.insert(file);
@@ -384,7 +391,9 @@ bool StreamHandler::AddNamedOutputFile([[maybe_unused]] const QString &file)
     }
     else
     {
-        if (link(m_mptsBaseFile.toLocal8Bit(), fn.toLocal8Bit()) < 0)
+        if (link(m_mptsBaseFile.toLocal8Bit().constData(),
+                 fn.toLocal8Bit().constData())
+            < 0)
         {
             LOG(VB_GENERAL, LOG_ERR, LOC +
                 QString("Failed to link '%1' to '%2'")
@@ -397,13 +406,13 @@ bool StreamHandler::AddNamedOutputFile([[maybe_unused]] const QString &file)
                 .arg(m_mptsBaseFile, fn));
         }
     }
-#endif //  !defined( USING_MINGW ) && !defined( _MSC_VER )
+#endif //  !defined( Q_OS_WINDOWS )
     return true;
 }
 
 void StreamHandler::RemoveNamedOutputFile([[maybe_unused]] const QString &file)
 {
-#if !defined( USING_MINGW ) && !defined( _MSC_VER )
+#ifndef Q_OS_WINDOWS
     QMutexLocker lk(&m_mptsLock);
 
     QSet<QString>::iterator it = m_mptsFiles.find(file);
@@ -416,5 +425,5 @@ void StreamHandler::RemoveNamedOutputFile([[maybe_unused]] const QString &file)
             m_mptsTfw = nullptr;
         }
     }
-#endif //  !defined( USING_MINGW ) && !defined( _MSC_VER )
+#endif //  !defined( Q_OS_WINDOWS )
 }

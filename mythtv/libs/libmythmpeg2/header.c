@@ -25,6 +25,7 @@
 #include "mpeg2config.h"
 
 #include <inttypes.h>
+#include <stddef.h>
 #include <stdlib.h>	/* defines NULL */
 #include <string.h>	/* memcmp */
 
@@ -328,7 +329,7 @@ static inline void finalize_sequence (mpeg2_sequence_t * sequence)
 	case 12: /* BT.601 525 lines 4:3 */
 	    sequence->pixel_width = 10;	sequence->pixel_height = 11;	return;
 	default:
-	    height = 88 * sequence->pixel_width + 1171;
+	    height = (88 * sequence->pixel_width) + 1171;
 	    width = 2000;
 	}
     }
@@ -662,7 +663,7 @@ static int picture_display_ext (mpeg2dec_t * mpeg2dec)
 {
     uint8_t * buffer = mpeg2dec->chunk_start;
     mpeg2_picture_t * picture = &(mpeg2dec->new_picture);
-    int i = 0;
+    ptrdiff_t i = 0;
 
     int nb_pos = picture->nb_fields;
     if (mpeg2dec->sequence.flags & SEQ_FLAG_PROGRESSIVE_SEQUENCE)
@@ -670,9 +671,9 @@ static int picture_display_ext (mpeg2dec_t * mpeg2dec)
 
     for (i = 0; i < nb_pos; i++) {
 	int x = ((buffer[4*i] << 24) | (buffer[(4*i)+1] << 16) |
-                 (buffer[(4*i)+2] << 8) | buffer[(4*i)+3]) >> (11-2*i);
+                 (buffer[(4*i)+2] << 8) | buffer[(4*i)+3]) >> (11-(2*i));
 	int y = ((buffer[(4*i)+2] << 24) | (buffer[(4*i)+3] << 16) |
-                 (buffer[(4*i)+4] << 8) | buffer[(4*i)+5]) >> (10-2*i);
+                 (buffer[(4*i)+4] << 8) | buffer[(4*i)+5]) >> (10-(2*i));
 	if (! (x & y & 1))
 	    return 1;
 	picture->display_offset[i].x = mpeg2dec->display_offset_x = x >> 1;
@@ -898,9 +899,9 @@ mpeg2_state_t mpeg2_header_slice_start (mpeg2dec_t * mpeg2dec)
 	}
     }
 
-    if (!(mpeg2dec->nb_decode_slices))
+    if (!(mpeg2dec->nb_decode_slices)) {
 	mpeg2dec->picture->flags |= PIC_FLAG_SKIP;
-    else if (mpeg2dec->convert_start) {
+    } else if (mpeg2dec->convert_start) {
 	mpeg2dec->convert_start (decoder->convert_id, mpeg2dec->fbuf[0],
 				 mpeg2dec->picture, mpeg2dec->info.gop);
 

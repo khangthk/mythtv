@@ -1,14 +1,16 @@
 // C++
+#include <thread>
 #include <utility>
 
 // qt
 #include <QKeyEvent>
 
 // MythTV
-#include <libmyth/mythcontext.h>
 #include <libmythbase/mthreadpool.h>
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythdbcon.h>
 #include <libmythbase/mythdirs.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythbase/remotefile.h>
 #include <libmythmetadata/metaio.h>
 #include <libmythmetadata/musicutils.h>
@@ -421,7 +423,7 @@ void EditMetadataDialog::ratingSpinChanged(MythUIButtonListItem *item)
 {
     if (item)
     {
-        int rating = item->GetData().value<int>();
+        int rating = item->GetData().toInt();
         s_metadata->setRating(rating);
 
         if (m_ratingState)
@@ -751,7 +753,9 @@ void EditMetadataDialog::customEvent(QEvent *event)
         if (resultid == "optionsmenu")
         {
             if (resulttext == tr("Edit Albumart Images"))
+            {
                 switchToAlbumArt();
+            }
             else if (resulttext == tr("Search Internet For Genre Image"))
             {
                 updateMetadata();
@@ -1014,7 +1018,9 @@ void EditAlbumartDialog::showTypeMenu(bool changeType)
 
     ImageType imageType = IT_UNKNOWN;
     if (changeType)
+    {
         menu->SetReturnEvent(this, "changetypemenu");
+    }
     else
     {
         menu->SetReturnEvent(this, "asktypemenu");
@@ -1179,7 +1185,9 @@ void EditAlbumartDialog::customEvent(QEvent *event)
         if (!tokens.isEmpty())
         {
             if (tokens[0] == "BROWSER_DOWNLOAD_FINISHED")
+            {
                 rescanForImages();
+            }
             else if (tokens[0] == "MUSIC_ALBUMART_CHANGED")
             {
                 if (tokens.size() >= 2)
@@ -1302,14 +1310,15 @@ class CopyImageThread: public MThread
     explicit CopyImageThread(QStringList strList) :
             MThread("CopyImage"), m_strList(std::move(strList)) {}
 
+    QStringList getResult(void) { return m_strList; }
+
+  protected:
     void run() override // MThread
     {
         RunProlog();
         gCoreContext->SendReceiveStringList(m_strList);
         RunEpilog();
     }
-
-    QStringList getResult(void) { return m_strList; }
 
   private:
     QStringList m_strList;
@@ -1352,8 +1361,7 @@ void EditAlbumartDialog::doCopyImageToTag(const AlbumArtImage *image)
     while (copyThread->isRunning())
     {
         qApp->processEvents();
-        const struct timespec onems {0, 1000000};
-        nanosleep(&onems, nullptr);
+        std::this_thread::sleep_for(1ms);
     }
 
     strList = copyThread->getResult();
@@ -1375,3 +1383,5 @@ void EditAlbumartDialog::removeCachedImage(const AlbumArtImage *image)
 
     GetMythUI()->RemoveFromCacheByFile(image->m_filename);
 }
+
+#include "moc_editmetadata.cpp"

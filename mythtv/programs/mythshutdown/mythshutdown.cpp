@@ -2,26 +2,27 @@
 // C/C++
 #include <cstdlib>
 #include <iostream>
-#include <unistd.h>
+#include <thread>
 
 // Qt
 #include <QtGlobal>
 #include <QCoreApplication>
 #include <QFile>
+#include <QTimeZone>
 
 // MythTV
 #include "libmyth/mythcontext.h"
 #include "libmythbase/compat.h"
 #include "libmythbase/exitcodes.h"
+#include "libmythbase/mythappname.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythsystemlegacy.h"
 #include "libmythbase/mythversion.h"
-#include "libmythbase/programinfo.h"
-#include "libmythbase/remoteutil.h"
-#include "libmythbase/signalhandling.h"
 #include "libmythtv/jobqueue.h"
+#include "libmythtv/programinfo.h"
 #include "libmythtv/tv.h"
 #include "libmythtv/tvremoteutil.h"
 
@@ -91,7 +92,7 @@ static int lockShutdown()
     while (!query.exec("LOCK TABLE settings WRITE;") && tries < 5)
     {
         LOG(VB_GENERAL, LOG_INFO, "Waiting for lock on setting table");
-        sleep(1);
+        std::this_thread::sleep_for(1s);
         tries++;
     }
 
@@ -145,7 +146,7 @@ static int unlockShutdown()
     while (!query.exec("LOCK TABLE settings WRITE;") && tries < 5)
     {
         LOG(VB_GENERAL, LOG_INFO, "Waiting for lock on setting table");
-        sleep(1);
+        std::this_thread::sleep_for(1s);
         tries++;
     }
 
@@ -214,11 +215,13 @@ static QDateTime getDailyWakeupTime(const QString& sPeriod)
 {
     QString sTime = getGlobalSetting(sPeriod, "00:00");
     QTime tTime = QTime::fromString(sTime, "hh:mm");
-    QDateTime dtDateTime = QDateTime(
-        MythDate::current().toLocalTime().date(),
-        tTime, Qt::LocalTime).toUTC();
-
-    return dtDateTime;
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
+    return QDateTime(MythDate::current().toLocalTime().date(),
+                     tTime, Qt::LocalTime).toUTC();
+#else
+    return QDateTime(MythDate::current().toLocalTime().date(),
+                     tTime, QTimeZone(QTimeZone::LocalTime)).toUTC();
+#endif
 }
 
 static bool isRecording()
@@ -785,7 +788,9 @@ static int startup()
 
     // if we don't have a valid startup time assume we were started manually
     if (!startupTime.isValid())
+    {
         res = 1;
+    }
     else
     {
         // if we started within 15mins of the saved wakeup time assume we started
@@ -845,43 +850,37 @@ int main(int argc, char **argv)
     if (retval != GENERIC_EXIT_OK)
         return retval;
 
-#ifndef _WIN32
-    SignalHandler::Init();
-#endif
-
-    gContext = new MythContext(MYTH_BINARY_VERSION);
-    if (!gContext->Init(false))
+    MythContext context {MYTH_BINARY_VERSION};
+    if (!context.Init(false))
     {
         LOG(VB_STDIO|VB_FLUSH, LOG_ERR, "Error: "
             "Could not initialize MythContext. Exiting.\n");
-        SignalHandler::Done();
         return GENERIC_EXIT_NO_MYTHCONTEXT;
     }
 
     int res = 0;
 
-    if (cmdline.toBool("lock"))
+    if (cmdline.toBool("lock")) {
         res = lockShutdown();
-    else if (cmdline.toBool("unlock"))
+    } else if (cmdline.toBool("unlock")) {
         res = unlockShutdown();
-    else if (cmdline.toBool("check"))
+    } else if (cmdline.toBool("check")) {
         res = checkOKShutdown(cmdline.toInt("check") == 1);
-    else if (cmdline.toBool("setschedwakeup"))
+    } else if (cmdline.toBool("setschedwakeup")) {
         res = setScheduledWakeupTime();
-    else if (cmdline.toBool("startup"))
+    } else if (cmdline.toBool("startup")) {
         res = startup();
-    else if (cmdline.toBool("shutdown"))
+    } else if (cmdline.toBool("shutdown")) {
         res = shutdown();
-    else if (cmdline.toBool("status"))
+    } else if (cmdline.toBool("status")) {
         res = getStatus(cmdline.toInt("status") == 1);
-    else if (cmdline.toBool("setwakeup"))
-    {
+    } else if (cmdline.toBool("setwakeup")) {
         // only one of --utc or --localtime can be passed per
         // CommandLineArg::AllowOneOf() in commandlineparser.cpp
         bool utc = cmdline.toBool("utc");
         QString tmp = cmdline.toString("setwakeup");
 
-        QDateTime wakeuptime = (utc) ?
+        QDateTime wakeuptime = utc ?
             MythDate::fromString(tmp) :
             QDateTime::fromString(tmp, Qt::ISODate).toUTC();
 
@@ -914,10 +913,6 @@ int main(int argc, char **argv)
     {
         cmdline.PrintHelp();
     }
-
-    delete gContext;
-
-    SignalHandler::Done();
 
     return res;
 }

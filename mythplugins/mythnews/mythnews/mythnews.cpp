@@ -2,6 +2,7 @@
 #include <unistd.h>
 
 // C headers
+#include <algorithm>
 #include <cmath>
 
 // QT headers
@@ -13,11 +14,12 @@
 #include <QUrl>
 
 // MythTV headers
-#include <libmyth/mythcontext.h>
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythdate.h>
 #include <libmythbase/mythdb.h>
 #include <libmythbase/mythdirs.h>
 #include <libmythbase/mythdownloadmanager.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythbase/mythsystemlegacy.h>
 #include <libmythui/mythdialogbox.h>
 #include <libmythui/mythmainwindow.h>
@@ -176,7 +178,7 @@ void MythNews::loadSites(void)
         bool podcast = query.value(4).toBool();
         m_newsSites.push_back(new NewsSite(name, url, time, podcast));
     }
-    std::sort(m_newsSites.begin(), m_newsSites.end(), NewsSite::sortByName);
+    std::ranges::sort(m_newsSites, NewsSite::sortByName);
 
     for (auto & site : m_newsSites)
     {
@@ -685,7 +687,7 @@ QString MythNews::cleanText(const QString &text)
     // replace a few HTML characters
     result.replace("&#8232;", "");   // LSEP
     result.replace("&#8233;", "");   // PSEP
-    result.replace("&#163;",  u8"\u00A3");  // POUND
+    result.replace("&#163;",  "£");  // POUND
     result.replace("&#173;",  "");   // ?
     result.replace("&#8211;", "-");  // EN-DASH
     result.replace("&#8220;", """"); // LEFT-DOUBLE-QUOTE
@@ -733,3 +735,5 @@ QString MythNews::cleanText(const QString &text)
 
     return result;
 }
+
+#include "moc_mythnews.cpp"

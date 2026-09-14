@@ -17,7 +17,6 @@ set(LIBMYTHBASE_HEADERS
     compat.h
     dbutil.h
     exitcodes.h
-    ffmpeg-mmx.h
     filesysteminfo.h
     hardwareprofile.h
     iso3166.h
@@ -31,7 +30,6 @@ set(LIBMYTHBASE_HEADERS
     mythchrono.h
     mythcommandlineparser.h
     mythcorecontext.h
-    mythcoreutil.h
     mythdate.h
     mythdb.h
     mythdbcheck.h
@@ -63,15 +61,9 @@ set(LIBMYTHBASE_HEADERS
     mythtypes.h
     netgrabbermanager.h
     netutils.h
-    programinfo.h
-    programtypes.h
-    programtypeflags.h
-    recordingstatus.h
-    recordingtypes.h
     referencecounter.h
     referencecounterlist.h
     remotefile.h
-    remoteutil.h
     rssparse.h
     rssmanager.h
     serverpool.h
@@ -84,18 +76,17 @@ set(LIBMYTHBASE_HEADERS
 
 set(LIBMYTHBASE_HEADERS_NOT_INSTALLED
     mythbinaryplist.h
-    cleanupguard.h
     configuration.h
     housekeeper.h
     logging.h
     mconcurrent.h
+    mythappname.h
     mythhdd.h
     mythpower.h
     mythscheduler.h
     mythsystemprivate.h
     mythtimezone.h
     portchecker.h
-    programinfoupdater.h
     unzip2.h
     unziputil.h)
 
@@ -145,7 +136,6 @@ add_library(
   ${LIBMYTHBASE_HEADERS}
   ${LIBMYTHBASE_HEADERS_NOT_INSTALLED}
   ${LIBMYTHBASE_HTTP_HEADERS}
-  cleanupguard.cpp
   configuration.cpp
   dbcheckcommon.cpp
   dbutil.cpp
@@ -192,13 +182,11 @@ add_library(
   loggingserver.cpp
   mthread.cpp
   mthreadpool.cpp
-  mythbaseutil.h
   mythbinaryplist.cpp
   mythcdrom.cpp
   mythcommandlineparser.cpp
   mythconfig.h.in
   mythcorecontext.cpp
-  mythcoreutil.cpp
   mythdate.cpp
   mythdb.cpp
   mythdbcon.cpp
@@ -230,14 +218,8 @@ add_library(
   netgrabbermanager.cpp
   netutils.cpp
   portchecker.cpp
-  programinfo.cpp
-  programinfoupdater.cpp
-  programtypes.cpp
-  recordingstatus.cpp
-  recordingtypes.cpp
   referencecounter.cpp
   remotefile.cpp
-  remoteutil.cpp
   rssparse.cpp
   rssmanager.cpp
   serverpool.cpp
@@ -246,8 +228,7 @@ add_library(
   stringutil.cpp
   threadedfilewriter.cpp
   unzip2.cpp
-  unziputil.cpp
-  version.h.in)
+  unziputil.cpp)
 
 #
 # All remaining target information
@@ -255,18 +236,11 @@ add_library(
 
 target_compile_definitions(mythbase PRIVATE MBASE_API)
 
-# The libudfread library is guaranteed to be installed by this point. Either by
-# the system, or by the higher level CMakeLists.txt file that includes MythTV as
-# an external project.
-set_source_files_properties(mythcdrom.cpp PROPERTIES COMPILE_DEFINITIONS
-                                                     HAVE_LIBUDFREAD)
-
 set_source_files_properties(
   mythdirs.cpp
   PROPERTIES
     COMPILE_DEFINITIONS
-    "RUNPREFIX=\"${CMAKE_INSTALL_PREFIX}\";LIBDIRNAME=\"${CMAKE_INSTALL_LIBDIR}\""
-)
+    "LIBDIRNAME=\"${CMAKE_INSTALL_LIBDIR}\"")
 target_include_directories(
   mythbase
   PRIVATE .
@@ -274,7 +248,7 @@ target_include_directories(
          $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/libs>
          # Generated includes with dir name
          $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/libs>
-         # For mythconfig.h
+         # For mythconfig.h and mythversion.h
          $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
   INTERFACE $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/mythtv>)
 
@@ -335,12 +309,18 @@ endif()
 #
 # Generated files section
 #
-
-configure_file(version.h.in version.h @ONLY)
 configure_file(mythversion.h.in mythversion.h @ONLY)
 configure_file(mythconfig.h.in mythconfig.h @ONLY)
-file(CREATE_LINK ${CMAKE_CURRENT_BINARY_DIR}/mythconfig.h
-     ${PROJECT_BINARY_DIR}/config.h SYMBOLIC)
+
+#
+# Regenerate version.h every compile
+#
+add_custom_target(
+  update_version_h ALL
+  COMMAND ${PROJECT_SOURCE_DIR}/version.sh $<IF:$<BOOL:${VERBOSE}>,,-q>
+  ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR}
+  COMMENT "Update version.h"
+  BYPRODUCTS version.h)
 
 #
 # Installation section
@@ -348,11 +328,9 @@ file(CREATE_LINK ${CMAKE_CURRENT_BINARY_DIR}/mythconfig.h
 
 install(TARGETS mythbase LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/mythconfig.h
-        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/mythtv)
-
 install(FILES ${LIBMYTHBASE_HEADERS} ${CMAKE_CURRENT_BINARY_DIR}/version.h
               ${CMAKE_CURRENT_BINARY_DIR}/mythversion.h
+              ${CMAKE_CURRENT_BINARY_DIR}/mythconfig.h
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/mythtv/libmythbase)
 
 if(ANDROID)

@@ -7,6 +7,7 @@
 #include <random>
 #include <vector>
 
+#include "libmythbase/mythlogging.h"
 #include "libmythbase/mythrandom.h"
 
 #define LOC QString("Galleryviews: ")
@@ -53,6 +54,7 @@ void MarkedFiles::Invert(const ImageIdList &all)
 ImageListK FlatView::GetAllNodes() const
 {
     ImageListK files;
+    files.reserve(m_sequence.size());
     for (int id : std::as_const(m_sequence))
         files.append(m_images.value(id));
     return files;
@@ -281,14 +283,17 @@ void FlatView::Populate(ImageList &files)
             }
             // exclude the last value so the past the end iterator is not returned
             // by std::upper_bound
-            uint32_t maxWeight = weights.back() - 1;
-
-            for (int count = 0; count < files.size(); ++count)
+            if (!weights.empty())
             {
-                uint32_t randWeight = MythRandom(0, maxWeight);
-                auto it = std::upper_bound(weights.begin(), weights.end(), randWeight);
-                int    index      = std::distance(weights.begin(), it);
-                m_sequence.append(files.at(index)->m_id);
+                uint32_t maxWeight = weights.back() - 1;
+
+                for (int count = 0; count < files.size(); ++count)
+                {
+                    uint32_t randWeight = MythRandom(0, maxWeight);
+                    auto it = std::ranges::upper_bound(weights, randWeight);
+                    int    index      = std::distance(weights.begin(), it);
+                    m_sequence.append(files.at(index)->m_id);
+                }
             }
         }
     }
@@ -317,7 +322,9 @@ WeightList FlatView::CalculateSeasonalWeights(ImageList &files)
         double weight = 0;
 
         if (im->m_date == 0s)
+        {
             weight = DEFAULT_WEIGHT;
+        }
         else
         {
             QDateTime timestamp = QDateTime::fromSecsSinceEpoch(im->m_date.count());
@@ -457,6 +464,7 @@ void FlatView::Cache(int id, int parent, const QString &url, const QString &thum
 QString DirCacheEntry::ToString(int id) const
 {
     QStringList ids;
+    ids.reserve(m_thumbs.size());
     for (const auto & thumb : std::as_const(m_thumbs))
         ids << QString::number(thumb.first);
     return QString("Dir %1 (%2, %3) Thumbs %4 (%5) Parent %6")

@@ -1,16 +1,20 @@
+#include <algorithm>
 #include <array>
+#include <cstdint>
 
 #include "ifs.h"
 #include "goomconfig.h"
+#include "libmythbase/mythconfig.h"
+#include "libmythbase/mythrandom.h"
 
-#ifdef MMX
+#if HAVE_MMX
 #include "mmx.h"
 #endif
 
 #include "goom_tools.h"
 
 /* NOLINTNEXTLINE(readability-non-const-parameter) */
-void ifs_update (guint32 * data, const guint32 * back, int width, int height,
+void ifs_update (uint32_t * data, const uint32_t * back, int width, int height,
 						int increment)
 {
 	static int s_couleur = 0xc0c0c0c0;
@@ -35,7 +39,7 @@ void ifs_update (guint32 * data, const guint32 * back, int width, int height,
 	if (s_cycle < 40)
 		cycle10 = s_cycle / 10;
 	else
-		cycle10 = 7 - s_cycle / 10;
+		cycle10 = 7 - (s_cycle / 10);
 
 	{
 		auto *tmp = (unsigned char *) &couleursl;
@@ -50,7 +54,7 @@ void ifs_update (guint32 * data, const guint32 * back, int width, int height,
 	IFSPoint *points = draw_ifs (&nbpt);
 	nbpt--;
 
-#ifdef MMX
+#if HAVE_MMX
 	movd_m2r (couleursl, mm1);
 	punpckldq_r2r (mm1, mm1);
 	for (int i = 0; i < nbpt; i += increment) {
@@ -80,8 +84,7 @@ void ifs_update (guint32 * data, const guint32 * back, int width, int height,
 			for (int j = 0; j < 4; j++) {
 				tra = *cra;
 				tra += *bra;
-				if (tra > 255)
-					tra = 255;
+				tra = std::min(tra, 255);
 				*dra = tra;
 				++dra;
 				++cra;
@@ -89,7 +92,7 @@ void ifs_update (guint32 * data, const guint32 * back, int width, int height,
 			}
 		}
 	}
-#endif /*MMX*/
+#endif /* HAVE_MMX */
 		s_justChanged--;
 
 	s_col[ALPHA] = s_couleur >> (ALPHA * 8) & 0xff;
@@ -101,17 +104,17 @@ void ifs_update (guint32 * data, const guint32 * back, int width, int height,
 		s_col[BLEU] += s_v[BLEU];
 		if (s_col[BLEU] > 255) {
 			s_col[BLEU] = 255;
-			s_v[BLEU] = -(RAND() % 4) - 1;
+			s_v[BLEU] = MythRandomInt(-4, -1);
 		}
 		if (s_col[BLEU] < 32) {
 			s_col[BLEU] = 32;
-			s_v[BLEU] = (RAND() % 4) + 1;
+			s_v[BLEU] = MythRandomInt(1, 4);
 		}
 
 		s_col[VERT] += s_v[VERT];
 		if (s_col[VERT] > 200) {
 			s_col[VERT] = 200;
-			s_v[VERT] = -(RAND() % 3) - 2;
+			s_v[VERT] = MythRandomInt(-4, -2);
 		}
 		if (s_col[VERT] > s_col[BLEU]) {
 			s_col[VERT] = s_col[BLEU];
@@ -119,33 +122,33 @@ void ifs_update (guint32 * data, const guint32 * back, int width, int height,
 		}
 		if (s_col[VERT] < 32) {
 			s_col[VERT] = 32;
-			s_v[VERT] = (RAND() % 3) + 2;
+			s_v[VERT] = MythRandomInt(2, 4);
 		}
 
 		s_col[ROUGE] += s_v[ROUGE];
 		if (s_col[ROUGE] > 64) {
 			s_col[ROUGE] = 64;
-			s_v[ROUGE] = -(RAND () % 4) - 1;
+			s_v[ROUGE] = MythRandomInt(-4, -1);
 		}
 		if (s_col[ROUGE] < 0) {
 			s_col[ROUGE] = 0;
-			s_v[ROUGE] = (RAND () % 4) + 1;
+			s_v[ROUGE] = MythRandomInt(1, 4);
 		}
 
 		s_col[ALPHA] += s_v[ALPHA];
 		if (s_col[ALPHA] > 0) {
 			s_col[ALPHA] = 0;
-			s_v[ALPHA] = -(RAND () % 4) - 1;
+			s_v[ALPHA] = MythRandomInt(-4, -1);
 		}
 		if (s_col[ALPHA] < 0) {
 			s_col[ALPHA] = 0;
-			s_v[ALPHA] = (RAND () % 4) + 1;
+			s_v[ALPHA] = MythRandomInt(1, 4);
 		}
 
 		if (((s_col[VERT] > 32) && (s_col[ROUGE] < s_col[VERT] + 40)
 				 && (s_col[VERT] < s_col[ROUGE] + 20) && (s_col[BLEU] < 64)
-				 && (RAND () % 20 == 0)) && (s_justChanged < 0)) {
-			s_mode = (RAND () % 3) ? MOD_FEU : MOD_MERVER;
+				 && rand_bool(20)) && (s_justChanged < 0)) {
+			s_mode = !rand_bool(3) ? MOD_FEU : MOD_MERVER;
 			s_justChanged = 250;
 		}
 	}
@@ -153,17 +156,17 @@ void ifs_update (guint32 * data, const guint32 * back, int width, int height,
 		s_col[BLEU] += s_v[BLEU];
 		if (s_col[BLEU] > 128) {
 			s_col[BLEU] = 128;
-			s_v[BLEU] = -(RAND () % 4) - 1;
+			s_v[BLEU] = MythRandomInt(-4, -1);
 		}
 		if (s_col[BLEU] < 16) {
 			s_col[BLEU] = 16;
-			s_v[BLEU] = (RAND () % 4) + 1;
+			s_v[BLEU] = MythRandomInt(1, 4);
 		}
 
 		s_col[VERT] += s_v[VERT];
 		if (s_col[VERT] > 200) {
 			s_col[VERT] = 200;
-			s_v[VERT] = -(RAND () % 3) - 2;
+			s_v[VERT] = MythRandomInt(-4, -2);
 		}
 		if (s_col[VERT] > s_col[ALPHA]) {
 			s_col[VERT] = s_col[ALPHA];
@@ -171,33 +174,33 @@ void ifs_update (guint32 * data, const guint32 * back, int width, int height,
 		}
 		if (s_col[VERT] < 32) {
 			s_col[VERT] = 32;
-			s_v[VERT] = (RAND () % 3) + 2;
+			s_v[VERT] = MythRandomInt(2, 4);
 		}
 
 		s_col[ROUGE] += s_v[ROUGE];
 		if (s_col[ROUGE] > 128) {
 			s_col[ROUGE] = 128;
-			s_v[ROUGE] = -(RAND () % 4) - 1;
+			s_v[ROUGE] = MythRandomInt(-4, -1);
 		}
 		if (s_col[ROUGE] < 0) {
 			s_col[ROUGE] = 0;
-			s_v[ROUGE] = (RAND () % 4) + 1;
+			s_v[ROUGE] = MythRandomInt(1, 4);
 		}
 
 		s_col[ALPHA] += s_v[ALPHA];
 		if (s_col[ALPHA] > 255) {
 			s_col[ALPHA] = 255;
-			s_v[ALPHA] = -(RAND () % 4) - 1;
+			s_v[ALPHA] = MythRandomInt(-4, -1);
 		}
 		if (s_col[ALPHA] < 0) {
 			s_col[ALPHA] = 0;
-			s_v[ALPHA] = (RAND () % 4) + 1;
+			s_v[ALPHA] = MythRandomInt(1, 4);
 		}
 
 		if (((s_col[VERT] > 32) && (s_col[ROUGE] < s_col[VERT] + 40)
 				 && (s_col[VERT] < s_col[ROUGE] + 20) && (s_col[BLEU] < 64)
-				 && (RAND () % 20 == 0)) && (s_justChanged < 0)) {
-			s_mode = (RAND () % 3) ? MOD_FEU : MOD_MER;
+				 && rand_bool(20)) && (s_justChanged < 0)) {
+			s_mode = !rand_bool(3) ? MOD_FEU : MOD_MER;
 			s_justChanged = 250;
 		}
 	}
@@ -206,57 +209,57 @@ void ifs_update (guint32 * data, const guint32 * back, int width, int height,
 		s_col[BLEU] += s_v[BLEU];
 		if (s_col[BLEU] > 64) {
 			s_col[BLEU] = 64;
-			s_v[BLEU] = -(RAND () % 4) - 1;
+			s_v[BLEU] = MythRandomInt(-4, -1);
 		}
 		if (s_col[BLEU] < 0) {
 			s_col[BLEU] = 0;
-			s_v[BLEU] = (RAND () % 4) + 1;
+			s_v[BLEU] = MythRandomInt(1, 4);
 		}
 
 		s_col[VERT] += s_v[VERT];
 		if (s_col[VERT] > 200) {
 			s_col[VERT] = 200;
-			s_v[VERT] = -(RAND () % 3) - 2;
+			s_v[VERT] = MythRandomInt(-4, -2);
 		}
 		if (s_col[VERT] > s_col[ROUGE] + 20) {
 			s_col[VERT] = s_col[ROUGE] + 20;
-			s_v[VERT] = -(RAND () % 3) - 2;
-			s_v[ROUGE] = (RAND () % 4) + 1;
-			s_v[BLEU] = (RAND () % 4) + 1;
+			s_v[VERT] = MythRandomInt(-4, -2);
+			s_v[ROUGE] = MythRandomInt(1, 4);
+			s_v[BLEU] = MythRandomInt(1, 4);
 		}
 		if (s_col[VERT] < 0) {
 			s_col[VERT] = 0;
-			s_v[VERT] = (RAND () % 3) + 2;
+			s_v[VERT] = MythRandomInt(2, 4);
 		}
 
 		s_col[ROUGE] += s_v[ROUGE];
 		if (s_col[ROUGE] > 255) {
 			s_col[ROUGE] = 255;
-			s_v[ROUGE] = -(RAND () % 4) - 1;
+			s_v[ROUGE] = MythRandomInt(-4, -1);
 		}
 		if (s_col[ROUGE] > s_col[VERT] + 40) {
 			s_col[ROUGE] = s_col[VERT] + 40;
-			s_v[ROUGE] = -(RAND () % 4) - 1;
+			s_v[ROUGE] = MythRandomInt(-4, -1);
 		}
 		if (s_col[ROUGE] < 0) {
 			s_col[ROUGE] = 0;
-			s_v[ROUGE] = (RAND () % 4) + 1;
+			s_v[ROUGE] = MythRandomInt(1, 4);
 		}
 
 		s_col[ALPHA] += s_v[ALPHA];
 		if (s_col[ALPHA] > 0) {
 			s_col[ALPHA] = 0;
-			s_v[ALPHA] = -(RAND () % 4) - 1;
+			s_v[ALPHA] = MythRandomInt(-4, -1);
 		}
 		if (s_col[ALPHA] < 0) {
 			s_col[ALPHA] = 0;
-			s_v[ALPHA] = (RAND () % 4) + 1;
+			s_v[ALPHA] = MythRandomInt(1, 4);
 		}
 
 		if (((s_col[ROUGE] < 64) && (s_col[VERT] > 32) && (s_col[VERT] < s_col[BLEU])
 				 && (s_col[BLEU] > 32)
-				 && (RAND () % 20 == 0)) && (s_justChanged < 0)) {
-			s_mode = (RAND () % 2) ? MOD_MER : MOD_MERVER;
+				 && rand_bool(20)) && (s_justChanged < 0)) {
+			s_mode = rand_bool() ? MOD_MER : MOD_MERVER;
 			s_justChanged = 250;
 		}
 	}

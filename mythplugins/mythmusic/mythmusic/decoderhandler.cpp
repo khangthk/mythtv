@@ -1,7 +1,7 @@
 // c/c++
 #include <cassert>
 #include <cstdio>
-#include <unistd.h>
+#include <thread>
 
 // qt
 #include <QApplication>
@@ -9,7 +9,6 @@
 #include <QUrl>
 
 // MythTV
-#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythdirs.h>
 #include <libmythbase/mythdownloadmanager.h>
 #include <libmythbase/mythlogging.h>
@@ -100,8 +99,11 @@ void DecoderHandler::doStart(bool result)
     if (m_state == LOADING && result)
     {
         for (int ii = 0; ii < m_playlist.size(); ii++)
+        {
+            PlayListFileEntry* file = m_playlist.get(ii);
             LOG(VB_PLAYBACK, LOG_INFO, QString("Track %1 = %2")
-                .arg(ii) .arg(m_playlist.get(ii)->File()));
+                .arg(ii) .arg(file ? file->File() : "<invalid>"));
+        }
         next();
     }
     else
@@ -149,6 +151,8 @@ bool DecoderHandler::next(void)
     }
 
     PlayListFileEntry *entry = m_playlist.get(m_playlistPos);
+    if (nullptr == entry)
+        return false;
 
     if (QFileInfo(entry->File()).isAbsolute())
         m_url = QUrl::fromLocalFile(entry->File());
@@ -159,7 +163,9 @@ bool DecoderHandler::next(void)
 
     // we use the avfdecoder for everything except CD tracks
     if (m_url.toString().endsWith(".cda"))
+    {
         doConnectDecoder(m_url, ".cda");
+    }
     else
     {
         // we don't know what format radio stations are so fake a format
@@ -325,7 +331,7 @@ void DecoderHandler::createPlaylistFromRemoteUrl(const QUrl &url)
         }
 
         QCoreApplication::processEvents();
-        usleep(500);
+        std::this_thread::sleep_for(500us);
     }
 }
 
@@ -377,3 +383,5 @@ void DecoderHandler::doOperationStop(void)
     DecoderHandlerEvent ev(DecoderHandlerEvent::kOperationStop);
     dispatch(ev);
 }
+
+#include "moc_decoderhandler.cpp"

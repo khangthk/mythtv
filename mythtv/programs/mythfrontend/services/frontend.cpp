@@ -12,9 +12,9 @@
 #include "libmythbase/mythevent.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythversion.h"
+#include "libmythbase/storagegroup.h"
 #include "libmythmetadata/videometadata.h"
 #include "libmythmetadata/videometadatalistmanager.h"
-#include "libmythmetadata/videoutils.h"
 #include "libmythtv/recordinginfo.h"
 #include "libmythtv/tv_actions.h"        // for ACTION_JUMPCHAPTER, etc
 #include "libmythtv/tv_play.h"
@@ -228,7 +228,7 @@ bool Frontend::PlayVideo(const QString &Id, bool UseBookmark)
         return false;
     }
 
-    QString mrl = generate_file_url("Videos", metadata->GetHost(),
+    QString mrl = StorageGroup::generate_file_url("Videos", metadata->GetHost(),
                                     metadata->GetFilename());
     LOG(VB_GENERAL, LOG_INFO, LOC +
         QString("PlayVideo, id: %1 usebookmark: %2 url: '%3'")
@@ -262,10 +262,9 @@ DTC::FrontendActionList* Frontend::GetActionList(const QString &lContext)
 
     InitialiseActions();
 
-    QHashIterator<QString,QStringList> contexts(gActionDescriptions);
-    while (contexts.hasNext())
+    for (auto contexts = Frontend::gActionDescriptions.cbegin();
+         contexts != Frontend::gActionDescriptions.cend(); ++contexts)
     {
-        contexts.next();
         if (!lContext.isEmpty() && contexts.key() != lContext)
             continue;
 
@@ -420,7 +419,9 @@ bool Frontend::SendKey(const QString &sKey)
     }
 
     if (GetMythMainWindow())
+    {
         keyDest = GetMythMainWindow();
+    }
     else
     {
         LOG(VB_GENERAL, LOG_ERR,
@@ -462,3 +463,5 @@ bool Frontend::SendKey(const QString &sKey)
 
     return ret;
 }
+
+#include "moc_frontend.cpp"

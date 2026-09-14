@@ -1,8 +1,14 @@
+// C++ headers
+#include <algorithm>
+
 // MythTV
+#include "mythconfig.h"
+
 #include "mythcorecontext.h"
+#include "mythlogging.h"
 #include "mythpower.h"
 
-#ifdef USING_DBUS
+#if CONFIG_QTDBUS
 #include "platforms/mythpowerdbus.h"
 #endif
 
@@ -86,7 +92,7 @@ MythPower* MythPower::AcquireRelease(void *Reference, bool Acquire, std::chrono:
 #ifdef Q_OS_DARWIN
             // NB OSX may have DBUS but it won't help here
             s_instance = new MythPowerOSX();
-#elif defined(USING_DBUS)
+#elif CONFIG_QTDBUS
             if (MythPowerDBus::IsAvailable())
                 s_instance = new MythPowerDBus();
 #endif
@@ -111,7 +117,7 @@ MythPower* MythPower::AcquireRelease(void *Reference, bool Acquire, std::chrono:
     if (s_instance)
     {
         // Update the maximum requested delay
-        std::chrono::seconds max = std::max_element(s_delays.cbegin(), s_delays.cend()).value();
+        std::chrono::seconds max = std::ranges::max_element(std::as_const(s_delays)).value();
         s_instance->SetRequestedDelay(max);
     }
     return s_instance;
@@ -221,7 +227,9 @@ void MythPower::CancelFeature(void)
     QMutexLocker locker(&s_lock);
 
     if (!m_featureTimer.isActive() || !m_scheduledFeature)
+    {
         LOG(VB_GENERAL, LOG_WARNING, LOC + "No power request to cancel");
+    }
     else
     {
         LOG(VB_GENERAL, LOG_INFO, LOC + QString("Cancelling %1 request with %2 seconds remaining")
@@ -378,3 +386,5 @@ void MythPower::PowerLevelChanged(int Level)
 
     m_powerLevel = Level;
 }
+
+#include "moc_mythpower.cpp"

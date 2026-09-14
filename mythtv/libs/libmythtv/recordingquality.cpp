@@ -20,6 +20,8 @@ RecordingQuality::RecordingQuality(const RecordingInfo *ri,
     if (!ri)
         return;
 
+    // QList doesn't play well with std::ranges
+    // NOLINTNEXTLINE(modernize-use-ranges)
     std::stable_sort(m_recordingGaps.begin(), m_recordingGaps.end());
     merge_overlapping(m_recordingGaps);
 
@@ -38,6 +40,8 @@ RecordingQuality::RecordingQuality(
         return;
 
     m_programKey = ri->MakeUniqueKey();
+    int max_start = gCoreContext->GetNumSetting("MaxStartGap", 15);
+    int max_end   = gCoreContext->GetNumSetting("MaxEndGap", 15);
 
     // trim start
     QDateTime start = get_start(*ri);
@@ -52,7 +56,7 @@ RecordingQuality::RecordingQuality(
     }
 
     // trim end
-    QDateTime end = get_end(*ri);
+    QDateTime end = get_end(*ri).addSecs(-max_end);
     while (!m_recordingGaps.empty() &&
            m_recordingGaps.back().GetEnd() > end)
     {
@@ -65,14 +69,16 @@ RecordingQuality::RecordingQuality(
 
     // account for late start
     int start_gap = (first.isValid()) ? start.secsTo(first) : 0;
-    if (start_gap >  gCoreContext->GetNumSetting("MaxStartGap", 15))
+    if (start_gap >  max_start)
         m_recordingGaps.push_front(RecordingGap(start, first));
 
     // account for missing end
     int end_gap = (latest.isValid()) ? latest.secsTo(end) : 0;
-    if (end_gap > gCoreContext->GetNumSetting("MaxEndGap", 15))
+    if (end_gap > max_end)
         m_recordingGaps.push_back(RecordingGap(latest, end));
 
+    // QList doesn't play well with std::ranges
+    // NOLINTNEXTLINE(modernize-use-ranges)
     std::stable_sort(m_recordingGaps.begin(), m_recordingGaps.end());
     merge_overlapping(m_recordingGaps);
 
@@ -165,8 +171,7 @@ static void merge_overlapping(RecordingGaps &gaps)
 
 static double score_gaps(const RecordingInfo &ri, const RecordingGaps &gaps)
 {
-    RecordingGaps::const_iterator it = gaps.begin();
-    if (it == gaps.end())
+    if (gaps.empty())
         return 1.0;
 
     QDateTime start = get_start(ri);
@@ -176,10 +181,10 @@ static double score_gaps(const RecordingInfo &ri, const RecordingGaps &gaps)
         return 0.0;
 
     double score = 1.0;
-    for (; it != gaps.end(); ++it)
+    for (const auto & gap : gaps)
     {
-        double gap_start  = start.secsTo((*it).GetStart());
-        double gap_end    = start.secsTo((*it).GetEnd());
+        double gap_start  = start.secsTo(gap.GetStart());
+        double gap_end    = start.secsTo(gap.GetEnd());
         double gap_length = gap_end - gap_start;
         double rel_start  = gap_start / program_length;
         double rel_end    = gap_end / program_length;

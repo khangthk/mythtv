@@ -3,7 +3,6 @@
 #include <iostream>
 
 #include "libmythbase/mythlogging.h"
-#include "recorders/dtvrecorder.h" // for FrameRate
 
 #include <cmath>
 #include <strings.h>
@@ -994,13 +993,13 @@ void AVCParser::decode_SEI(BitReader& br)
      * can be no message in less than 24 bits */
     while (br.get_bits_left() >= 24)
     {
-        do {
+        type += br.show_bits(8);
+        while (br.get_bits(8) == 0xFF)
             type += br.show_bits(8);
-        } while (br.get_bits(8) == 0xFF);
 
-        do {
+        size += br.show_bits(8);
+        while (br.get_bits(8) == 0xFF)
             size += br.show_bits(8);
-        } while (br.get_bits(8) == 0xFF);
 
         switch (type)
         {
@@ -1074,12 +1073,11 @@ double AVCParser::frameRate(void) const
     return fps;
 }
 
-void AVCParser::getFrameRate(FrameRate &result) const
+MythAVRational AVCParser::getFrameRate() const
 {
     if (m_unitsInTick == 0)
-        result = FrameRate(0);
-    else if (m_timeScale & 0x1)
-        result = FrameRate(m_timeScale, m_unitsInTick * 2);
-    else
-        result = FrameRate(m_timeScale / 2, m_unitsInTick);
+        return MythAVRational(0);
+    if (m_timeScale & 0x1)
+        return MythAVRational(m_timeScale, m_unitsInTick * 2);
+    return MythAVRational(m_timeScale / 2, m_unitsInTick);
 }

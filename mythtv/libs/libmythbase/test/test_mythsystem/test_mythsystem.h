@@ -17,14 +17,17 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
+#ifndef LIBMYTHBASE_TEST_MYTHSYSTEM_H
+#define LIBMYTHBASE_TEST_MYTHSYSTEM_H
 
-#include <unistd.h> // for usleep()
-
+#include <QChar>     // Fix Qt6 GCC SFINAE warning
+#include <QBitArray> // Fix Qt6 GCC SFINAE warning
 #include <QTest>
 #include <QTemporaryFile>
 #include <QDateTime>
 
 #include <iostream>
+#include <thread>
 
 //#define NEW_LOGGING
 #ifdef NEW_LOGGING
@@ -34,6 +37,7 @@
 
 #include "mythcorecontext.h"
 #include "mythsystem.h"
+#include "mythsystemlegacy.h"
 
 #ifdef NEW_LOGGING
 static DebugLogHandler *console_dbg(void)
@@ -62,8 +66,9 @@ class TestMythSystem: public QObject
     }
 
     // called at the end of these sets of tests
-    void cleanupTestCase(void)
+    static void cleanupTestCase(void)
     {
+        ShutdownMythSystemLegacy();
     }
 
     // called before each test case
@@ -110,14 +115,14 @@ class TestMythSystem: public QObject
     {
         QSKIP("stdin_works -- currently blocks forever");
         QTemporaryFile tempfile;
-        tempfile.open();
+        QCOMPARE(tempfile.open(), true);
         QByteArray in = QString(__FUNCTION__).toLatin1();
         QScopedPointer<MythSystem> cmd(
             MythSystem::Create(QString("cat - > %1").arg(tempfile.fileName()),
                                kMSStdIn | kMSRunShell));
         cmd->GetStandardInputStream()->write(in);
         cmd->GetStandardInputStream()->close();
-        std::cerr << "stdin_works -- Wait starting" << std::endl;
+        std::cerr << "stdin_works -- Wait starting\n";
         cmd->Wait(0ms);
         QVERIFY(cmd->GetExitCode() == 0);
         QByteArray out = tempfile.readAll();
@@ -271,10 +276,14 @@ class TestMythSystem: public QObject
     {
         QScopedPointer<MythSystem> cmd(
             MythSystem::Create("sleep 5", kMSRunShell));
-        usleep(50 * 1000);
+        std::this_thread::sleep_for(50ms);
         cmd->Signal(kSignalTerm);
         cmd->Wait();
+#ifndef Q_OS_OPENBSD
         QCOMPARE(cmd->GetExitCode(), -1);
+#else
+        QCOMPARE(cmd->GetExitCode(), 143); // 128 + SIGTERM = Please quit
+#endif
     }
 
     static void getexitcode_returns_neg_2_when_still_running(void)
@@ -284,3 +293,5 @@ class TestMythSystem: public QObject
         QVERIFY(cmd->GetExitCode() == -2);
     }
 };
+
+#endif // LIBMYTHBASE_TEST_MYTHSYSTEM_H

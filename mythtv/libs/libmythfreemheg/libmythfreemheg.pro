@@ -2,6 +2,9 @@ include ( ../../settings.pro )
 
 INCLUDEPATH += ../.. ..
 
+# Mark appropriate symbols as EXPORT
+DEFINES += MHEG_API
+
 TEMPLATE = lib
 TARGET = mythfreemheg-$$LIBVERSION
 CONFIG += thread dll
@@ -25,3 +28,10 @@ LIBS += $$EXTRA_LIBS
 LIBS += $$LATE_LIBS
 
 include ( ../libs-targetfix.pro )
+
+test_clean.commands = -cd test/ && $(MAKE) -f Makefile clean
+clean.depends = test_clean
+QMAKE_EXTRA_TARGETS += test_clean clean
+test_distclean.commands = -cd test/ && $(MAKE) -f Makefile distclean
+distclean.depends = test_distclean
+QMAKE_EXTRA_TARGETS += test_distclean distclean

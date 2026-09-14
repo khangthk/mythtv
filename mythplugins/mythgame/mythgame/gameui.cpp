@@ -1,11 +1,13 @@
 // Qt
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QMetaType>
 #include <QStringList>
 #include <QTimer>
 
 // MythTV
-#include <libmyth/mythcontext.h>
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythdirs.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythmetadata/mythuimetadataresults.h>
 #include <libmythui/mythdialogbox.h>
 #include <libmythui/mythgenerictree.h>
@@ -237,7 +239,9 @@ void GameUI::nodeChanged(MythGenericTree* node)
         updateRomInfo(romInfo);
         if (!romInfo->Screenshot().isEmpty() || !romInfo->Fanart().isEmpty() ||
             !romInfo->Boxart().isEmpty())
+        {
             showImages();
+        }
         else
         {
             if (m_gameImage)
@@ -779,7 +783,7 @@ QString GameUI::getChildLevelString(MythGenericTree *node)
         node = node->getParent();
 
     auto *gi = node->GetData().value<GameTreeInfo *>();
-    return gi->getLevel(this_level - 1);
+    return gi ? gi->getLevel(this_level - 1) : "<invalid>";
 }
 
 QString GameUI::getFilter(MythGenericTree *node)
@@ -787,7 +791,7 @@ QString GameUI::getFilter(MythGenericTree *node)
     while (node->getInt() != 1)
         node = node->getParent();
     auto *gi = node->GetData().value<GameTreeInfo *>();
-    return gi->getFilter();
+    return gi ? gi->getFilter() : "<invalid>";
 }
 
 int GameUI::getLevelsOnThisBranch(MythGenericTree *node)
@@ -796,7 +800,7 @@ int GameUI::getLevelsOnThisBranch(MythGenericTree *node)
         node = node->getParent();
 
     auto *gi = node->GetData().value<GameTreeInfo *>();
-    return gi->getDepth();
+    return gi ? gi->getDepth() : 0;
 }
 
 bool GameUI::isLeaf(MythGenericTree *node)
@@ -1110,3 +1114,5 @@ void GameUI::reloadAllData(bool dbChanged)
         BuildTree();
 }
 
+
+#include "moc_gameui.cpp"

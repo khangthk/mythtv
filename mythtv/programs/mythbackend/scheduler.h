@@ -18,7 +18,6 @@
 #include "libmythbase/mthread.h"
 #include "libmythbase/mythdeque.h"
 #include "libmythbase/mythscheduler.h"
-#include "libmythbase/remoteutil.h"
 #include "libmythtv/recordinginfo.h"
 #include "libmythtv/scheduledrecording.h"
 
@@ -81,7 +80,7 @@ class Scheduler : public MThread, public MythScheduler
     bool GetAllPending(ProgramList &retList, int recRuleId = 0) const;
     void GetAllPending(QStringList &strList) const override; // MythScheduler
     QMap<QString,ProgramInfo*> GetRecording(void) const override; // MythScheduler
-    RecordingInfo* GetRecording(uint recordedid) const;
+    virtual RecordingInfo* GetRecording(uint recordedid) const;
 
     enum SchedSortColumn : std::uint8_t
                          { kSortTitle, kSortLastRecorded, kSortNextRecording,
@@ -254,7 +253,7 @@ class Scheduler : public MThread, public MythScheduler
     QDateTime m_schedTime;
     bool m_recListChanged              {false};
 
-    bool m_specSched;
+    bool m_specSched                   {false};
     bool m_schedulingEnabled           {true};
     QMap<int, bool> m_schedAfterStartMap;
 
@@ -263,7 +262,7 @@ class Scheduler : public MThread, public MythScheduler
 
     QSet<uint> m_schedOrderWarned;
 
-    bool m_doRun;
+    bool m_doRun                       {false};
 
     MainServer *m_mainServer           {nullptr};
 

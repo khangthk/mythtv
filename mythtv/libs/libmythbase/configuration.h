@@ -13,6 +13,8 @@
 #ifndef CONFIGURATION_H
 #define CONFIGURATION_H
 
+#include "mythconfig.h"
+
 #include <utility>
 
 #include <QDomDocument>
@@ -53,6 +55,12 @@ class MBASE_PUBLIC XmlConfiguration
   public:
 
     static constexpr auto kDefaultFilename = "config.xml";
+
+    static inline const QString kDefaultDB  {"Database/"};
+    static inline const QString kDefaultWOL {"WakeOnLAN/"};
+    static inline const QString kDefaultMFE {"UPnP/MythFrontend/DefaultBackend/"};
+    static inline const QString kDefaultPIN {kDefaultMFE + "SecurityPin"};
+    static inline const QString kDefaultUSN {kDefaultMFE + "USN"};
 
     XmlConfiguration() { Load(); }
     explicit XmlConfiguration(QString fileName)
@@ -110,15 +118,23 @@ class MBASE_PUBLIC XmlConfiguration
     void    ClearValue(const QString &setting);
 
     template <typename T>
-    typename std::enable_if_t<std::chrono::__is_duration<T>::value, T>
-    GetDuration(const QString &setting, T defaultValue = T::zero())
+    T GetDuration(const QString &setting, T defaultValue = T::zero())
+#if HAVE_IS_DURATION_V
+    requires (std::chrono::__is_duration_v<T>)
+#else
+    requires (std::chrono::__is_duration<T>::value)
+#endif
     {
         return T(GetValue(setting, static_cast<int>(defaultValue.count())));
     }
 
     template <typename T>
-    typename std::enable_if_t<std::chrono::__is_duration<T>::value>
-    SetDuration(const QString &setting, T value)
+    void SetDuration(const QString &setting, T value)
+#if HAVE_IS_DURATION_V
+    requires (std::chrono::__is_duration_v<T>)
+#else
+    requires (std::chrono::__is_duration<T>::value)
+#endif
     {
         SetValue(setting, static_cast<int>(value.count()));
     }

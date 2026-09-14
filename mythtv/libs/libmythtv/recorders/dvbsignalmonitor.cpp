@@ -3,15 +3,14 @@
 #include <cerrno>
 #include <cmath>
 #include <cstring>
-
-#include <unistd.h>
+#include <thread>
 
 //Qt headers
 #include <QCoreApplication>
 
 // MythTV headers
-#include "libmyth/mythcontext.h"
 #include "libmythbase/mythdbcon.h"
+#include "libmythbase/mythlogging.h"
 
 #include "cardutil.h"
 #include "dvbchannel.h"
@@ -160,7 +159,7 @@ DVBSignalMonitor::DVBSignalMonitor(int db_cardnum, DVBChannel* _channel,
 
     m_minimumUpdateRate = _channel->GetMinSignalMonitorDelay();
     if (m_minimumUpdateRate > 30ms)
-        usleep(m_minimumUpdateRate);
+        std::this_thread::sleep_for(m_minimumUpdateRate);
 
     m_streamHandler = DVBStreamHandler::Get(_channel->GetCardNum(), m_inputid);
 }
@@ -193,7 +192,7 @@ void DVBSignalMonitor::GetRotorStatus(bool &was_moving, bool &is_moving)
 
     QMutexLocker locker(&m_statusLock);
     was_moving = m_rotorPosition.GetValue() < 100;
-    int pos    = (int)truncf(rotor->GetProgress() * 100);
+    int pos    = (int)std::trunc(rotor->GetProgress() * 100);
     m_rotorPosition.SetValue(pos);
     is_moving  = m_rotorPosition.GetValue() < 100;
 }
@@ -362,7 +361,7 @@ void DVBSignalMonitor::UpdateValues(void)
         // normalize these to a time period.
 
         wasLocked = m_signalLock.IsGood();
-        m_signalLock.SetValue((has_lock) ? 1 : 0);
+        m_signalLock.SetValue(has_lock ? 1 : 0);
         isLocked = m_signalLock.IsGood();
 
         if (HasFlags(kSigMon_WaitForSig))

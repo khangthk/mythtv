@@ -9,6 +9,8 @@
 
 // MythTV
 #include "libmythbase/compat.h"
+#include "libmythbase/mythcorecontext.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythbase/mythsystemlegacy.h"
 #include "libmythbase/remotefile.h"
 #include "libmythui/mythdialogbox.h"
@@ -26,7 +28,8 @@
 static QString clean_comment(const QString &comment)
 {
     QString result;
-    std::copy_if(comment.cbegin(), comment.cend(), std::back_inserter(result), [](QChar x) { return x.isPrint(); } );
+    std::ranges::copy_if(std::as_const(comment), std::back_inserter(result),
+                         [](QChar x) { return x.isPrint(); } );
     return result;
 }
 
@@ -39,6 +42,7 @@ public:
 
     int GetResult(void) const { return m_result; }
 
+protected:
     void run() override // MThread
     {
         RunProlog();
@@ -74,6 +78,7 @@ public:
 
     ImageSet GetResult(void) { return m_failed; }
 
+protected:
     void run() override // MThread
     {
         RunProlog();
@@ -216,18 +221,16 @@ bool GalleryThumbView::Create()
     // Determine zoom levels supported by theme
     // images0 must exist; images1, images2 etc. are optional and enable zoom
     int               zoom = 0;
-    MythUIButtonList *widget = nullptr;
-    do
+    QString name = QString("images%1").arg(zoom++);
+    auto *widget = dynamic_cast<MythUIButtonList *>(this->GetChild(name));
+    while (widget)
     {
-        QString name = QString("images%1").arg(zoom++);
+        m_zoomWidgets.append(widget);
+        widget->SetVisible(false);
+
+        name = QString("images%1").arg(zoom++);
         widget = dynamic_cast<MythUIButtonList *>(this->GetChild(name));
-        if (widget)
-        {
-            m_zoomWidgets.append(widget);
-            widget->SetVisible(false);
-        }
     }
-    while (widget);
 
     if (m_zoomWidgets.isEmpty())
     {
@@ -286,21 +289,37 @@ bool GalleryThumbView::keyPressEvent(QKeyEvent *event)
         handled = true;
 
         if (action == "MENU")
+        {
             MenuMain();
+        }
         else if (action == "INFO")
+        {
             ShowDetails();
+        }
         else if (action == "ZOOMIN")
+        {
             ZoomIn();
+        }
         else if (action == "ZOOMOUT")
+        {
             ZoomOut();
+        }
         else if (action == "ROTRIGHT")
+        {
             RotateCW();
+        }
         else if (action == "ROTLEFT")
+        {
             RotateCCW();
+        }
         else if (action == "FLIPHORIZONTAL")
+        {
             FlipHorizontal();
+        }
         else if (action == "FLIPVERTICAL")
+        {
             FlipVertical();
+        }
         else if (action == "COVER")
         {
             ImagePtrK im = m_view->GetSelected();
@@ -472,7 +491,7 @@ void GalleryThumbView::customEvent(QEvent *event)
     }
     else if (event->type() == DialogCompletionEvent::kEventType)
     {
-        auto *dce = (DialogCompletionEvent *)(event);
+        auto *dce = (DialogCompletionEvent *)event;
 
         QString resultid  = dce->GetId();
         int     buttonnum = dce->GetResult();
@@ -1981,7 +2000,9 @@ void GalleryThumbView::Copy(bool deleteAfter)
     auto *progress = new MythUIProgressDialog(tr("Copying files"), popupStack,
                                               "copydialog");
     if (progress->Create())
+    {
         popupStack->AddScreen(progress, false);
+    }
     else
     {
         delete progress;
@@ -2005,9 +2026,11 @@ void GalleryThumbView::Copy(bool deleteAfter)
         transfers.remove(im);
 
     ImageListK newImages = transfers.keys();
+    newImages.reserve(newImages.size() + dirs.size());
 
     // Include dirs
     QStringList dirPaths;
+    dirPaths.reserve(dirs.size());
     for (const ImagePtr & im : std::as_const(dirs))
     {
         QString relPath = im->m_filePath.mid(basePathSize);
@@ -2036,6 +2059,7 @@ void GalleryThumbView::Copy(bool deleteAfter)
             // Delete files/dirs that have been successfully copied
             // Will fail for dirs containing images that failed to copy
             ImageIdList ids;
+            ids.reserve(newImages.size());
             for (const ImagePtrK & im : std::as_const(newImages))
                 ids << im->m_id;
 
@@ -2090,7 +2114,11 @@ void GalleryThumbView::Move()
         // Nothing to clean up
         return;
     }
-    ImageList images = dirs + files;
+    ImageList images;
+    if (!dirs.isEmpty())
+        images += dirs;
+    if (!files.isEmpty())
+        images += files;
 
     // Determine parent from first dir or pic
     ImagePtr aChild = images[0];
@@ -2117,7 +2145,9 @@ void GalleryThumbView::Move()
                                               "movedialog");
 
     if (progress->Create())
+    {
         popupStack->AddScreen(progress, false);
+    }
     else
     {
         delete progress;
@@ -2189,3 +2219,10 @@ void GalleryThumbView::Import()
     if (!err.isEmpty())
         LOG(VB_GENERAL, LOG_ERR, LOC + err);
 }
+
+void GalleryThumbView::DoRepeat(int on)
+{
+    gCoreContext->SaveSetting("GalleryRepeat", on);
+}
+
+#include "moc_gallerythumbview.cpp"

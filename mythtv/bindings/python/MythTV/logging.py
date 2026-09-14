@@ -6,7 +6,7 @@ from MythTV.exceptions import MythError
 
 import os
 import syslog
-import codecs
+
 try:
     # needs python-systemd package installed
     from systemd import journal
@@ -281,7 +281,7 @@ class MythLog( LOGLEVEL, LOGMASK, LOGFACILITY ):
     def _setfile(cls, filename):
         """Redirect log output to a specific file."""
         cls._initlogger()
-        cls._setfileobject(codecs.open(filename, 'w', encoding='utf-8'))
+        cls._setfileobject(open(filename, 'w', encoding='utf-8'))
 
     @classmethod
     def _setpath(cls, filepath):
@@ -361,11 +361,11 @@ class MythLog( LOGLEVEL, LOGMASK, LOGFACILITY ):
 
     @classmethod
     def _parsemask(cls, mstr=None):
-        bwlist = (  'important','general','record','playback','channel','osd',
+        bwlist = (  'general','record','playback','channel','osd',
                     'file','schedule','network','commflag','audio','libav',
                     'jobqueue','siparser','eit','vbi','database','dsmcc',
                     'mheg','upnp','socket','xmltv','dvbcam','media','idle',
-                    'channelscan','extra','timestamp')
+                    'channelscan','system','timestamp')
         if mstr:
             mask = cls.NONE
             for m in mstr.split(','):

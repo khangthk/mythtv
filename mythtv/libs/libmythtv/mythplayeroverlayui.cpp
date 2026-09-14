@@ -1,7 +1,9 @@
 #include <chrono>
 
 // MythTV
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
+#include "libmythbase/mythlogging.h"
 
 #include "tv_play.h"
 #include "livetvchain.h"
@@ -17,7 +19,7 @@ MythPlayerOverlayUI::MythPlayerOverlayUI(MythMainWindow* MainWindow, TV* Tv, Pla
     // Register our state type for signalling
     qRegisterMetaType<MythOverlayState>();
 
-    m_positionUpdateTimer.setInterval(999ms);
+    m_positionUpdateTimer.setInterval(99ms);
     connect(&m_positionUpdateTimer, &QTimer::timeout, this, &MythPlayerOverlayUI::UpdateOSDPosition);
     connect(this, &MythPlayerOverlayUI::OverlayStateChanged, m_tv, &TV::OverlayStateChanged);
     connect(m_tv, &TV::ChangeOSDMessage, this, qOverload<const QString&>(&MythPlayerOverlayUI::UpdateOSDMessage));
@@ -237,7 +239,8 @@ void MythPlayerOverlayUI::UpdateSliderInfo(osdInfo &Info, bool PaddedFields)
         QString dtformat = gCoreContext->GetSetting("DateFormat", "ddd MMMM d yyyy")
             + ", " + gCoreContext->GetSetting("TimeFormat", "hh:mm");
 
-        if (m_playerCtx->GetState() == kState_WatchingPreRecorded )
+        if ((m_playerCtx->GetState() == kState_WatchingPreRecorded) ||
+            (m_playerCtx->GetState() == kState_WatchingRecording  ))
         {
             QDateTime recordedtime =
                 m_playerCtx->m_playingRecStart.addSecs(static_cast<qint64>(secsplayed.count()));
@@ -277,4 +280,4 @@ std::chrono::seconds MythPlayerOverlayUI::GetTotalSeconds(bool HonorCutList) con
     return duration_cast<std::chrono::seconds>(GetTotalMilliseconds(HonorCutList));
 }
 
-
+#include "moc_mythplayeroverlayui.cpp"

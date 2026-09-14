@@ -15,15 +15,14 @@
 #include <QStringList>
 #include <QTextStream>
 
-// MythTV
+#include "libmythbase/mythconfig.h"
+
 #include "libmythbase/compat.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdirs.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythmiscutil.h"
 #include "libmythbase/mythversion.h"
-#include "libmythbase/programinfo.h"
-#include "libmythbase/remoteutil.h"
 #include "libmythtv/mythsystemevent.h"
 #include "libmythtv/previewgenerator.h"
 #include "libmythui/mythmainwindow.h"
@@ -42,9 +41,11 @@
 #include "libmythui/mythuispinbox.h"
 #include "libmythui/mythuitextedit.h"
 #include "libmythui/mythuivideo.h"
-#if CONFIG_QTWEBKIT
+
+#if CONFIG_QTWEBENGINE
 #include "libmythui/mythuiwebbrowser.h"
 #endif
+
 
 // MythFrontend
 #include "networkcontrol.h"
@@ -305,33 +306,30 @@ void NetworkControl::processNetworkControlCommand(NetworkCommand *nc)
 
     int clientID = m_clients.indexOf(nc->getClient());
 
-    if (is_abbrev("jump", nc->getArg(0)))
+    if (is_abbrev("jump", nc->getArg(0))) {
         result = processJump(nc);
-    else if (is_abbrev("key", nc->getArg(0)))
+    } else if (is_abbrev("key", nc->getArg(0))) {
         result = processKey(nc);
-    else if (is_abbrev("play", nc->getArg(0)))
+    } else if (is_abbrev("play", nc->getArg(0))) {
         result = processPlay(nc, clientID);
-    else if (is_abbrev("query", nc->getArg(0)))
+    } else if (is_abbrev("query", nc->getArg(0))) {
         result = processQuery(nc);
-    else if (is_abbrev("set", nc->getArg(0)))
+    } else if (is_abbrev("set", nc->getArg(0))) {
         result = processSet(nc);
-    else if (is_abbrev("screenshot", nc->getArg(0)))
+    } else if (is_abbrev("screenshot", nc->getArg(0))) {
         result = saveScreenshot(nc);
-    else if (is_abbrev("help", nc->getArg(0)))
+    } else if (is_abbrev("help", nc->getArg(0))) {
         result = processHelp(nc);
-    else if (is_abbrev("message", nc->getArg(0)))
+    } else if (is_abbrev("message", nc->getArg(0))) {
         result = processMessage(nc);
-    else if (is_abbrev("notification", nc->getArg(0)))
+    } else if (is_abbrev("notification", nc->getArg(0))) {
         result = processNotification(nc);
-    else if (is_abbrev("theme", nc->getArg(0)))
+    } else if (is_abbrev("theme", nc->getArg(0))) {
         result = processTheme(nc);
-    else if ((nc->getArg(0).toLower() == "exit") || (nc->getArg(0).toLower() == "quit"))
-    {
+    } else if ((nc->getArg(0).toLower() == "exit") || (nc->getArg(0).toLower() == "quit")) {
         QCoreApplication::postEvent(this,
                                 new NetworkControlCloseEvent(nc->getClient()));
-    }
-    else if (! nc->getArg(0).isEmpty())
-    {
+    } else if (! nc->getArg(0).isEmpty()) {
         result = QString("INVALID command '%1', try 'help' for more info")
                          .arg(nc->getArg(0));
     }
@@ -708,11 +706,17 @@ QString NetworkControl::processPlay(NetworkCommand *nc, int clientID)
         if (nc->getArgCount() == 3)
         {
             if (is_abbrev("play", nc->getArg(2)))
+            {
                 message = QString("MUSIC_COMMAND %1 PLAY").arg(hostname);
+            }
             else if (is_abbrev("pause", nc->getArg(2)))
+            {
                 message = QString("MUSIC_COMMAND %1 PAUSE").arg(hostname);
+            }
             else if (is_abbrev("stop", nc->getArg(2)))
+            {
                 message = QString("MUSIC_COMMAND %1 STOP").arg(hostname);
+            }
             else if (is_abbrev("getvolume", nc->getArg(2)))
             {
                 m_gotAnswer = false;
@@ -852,17 +856,29 @@ QString NetworkControl::processPlay(NetworkCommand *nc, int clientID)
                            .arg(nc->getArg(0));
 
         if (is_abbrev("beginning", nc->getArg(2)))
+        {
             message = "NETWORK_CONTROL SEEK BEGINNING";
+        }
         else if (is_abbrev("forward", nc->getArg(2)))
+        {
             message = "NETWORK_CONTROL SEEK FORWARD";
+        }
         else if (is_abbrev("rewind",   nc->getArg(2)) ||
                  is_abbrev("backward", nc->getArg(2)))
+        {
             message = "NETWORK_CONTROL SEEK BACKWARD";
+        }
         else if (nc->getArg(2).contains(kSeekTimeRE))
         {
-            int hours   = nc->getArg(2).mid(0, 2).toInt();
-            int minutes = nc->getArg(2).mid(3, 2).toInt();
-            int seconds = nc->getArg(2).mid(6, 2).toInt();
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+            int hours   = nc->getArg(2).midRef(0, 2).toInt();
+            int minutes = nc->getArg(2).midRef(3, 2).toInt();
+            int seconds = nc->getArg(2).midRef(6, 2).toInt();
+#else
+            int hours   = QStringView(nc->getArg(2)).mid(0, 2).toInt();
+            int minutes = QStringView(nc->getArg(2)).mid(3, 2).toInt();
+            int seconds = QStringView(nc->getArg(2)).mid(6, 2).toInt();
+#endif
             message = QString("NETWORK_CONTROL SEEK POSITION %1")
                               .arg((hours * 3600) + (minutes * 60) + seconds);
         }
@@ -922,7 +938,9 @@ QString NetworkControl::processPlay(NetworkCommand *nc, int clientID)
     {
         static const QRegularExpression kNumberRE { "^\\d+$" };
         if (nc->getArgCount() < 3)
+        {
             message = QString("NETWORK_CONTROL SUBTITLES 0");
+        }
         else if (!nc->getArg(2).toLower().contains(kNumberRE))
         {
             return QString("ERROR: See 'help %1' for usage information")
@@ -1183,7 +1201,7 @@ QString NetworkControl::getWidgetType(MythUIType* type)
         return "MythUIImage";
     if (dynamic_cast<MythUISpinBox *>(type))
         return "MythUISpinBox";
-#if CONFIG_QTWEBKIT
+#if CONFIG_QTWEBENGINE
     if (dynamic_cast<MythUIWebBrowser *>(type))
         return "MythUIWebBrowser";
 #endif
@@ -1902,4 +1920,4 @@ QString NetworkCommand::getFrom(int arg)
     return c;
 }
 
-/* vim: set expandtab tabstop=4 shiftwidth=4: */
+#include "moc_networkcontrol.cpp"

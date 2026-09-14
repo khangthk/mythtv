@@ -1,4 +1,8 @@
 // Qt
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QFile>
 #include <QMap>
 #include <QUrl>
@@ -6,7 +10,6 @@
 
 // MythTV
 #include "libmythbase/compat.h"
-#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/remotefile.h"
@@ -15,7 +18,7 @@
 #include "mythiowrapper.h"
 
 // Std
-#if defined(_WIN32)
+#ifdef Q_OS_WINDOWS
 #include <windows.h>
 #else
 #include <dlfcn.h>
@@ -60,8 +63,6 @@ static QMutex                        s_callbackLock;
 static QMultiHash<QString, MythIOCallback> s_fileOpenCallbacks;
 
 #define LOC QString("MythIOWrap: ")
-
-extern "C" {
 
 static int GetNextFileID(void)
 {
@@ -234,12 +235,6 @@ int MythfileClose(int FileID)
     return -1;
 }
 
-#ifdef _WIN32
-#   undef  lseek
-#   define lseek  _lseeki64
-#   undef  off_t
-#   define off_t off64_t
-#endif
 off_t MythFileSeek(int FileID, off_t Offset, int Whence)
 {
     off_t result = -1;
@@ -276,11 +271,6 @@ off_t MythFileTell(int FileID)
 
     return result;
 }
-
-#ifdef _WIN32
-#   undef  lseek
-#   undef  off_t
-#endif
 
 ssize_t MythFileRead(int FileID, void *Buffer, size_t Count)
 {
@@ -387,7 +377,7 @@ int MythDirCheck(int DirID)
 {
     LOG(VB_FILE, LOG_DEBUG, QString("MythDirCheck: '%1'").arg(DirID));
     s_dirWrapperLock.lockForWrite();
-    int result = ((s_localdirs.contains(DirID) || s_remotedirs.contains(DirID))) ? 1 : 0;
+    int result = (s_localdirs.contains(DirID) || s_remotedirs.contains(DirID)) ? 1 : 0;
     s_dirWrapperLock.unlock();
     return result;
 }
@@ -467,7 +457,7 @@ int MythDirClose(int DirID)
     return -1;
 }
 
-char *MythDirRead(int DirID)
+std::string MythDirRead(int DirID)
 {
     LOG(VB_FILE, LOG_DEBUG, LOC + QString("MythDirRead: '%1'").arg(DirID));
 
@@ -477,7 +467,7 @@ char *MythDirRead(int DirID)
         int pos = s_remotedirPositions[DirID];
         if (s_remotedirs[DirID].size() >= (pos + 1))
         {
-            char* result = strdup(s_remotedirs[DirID][pos].toLocal8Bit().constData());
+            std::string result = s_remotedirs[DirID][pos].toLocal8Bit().constData();
             pos++;
             s_remotedirPositions[DirID] = pos;
             return result;
@@ -487,11 +477,8 @@ char *MythDirRead(int DirID)
     {
         struct dirent *dir = readdir(s_localdirs[DirID]);
         if (dir != nullptr)
-            return strdup(dir->d_name);
+            return { dir->d_name };
     }
 
-    return nullptr;
+    return {};
 }
-
-} // extern "C"
-

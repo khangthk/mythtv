@@ -17,9 +17,12 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
+#ifndef LIBMYTHTV_TEST_MHEG_DSMCC_H
+#define LIBMYTHTV_TEST_MHEG_DSMCC_H
 
+#include <QChar>     // Fix Qt6 GCC SFINAE warning
+#include <QBitArray> // Fix Qt6 GCC SFINAE warning
 #include <QTest>
-#include <iostream>
 
 #include "libmythtv/mheg/dsmcc.h"
 
@@ -34,3 +37,5 @@ private slots:
     static void test_carousel(void);
     static void cleanupTestCase();
 };
+
+#endif // LIBMYTHTV_TEST_MHEG_DSMCC_H

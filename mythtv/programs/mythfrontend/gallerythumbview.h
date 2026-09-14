@@ -27,17 +27,19 @@ public:
     GalleryThumbView(MythScreenStack *parent, const char *name);
     ~GalleryThumbView() override;
     bool    Create() override; // MythScreenType
+    bool    keyPressEvent(QKeyEvent *event) override; // MythScreenType
+    void    mediaEvent(MythMediaEvent *event) override // MythUIType
+            { m_mgr.DeviceEvent(event); }
 
 public slots:
     void    Start();
     void    Close() override; // MythScreenType
     static void    ClearSgDb()  { ImageManagerFe::ClearStorageGroup(); }
 
-private:
-    bool    keyPressEvent(QKeyEvent *event) override; // MythScreenType
-    void    mediaEvent(MythMediaEvent *event) override // MythUIType
-            { m_mgr.DeviceEvent(event); }
+protected:
     void    customEvent(QEvent *event) override; // MythUIType
+
+private:
     void    RemoveImages(const QStringList &ids, bool deleted = true);
     void    BuildImageList();
     void    ResetUiSelection();
@@ -119,7 +121,7 @@ private slots:
     void    Copy()                     { Copy(false); }
     void    Move();
     void    ShowPassword();
-    static void DoRepeat(int on)       { gCoreContext->SaveSetting("GalleryRepeat", on); }
+    static void DoRepeat(int on);
     static void RepeatOn()             { DoRepeat(1); }
     static void RepeatOff()            { DoRepeat(0); }
 

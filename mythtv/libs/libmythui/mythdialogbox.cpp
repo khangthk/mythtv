@@ -571,7 +571,9 @@ MythConfirmationDialog  *ShowOkPopup(const QString &message, bool showCancel)
     MythMainWindow *win = GetMythMainWindow();
 
     if (win)
+    {
         stk = win->GetStack("popup stack");
+    }
     else
     {
         LOG(VB_GENERAL, LOG_ERR, LOC + "no main window?");
@@ -987,7 +989,12 @@ bool MythTimeInputDialog::Create()
             if (m_resolution & kMinutes)
             {
                 time = time.addSecs(60);
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
                 QDateTime dt = QDateTime(startdate, time, Qt::LocalTime);
+#else
+                QDateTime dt = QDateTime(startdate, time,
+                                         QTimeZone(QTimeZone::LocalTime));
+#endif
                 text = MythDate::toString(dt, MythDate::kTime);
 
                 if (time == starttime)
@@ -1034,7 +1041,12 @@ void MythTimeInputDialog::okClicked(void)
     QDate date = m_dateList->GetDataValue().toDate();
     QTime time = m_timeList->GetDataValue().toTime();
 
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     QDateTime dateTime = QDateTime(date, time, Qt::LocalTime).toUTC();
+#else
+    QDateTime dateTime = QDateTime(date, time,
+                                   QTimeZone(QTimeZone::LocalTime)).toUTC();
+#endif
 
     emit haveResult(dateTime);
 
@@ -1047,3 +1059,5 @@ void MythTimeInputDialog::okClicked(void)
 
     Close();
 }
+
+#include "moc_mythdialogbox.cpp"

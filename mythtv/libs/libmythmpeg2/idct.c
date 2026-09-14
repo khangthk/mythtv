@@ -23,6 +23,7 @@
 
 #include "mpeg2config.h"
 
+#include <stddef.h>
 #include <stdlib.h>
 #include <inttypes.h>
 
@@ -38,6 +39,10 @@
 #define W6 1108 /* 2048 * sqrt (2) * cos (6 * pi / 16) */
 #define W7 565  /* 2048 * sqrt (2) * cos (7 * pi / 16) */
 /* NOLINTEND(modernize-macro-to-enum) */
+
+/* Multiply by 8, using the type of variable that the compiler uses
+ * for pointer indexing. */
+#define R(x) ((ptrdiff_t)8 * (x))
 
 /* idct main entry point  */
 void (* mpeg2_idct_copy) (int16_t * block, uint8_t * dest, int stride);
@@ -56,15 +61,15 @@ uint8_t mpeg2_clip[(3840 * 2) + 256];
 #if 0
 #define BUTTERFLY(t0,t1,W0,W1,d0,d1)	\
 do {					\
-    t0 = W0 * d0 + W1 * d1;		\
-    t1 = W0 * d1 - W1 * d0;		\
+    t0 = (W0 * d0) + (W1 * d1);		\
+    t1 = (W0 * d1) - (W1 * d0);		\
 } while (0)
 #else
 #define BUTTERFLY(t0,t1,W0,W1,d0,d1)	\
 do {					\
     int tmp = (W0) * ((d0) + (d1));		\
-    (t0) = tmp + ((W1) - (W0)) * (d1);		\
-    (t1) = tmp - ((W1) + (W0)) * (d0);		\
+    (t0) = tmp + (((W1) - (W0)) * (d1));		\
+    (t1) = tmp - (((W1) + (W0)) * (d0));		\
 } while (0)
 #endif
 
@@ -125,10 +130,10 @@ static inline void idct_col (int16_t * const block)
     int t2 = 0;
     int t3 = 0;
 
-    int d0 = (block[8*0] << 11) + 65536;
-    int d1 = block[8*1];
-    int d2 = block[8*2] << 11;
-    int d3 = block[8*3];
+    int d0 = (block[R(0)] << 11) + 65536;
+    int d1 = block[R(1)];
+    int d2 = block[R(2)] << 11;
+    int d3 = block[R(3)];
     int t0 = d0 + d2;
     int t1 = d0 - d2;
     BUTTERFLY (t2, t3, W6, W2, d3, d1);
@@ -137,10 +142,10 @@ static inline void idct_col (int16_t * const block)
     int a2 = t1 - t3;
     int a3 = t0 - t2;
 
-    d0 = block[8*4];
-    d1 = block[8*5];
-    d2 = block[8*6];
-    d3 = block[8*7];
+    d0 = block[R(4)];
+    d1 = block[R(5)];
+    d2 = block[R(6)];
+    d3 = block[R(7)];
     BUTTERFLY (t0, t1, W7, W1, d3, d0);
     BUTTERFLY (t2, t3, W3, W5, d1, d2);
     int b0 = t0 + t2;
@@ -150,14 +155,14 @@ static inline void idct_col (int16_t * const block)
     int b1 = ((t0 + t1) >> 8) * 181;
     int b2 = ((t0 - t1) >> 8) * 181;
 
-    block[8*0] = (a0 + b0) >> 17;
-    block[8*1] = (a1 + b1) >> 17;
-    block[8*2] = (a2 + b2) >> 17;
-    block[8*3] = (a3 + b3) >> 17;
-    block[8*4] = (a3 - b3) >> 17;
-    block[8*5] = (a2 - b2) >> 17;
-    block[8*6] = (a1 - b1) >> 17;
-    block[8*7] = (a0 - b0) >> 17;
+    block[R(0)] = (a0 + b0) >> 17;
+    block[R(1)] = (a1 + b1) >> 17;
+    block[R(2)] = (a2 + b2) >> 17;
+    block[R(3)] = (a3 + b3) >> 17;
+    block[R(4)] = (a3 - b3) >> 17;
+    block[R(5)] = (a2 - b2) >> 17;
+    block[R(6)] = (a1 - b1) >> 17;
+    block[R(7)] = (a0 - b0) >> 17;
 }
 
 static void mpeg2_idct_copy_c (int16_t * block, uint8_t * dest,
@@ -166,7 +171,7 @@ static void mpeg2_idct_copy_c (int16_t * block, uint8_t * dest,
     int i = 0;
 
     for (i = 0; i < 8; i++)
-	idct_row (block + (8 * i));
+	idct_row (block + R(i));
     for (i = 0; i < 8; i++)
 	idct_col (block + i);
     do {
@@ -194,7 +199,7 @@ static void mpeg2_idct_add_c (const int last, int16_t * block,
 
     if (last != 129 || (block[0] & (7 << 4)) == (4 << 4)) {
 	for (i = 0; i < 8; i++)
-	    idct_row (block + (8 * i));
+	    idct_row (block + R(i));
 	for (i = 0; i < 8; i++)
 	    idct_col (block + i);
 	do {
@@ -233,7 +238,7 @@ static void mpeg2_idct_add_c (const int last, int16_t * block,
 
 void mpeg2_idct_init (uint32_t accel)
 {
-    if (ARCH_X86 && HAVE_MMX) {
+    if (ARCH_X86 && HAVE_MMX) { /* NOLINT(misc-redundant-expression) */
     if (accel & MPEG2_ACCEL_X86_MMXEXT) {
 	mpeg2_idct_copy = mpeg2_idct_copy_mmxext;
 	mpeg2_idct_add = mpeg2_idct_add_mmxext;

@@ -14,15 +14,20 @@
 #ifndef HTTPSERVER_H
 #define HTTPSERVER_H
 
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 // POSIX headers
 #include <sys/types.h>
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #endif
 #include <utility>
 
 // Qt headers
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QReadWriteLock>
 #include <QMultiMap>
 #include <QRunnable>
@@ -40,12 +45,8 @@
 #include "libmythbase/serverpool.h"
 
 #include "httprequest.h"
-#include "upnputil.h"
 
 class HttpWorkerThread;
-#if CONFIG_QTSCRIPT
-class QScriptEngine;
-#endif
 class HttpServer;
 #ifndef QT_NO_OPENSSL
 class QSslKey;

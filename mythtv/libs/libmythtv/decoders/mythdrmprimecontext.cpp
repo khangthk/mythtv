@@ -1,4 +1,7 @@
 // MythTV
+#include "libmythbase/mythconfig.h"
+#include "libmythbase/mythlogging.h"
+
 #include "avformatdecoder.h"
 #include "mythplayerui.h"
 #include "mythdrmprimecontext.h"
@@ -50,7 +53,7 @@ MythCodecID MythDRMPRIMEContext::GetPrimeCodec(AVCodecContext **Context,
     QString name = QString((*Codec)->name) + "_" + CodecName;
     if (name.startsWith("mpeg2video"))
         name = "mpeg2_" + CodecName;
-    const AVCodec *codec = avcodec_find_decoder_by_name(name.toLocal8Bit());
+    const AVCodec *codec = avcodec_find_decoder_by_name(name.toLocal8Bit().constData());
     auto *decoder = dynamic_cast<AvFormatDecoder*>(reinterpret_cast<DecoderBase*>((*Context)->opaque));
     if (!codec || !decoder)
     {
@@ -110,7 +113,7 @@ int MythDRMPRIMEContext::HwDecoderInit(AVCodecContext *Context)
     if (Context->pix_fmt != AV_PIX_FMT_DRM_PRIME)
         return -1;
 
-#ifdef USING_EGL
+#if CONFIG_EGL
     if (auto * player = GetPlayerUI(Context); player != nullptr)
         if (FrameTypeIsSupported(Context, FMT_DRMPRIME))
             m_interop = MythDRMPRIMEInterop::CreateDRM(dynamic_cast<MythRenderOpenGL*>(player->GetRender()), player);
@@ -171,7 +174,6 @@ bool MythDRMPRIMEContext::GetDRMBuffer(AVCodecContext *Context, MythVideoFrame *
     Frame->m_swPixFmt = Context->sw_pix_fmt;
     Frame->m_directRendering = true;
     AvFrame->opaque = Frame;
-    AvFrame->reordered_opaque = Context->reordered_opaque;
 
     // Frame->data[0] holds AVDRMFrameDescriptor
     Frame->m_buffer = AvFrame->data[0];

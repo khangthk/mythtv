@@ -1,9 +1,10 @@
 #include <algorithm>
 #include <cstdint>
 
-#include "visualisations/goom/zoom_filters.h"
+#include "zoom_filters.h"
+#include "libmythbase/mythconfig.h"
 
-#ifdef MMX
+#if HAVE_MMX
 static   constexpr uint8_t  BUFFPOINTNB   { 16     };
 //static constexpr uint16_t BUFFPOINTMASK { 0xffff };
 //static constexpr uint8_t  BUFFINCR      { 0xff   };
@@ -26,7 +27,9 @@ int zoom_filter_mmx_supported () {
 
 void zoom_filter_mmx (int prevX, int prevY,
                       const unsigned int *expix1, unsigned int *expix2,//NOLINT(readability-non-const-parameter)
-                      const int *brutS, const int *brutD, int buffratio,
+                      const sintvec& brutS,
+                      const sintvec& brutD,
+                      int buffratio,
                       const GoomCoefficients &precalCoef)
 {
     unsigned int ax = (prevX-1)<<PERTEDEC;
@@ -60,7 +63,7 @@ void zoom_filter_mmx (int prevX, int prevY,
             pos=coeffs=0;
         }
         else {
-            pos = ((px >> PERTEDEC) + prevX * (py >> PERTEDEC));
+            pos = ((px >> PERTEDEC) + (prevX * (py >> PERTEDEC)));
             /* coef en modulo 15 */
             coeffs = precalCoef [px & PERTEMASK][py & PERTEMASK];
         }
@@ -136,8 +139,8 @@ void zoom_filter_mmx ([[maybe_unused]] int prevX,
                       [[maybe_unused]] int prevY,
                       [[maybe_unused]] const unsigned int *expix1,
                       [[maybe_unused]] unsigned int *expix2,
-                      [[maybe_unused]] const int *brutS,
-                      [[maybe_unused]] const int *brutD,
+                      [[maybe_unused]] const sintvec& brutS,
+                      [[maybe_unused]] const sintvec& brutD,
                       [[maybe_unused]] int buffratio,
                       [[maybe_unused]] const GoomCoefficients &precalCoef)
 {

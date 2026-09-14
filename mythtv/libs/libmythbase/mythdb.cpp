@@ -12,7 +12,7 @@
 #include <QRegularExpression>
 #include <QStandardPaths>
 
-#include "mythconfig.h"
+#include "configuration.h"
 #include "mythdbcon.h"
 #include "mythlogging.h"
 #include "mythdirs.h"
@@ -257,6 +257,58 @@ void MythDB::SetDatabaseParams(const DatabaseParams &params)
     d->m_dbParams = params;
 }
 
+bool MythDB::SaveDatabaseParams(const DatabaseParams &params, bool force)
+{
+    bool success = true;
+
+    // only rewrite file if it has changed
+    if (force || (params != d->m_dbParams))
+    {
+        /* Read in the current file on the filesystem, only setting/clearing as
+        necessary.  This prevents losing changes to the file from between when it
+        was read at startup of MythTV and when this function is called.
+        */
+        auto config = XmlConfiguration();
+
+        config.SetValue("LocalHostName", params.m_localHostName);
+
+        config.SetValue(XmlConfiguration::kDefaultDB + "PingHost", params.m_dbHostPing);
+
+        // If dbHostName is an IPV6 address with scope,
+        // remove the scope. Unescaped % signs are an
+        // xml violation
+        QString dbHostName(params.m_dbHostName);
+        QHostAddress addr;
+        if (addr.setAddress(dbHostName))
+        {
+            addr.setScopeId(QString());
+            dbHostName = addr.toString();
+        }
+        config.SetValue(XmlConfiguration::kDefaultDB + "Host",     dbHostName);
+        config.SetValue(XmlConfiguration::kDefaultDB + "UserName", params.m_dbUserName);
+        config.SetValue(XmlConfiguration::kDefaultDB + "Password", params.m_dbPassword);
+        config.SetValue(XmlConfiguration::kDefaultDB + "DatabaseName", params.m_dbName);
+        config.SetValue(XmlConfiguration::kDefaultDB + "Port",     params.m_dbPort);
+
+        config.SetValue(XmlConfiguration::kDefaultWOL + "Enabled", params.m_wolEnabled);
+        config.SetDuration(
+            XmlConfiguration::kDefaultWOL + "SQLReconnectWaitTime", params.m_wolReconnect);
+        config.SetValue(XmlConfiguration::kDefaultWOL + "SQLConnectRetry", params.m_wolRetry);
+        config.SetValue(XmlConfiguration::kDefaultWOL + "Command", params.m_wolCommand);
+
+        // actually save the file
+        success = config.Save();
+
+        // Use the new settings:
+        d->m_dbParams = params;
+
+        // If database has changed, force its use:
+        GetDBManager()->CloseDatabases();
+        ClearSettingsCache();
+    }
+    return success;
+}
+
 void MythDB::SetLocalHostname(const QString &name)
 {
     if (d->m_localhostname != name.toLower())
@@ -482,7 +534,7 @@ QString MythDB::GetSetting(const QString &_key, const QString &defaultval)
         d->m_settingsCacheLock.lockForWrite();
         // another thread may have inserted a value into the cache
         // while we did not have the lock, check first then save
-        if (d->m_settingsCache.find(key) == d->m_settingsCache.end())
+        if (!d->m_settingsCache.contains(key))
             d->m_settingsCache[key] = value;
         d->m_settingsCacheLock.unlock();
     }
@@ -597,7 +649,7 @@ bool MythDB::GetSettings(QMap<QString,QString> &_key_value_pairs)
 
             // another thread may have inserted a value into the cache
             // while we did not have the lock, check first then save
-            if (d->m_settingsCache.find(key) == d->m_settingsCache.end())
+            if (!d->m_settingsCache.contains(key))
             {
                 key.squeeze();
                 value.squeeze();
@@ -725,7 +777,7 @@ QString MythDB::GetSettingOnHost(const QString &_key, const QString &_host,
         myKey.squeeze();
         value.squeeze();
         d->m_settingsCacheLock.lockForWrite();
-        if (d->m_settingsCache.find(myKey) == d->m_settingsCache.end())
+        if (!d->m_settingsCache.contains(myKey))
             d->m_settingsCache[myKey] = value;
         d->m_settingsCacheLock.unlock();
     }

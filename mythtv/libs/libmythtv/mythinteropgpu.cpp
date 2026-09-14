@@ -1,19 +1,20 @@
 // MythTV
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythui/mythrender_base.h"
 #include "mythinteropgpu.h"
 
-#ifdef USING_OPENGL
+#if CONFIG_OPENGL
 #include "opengl/mythopenglinterop.h"
 #endif
 
-MythInteropGPU::InteropMap MythInteropGPU::GetTypes(MythRender* Render)
+MythInteropGPU::InteropMap MythInteropGPU::GetTypes([[ maybe_unused ]] MythRender* Render)
 {
     InteropMap result;
     if (!gCoreContext->IsUIThread())
         return result;
 
-#ifdef USING_OPENGL
+#if CONFIG_OPENGL
     MythOpenGLInterop::GetTypes(Render, result);
 #endif
     return result;
@@ -101,3 +102,4 @@ void* MythInteropGPU::GetDefaultUserOpaque()
     return m_defaultUserOpaque;
 }
 
+#include "moc_mythinteropgpu.cpp"

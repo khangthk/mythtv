@@ -100,22 +100,21 @@ bool ExternalChannel::Tune(const QString &channum)
         return true;
 
     QString result;
-    if (m_tuneTimeout < 0ms)
+    if (!m_streamHandler->ProcessCommand("LockTimeout?", result))
     {
-        if (!m_streamHandler->ProcessCommand("LockTimeout?", result))
-        {
-            LOG(VB_CHANNEL, LOG_ERR, LOC + QString
-                ("Failed to retrieve LockTimeout: %1").arg(result));
-            m_tuneTimeout = 60s;
-        }
-        else
-        {
-            m_tuneTimeout = std::chrono::milliseconds(result.split(":")[1].toInt());
-        }
-
-        LOG(VB_CHANNEL, LOG_INFO, LOC + QString("Using Tune timeout of %1ms")
-            .arg(m_tuneTimeout.count()));
+        LOG(VB_CHANNEL, LOG_ERR, LOC + QString
+            ("Failed to retrieve LockTimeout: %1").arg(result));
+        m_tuneTimeout = 60s;
     }
+    else
+    {
+        m_tuneTimeout = std::chrono::milliseconds(result.split(":")[1].toInt());
+    }
+
+    LOG(VB_CHANNEL, LOG_INFO, LOC + QString("Tune timeout: %1ms")
+        .arg(m_tuneTimeout.count()));
+
+    m_pParent->SetChannelTimeout(m_tuneTimeout);
 
     LOG(VB_CHANNEL, LOG_INFO, LOC + "Tuning to " + channum);
 
@@ -138,6 +137,7 @@ bool ExternalChannel::Tune(const QString &channum)
 
         cmd["command"] = "TuneChannel";
         cmd["channum"] = channum;
+        cmd["value"]   = channum;
         cmd["inputid"] = GetInputID();
         cmd["sourceid"] = m_sourceId;
 
@@ -148,10 +148,20 @@ bool ExternalChannel::Tune(const QString &channum)
             {
                 uint recordid = prog->GetRecordingRuleID();
                 cmd["recordid"] = recordid;
+                cmd["title"] = prog->GetTitle();
+                cmd["subtitle"] = prog->GetSubtitle();
+                cmd["description"] = prog->GetDescription();
+                cmd["duration"] = prog->GetRecordingStartTime()
+                                  .secsTo(prog->GetRecordingEndTime());
+                cmd["programid"] = prog->GetProgramID();
+                cmd["seriesid"] = prog->GetSeriesID();
             }
+            delete prog;
         }
 
         uint     chanid           = 0;
+        QString  name;
+        QString  callsign;
         QString  tvformat;
         QString  modulation;
         QString  freqtable;
@@ -168,7 +178,9 @@ bool ExternalChannel::Tune(const QString &channum)
         bool     commfree         = false;
 
         if (!ChannelUtil::GetChannelData(m_sourceId, chanid, channum,
-                                         tvformat, modulation, freqtable, freqid,
+                                         name, callsign,
+                                         tvformat, modulation,
+                                         freqtable, freqid,
                                          finetune, frequency, dtv_si_std,
                                          mpeg_prog_num, atsc_major, atsc_minor,
                                          dvb_transportid, dvb_networkid,
@@ -180,6 +192,8 @@ bool ExternalChannel::Tune(const QString &channum)
         }
         else
         {
+            cmd["name"] = name;
+            cmd["callsign"] = callsign;
             cmd["chanid"] = chanid;
             cmd["freqid"] = freqid;
             cmd["atsc_major"] = atsc_major;
@@ -215,7 +229,6 @@ bool ExternalChannel::EnterPowerSavingMode(void)
 
 uint ExternalChannel::GetTuneStatus(void)
 {
-
     if (!m_backgroundTuning)
         return 3;
 
@@ -235,7 +248,9 @@ uint ExternalChannel::GetTuneStatus(void)
     else
     {
         if (result.startsWith("OK:InProgress"))
+        {
             ret = 1;
+        }
         else
         {
             ret = 3;

@@ -10,7 +10,8 @@
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythdbcon.h"
-#include "libmythbase/programtypes.h"       // for RecStatus
+#include "libmythbase/mythlogging.h"
+#include "libmythtv/recordingstatus.h"       // for RecStatus
 #include "libmythtv/tv_actions.h"       // for ACTION_CHANNELSEARCH
 #include "libmythtv/tv_play.h"
 #include "libmythui/mythmainwindow.h"
@@ -72,6 +73,7 @@ bool ProgFinder::Create()
     UIUtilW::Assign(this, m_help1Text, "help1text");
     UIUtilW::Assign(this, m_help2Text, "help2text");
     UIUtilW::Assign(this, m_searchText, "search");
+    UIUtilW::Assign(this, m_groupByText, "groupby");
 
     if (err)
     {
@@ -181,32 +183,29 @@ bool ProgFinder::keyPressEvent(QKeyEvent *event)
         const QString& action = actions[i];
         handled = true;
 
-        if (action == "EDIT")
+        if (action == "EDIT") {
             EditScheduled();
-        else if (action == "CUSTOMEDIT")
+        } else if (action == "CUSTOMEDIT") {
             EditCustom();
-        else if (action == "UPCOMING")
+        } else if (action == "UPCOMING") {
             ShowUpcoming();
-        else if (action == "PREVRECORDED")
+        } else if (action == "PREVRECORDED") {
             ShowPrevious();
-        else if (action == "DETAILS" || action == "INFO")
+        } else if (action == "DETAILS" || action == "INFO") {
             ShowDetails();
-        else if (action == "TOGGLERECORD")
+        } else if (action == "TOGGLERECORD") {
             QuickRecord();
-        else if (action == "GUIDE" || action == "4")
+        } else if (action == "GUIDE" || action == "4") {
             ShowGuide();
-        else if (action == ACTION_CHANNELSEARCH)
+        } else if (action == ACTION_CHANNELSEARCH) {
             ShowChannelSearch();
-        else if (action == "ESCAPE")
-        {
+        } else if (action == "ESCAPE") {
             // don't fade the screen if we are returning to the player
             if (m_player && m_allowEPG)
                 GetScreenStack()->PopScreen(this, false);
             else
                 GetScreenStack()->PopScreen(this, true);
-        }
-        else
-        {
+        } else {
             handled = false;
         }
     }
@@ -221,35 +220,36 @@ bool ProgFinder::keyPressEvent(QKeyEvent *event)
 
 void ProgFinder::ShowMenu(void)
 {
-    QString label = tr("Options");
+    auto *menu = new MythMenu(tr("Options"), this, "menu");
+
+    if (!m_searchStr.isEmpty())
+        menu->AddItem(tr("Clear Search"));
+    menu->AddItem(tr("Edit Search"));
+    if (GetFocusWidget() == m_timesList && m_timesList->GetCount() > 0)
+    {
+        auto *sortGroupMenu = new MythMenu(tr("Sort/Group Options"), this,
+                                           "sortgroupmenu");
+        AddGroupMenuItems(sortGroupMenu);
+        menu->AddItem(tr("Sort/Group"), nullptr, sortGroupMenu);
+        menu->AddItem(tr("Toggle Record"));
+        menu->AddItem(tr("Program Details"));
+        menu->AddItem(tr("Upcoming"));
+        menu->AddItem(tr("Previously Recorded"));
+        menu->AddItem(tr("Custom Edit"));
+        menu->AddItem(tr("Program Guide"));
+        menu->AddItem(tr("Channel Search"));
+    }
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-    auto *menuPopup = new MythDialogBox(label, popupStack, "menuPopup");
+    auto *menuPopup = new MythDialogBox(menu, popupStack, "menuPopup");
 
-    if (menuPopup->Create())
-    {
-        menuPopup->SetReturnEvent(this, "menu");
-
-        if (!m_searchStr.isEmpty())
-            menuPopup->AddButton(tr("Clear Search"));
-        menuPopup->AddButton(tr("Edit Search"));
-        if (GetFocusWidget() == m_timesList && m_timesList->GetCount() > 0)
-        {
-            menuPopup->AddButton(tr("Toggle Record"));
-            menuPopup->AddButton(tr("Program Details"));
-            menuPopup->AddButton(tr("Upcoming"));
-            menuPopup->AddButton(tr("Previously Recorded"));
-            menuPopup->AddButton(tr("Custom Edit"));
-            menuPopup->AddButton(tr("Program Guide"));
-            menuPopup->AddButton(tr("Channel Search"));
-        }
-
-        popupStack->AddScreen(menuPopup);
-    }
-    else
+    if (!menuPopup->Create())
     {
         delete menuPopup;
+        return;
     }
+
+    popupStack->AddScreen(menuPopup);
 }
 
 void ProgFinder::customEvent(QEvent *event)
@@ -262,7 +262,8 @@ void ProgFinder::customEvent(QEvent *event)
 
         const QString& message = me->Message();
 
-        if (message == "SCHEDULE_CHANGE")
+        if (message == "SCHEDULE_CHANGE"
+            || message == "GROUPBY_CHANGE")
         {
             if (GetFocusWidget() == m_timesList)
             {
@@ -275,7 +276,7 @@ void ProgFinder::customEvent(QEvent *event)
     }
     else if (event->type() == DialogCompletionEvent::kEventType)
     {
-        auto *dce = (DialogCompletionEvent*)(event);
+        auto *dce = (DialogCompletionEvent*)event;
 
         QString resultid   = dce->GetId();
         QString resulttext = dce->GetResultText();
@@ -520,8 +521,10 @@ void ProgFinder::updateShowList()
 void ProgFinder::selectShowData(QString progTitle, int newCurShow)
 {
     progTitle = m_showList->GetValue();
-
     QDateTime progStart = MythDate::current();
+    ProgGroupBy::Type groupBy = GetProgramListGroupBy();
+    if (m_groupByText)
+	m_groupByText->SetText(ProgGroupBy::toString(groupBy));
 
     MSqlBindings bindings;
     QString querystr = "WHERE program.title = :TITLE "
@@ -532,7 +535,7 @@ void ProgFinder::selectShowData(QString progTitle, int newCurShow)
     bindings[":ENDTIME"] = progStart.addSecs(50 - progStart.time().second());
 
     LoadFromScheduler(m_schedList);
-    LoadFromProgram(m_showData, querystr, bindings, m_schedList);
+    LoadFromProgram(m_showData, querystr, bindings, m_schedList, groupBy);
 
     updateTimesList();
 
@@ -683,19 +686,16 @@ bool ProgFinder::formatSelectedData(QString& data, int charNum)
     if (charNum == 29 || charNum == 10)
     {
         if ((data.startsWith("The T") && charNum == 29) ||
-            (data.startsWith("The A") && charNum == 10))
+            (data.startsWith("The A") && charNum == 10)) {
             data = data.mid(4) + ", The";
-        else if ((data.startsWith("A T") && charNum == 29) ||
-                 (data.startsWith("A A") && charNum == 10))
+        } else if ((data.startsWith("A T") && charNum == 29) ||
+                 (data.startsWith("A A") && charNum == 10)) {
             data = data.mid(2) + ", A";
-        else if (data.startsWith("An A") && charNum == 10)
+        } else if (data.startsWith("An A") && charNum == 10) {
              data = data.mid(3) + ", An";
-        else if (!data.startsWith("The ") && !data.startsWith("A "))
-        {
+        } else if (!data.startsWith("The ") && !data.startsWith("A ")) {
             // use as is
-        }
-        else
-        {
+        } else {
             // don't add
             retval = false;
         }
@@ -1092,4 +1092,4 @@ void SearchInputDialog::editChanged(void)
     }
 }
 
-/* vim: set expandtab tabstop=4 shiftwidth=4: */
+#include "moc_progfind.cpp"

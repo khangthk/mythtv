@@ -10,7 +10,6 @@
 
 // MythTV
 #include "libmythbase/mythdate.h"
-#include "libmythbase/mythcorecontext.h"
 #include "libmythmetadata/musicmetadata.h"
 #include "libmythmetadata/mythmetaexp.h"
 
@@ -27,7 +26,7 @@ class META_PUBLIC LyricsLine
     std::chrono::milliseconds m_time {0ms};
     QString m_lyric;
 
-    QString toString(bool syncronized)
+    QString toString(bool syncronized) const
     {
         if (syncronized)
             return formatTime() + m_lyric;
@@ -98,10 +97,11 @@ class META_PUBLIC LyricsData : public QObject
     void findLyrics(const QString &grabber);
     void save(void);
 
-    void customEvent(QEvent *event) override; // QObject
-
   signals:
     void statusChanged(LyricsData::Status status, const QString &message);
+
+  protected:
+    void customEvent(QEvent *event) override; // QObject
 
   private:
     void loadLyrics(const QString &xmlData);

@@ -17,7 +17,7 @@ class DTVSignalMonitor;
 class ASIChannel;
 class DeviceReadBuffer;
 
-enum ASIClockSource
+enum ASIClockSource : uint8_t
 {
     kASIInternalClock         = 0,
     kASIExternalClock         = 1,
@@ -25,7 +25,7 @@ enum ASIClockSource
     kASIExternalClock2        = 1,
 };
 
-enum ASIRXMode
+enum ASIRXMode : uint8_t
 {
     kASIRXRawMode                  = 0,
     kASIRXSyncOn188                = 1,
@@ -57,17 +57,17 @@ class ASIStreamHandler : public StreamHandler
     void SetClockSource(ASIClockSource cs);
     void SetRXMode(ASIRXMode m);
 
+    void PriorityEvent(int fd) override; // DeviceReaderCB
+
+  protected:
+    void run(void) override; // MThread
+    void SetRunningDesired(bool desired) override; // StreamHandler
+
   private:
     explicit ASIStreamHandler(const QString &device, int inputid);
 
     bool Open(void);
     void Close(void);
-
-    void run(void) override; // MThread
-
-    void PriorityEvent(int fd) override; // DeviceReaderCB
-
-    void SetRunningDesired(bool desired) override; // StreamHandler
 
   private:
     int               m_deviceNum    {-1};

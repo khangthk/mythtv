@@ -46,8 +46,9 @@
 #include <thread>
 
 // MythTV headers
-#include "libmythbase/mythconfig.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdb.h"
+#include "libmythbase/mythlogging.h"
 #include "cardutil.h"
 #include "channelutil.h"
 #include "dvbtypes.h"
@@ -684,7 +685,7 @@ bool DVBChannel::CheckCodeRate(DTVCodeRate rate) const
 {
     const uint64_t caps = m_capabilities;
     return
-        ((DTVCodeRate::kFECNone == rate))                            ||
+        (DTVCodeRate::kFECNone == rate)                           ||
         ((DTVCodeRate::kFEC_1_2 == rate) && ((caps & FE_CAN_FEC_1_2) != 0U)) ||
         ((DTVCodeRate::kFEC_2_3 == rate) && ((caps & FE_CAN_FEC_2_3) != 0U)) ||
         ((DTVCodeRate::kFEC_3_4 == rate) && ((caps & FE_CAN_FEC_3_4) != 0U)) ||
@@ -706,11 +707,9 @@ bool DVBChannel::CheckModulation(DTVModulation modulation) const
 
     return
         ((DTVModulation::kModulationQPSK    == m) && ((c & FE_CAN_QPSK) != 0U))     ||
-#if HAVE_FE_CAN_2G_MODULATION
         ((DTVModulation::kModulation8PSK    == m) && ((c & FE_CAN_2G_MODULATION) != 0U)) ||
         ((DTVModulation::kModulation16APSK  == m) && ((c & FE_CAN_2G_MODULATION) != 0U)) ||
         ((DTVModulation::kModulation32APSK  == m) && ((c & FE_CAN_2G_MODULATION) != 0U)) ||
-#endif //HAVE_FE_CAN_2G_MODULATION
         ((DTVModulation::kModulationQAM16   == m) && ((c & FE_CAN_QAM_16) != 0U))   ||
         ((DTVModulation::kModulationQAM32   == m) && ((c & FE_CAN_QAM_32) != 0U))   ||
         ((DTVModulation::kModulationQAM64   == m) && ((c & FE_CAN_QAM_64) != 0U))   ||
@@ -817,8 +816,8 @@ bool DVBChannel::Tune(const DTVMultiplex &tuning,
     // DVB-S/S2 is in kHz, other DVB is in Hz
     bool is_dvbs = ((DTVTunerType::kTunerTypeDVBS1 == m_tunerType) ||
                     (DTVTunerType::kTunerTypeDVBS2 == m_tunerType));
-    int     freq_mult = (is_dvbs) ? 1 : 1000;
-    QString suffix    = (is_dvbs) ? "kHz" : "Hz";
+    int     freq_mult = is_dvbs ? 1 : 1000;
+    QString suffix    = is_dvbs ? "kHz" : "Hz";
 
     if (reset || !m_prevTuning.IsEqual(m_tunerType, tuning, 500 * freq_mult))
     {
@@ -930,8 +929,10 @@ bool DVBChannel::Tune(const DTVMultiplex &tuning,
 
             int res = ioctl(m_fdFrontend, FE_SET_PROPERTY, cmds);
 
+            // C library structure. NOLINTBEGIN(cppcoreguidelines-no-malloc)
             free(cmds->props);
             free(cmds);
+            // NOLINTEND(cppcoreguidelines-no-malloc)
 
             if (res < 0)
             {
@@ -1137,6 +1138,7 @@ int DVBChannel::GetChanID() const
         if (idlist.count() > 1)
         {
             QStringList sl;
+            sl.reserve(idlist.size());
             for (auto chanid : idlist)
             {
                 sl.append(QString::number(chanid));
@@ -1590,17 +1592,17 @@ bool DVBChannel::WaitForBackend(std::chrono::milliseconds timeout_ms)
     auto seconds = duration_cast<std::chrono::seconds>(timeout_ms);
     auto usecs = duration_cast<std::chrono::microseconds>(timeout_ms) - seconds;
     struct timeval select_timeout = {
-         static_cast<typeof(select_timeout.tv_sec)>(seconds.count()),
-         static_cast<typeof(select_timeout.tv_usec)>(usecs.count())};
+         .tv_sec=static_cast<time_t>(seconds.count()),
+         .tv_usec=static_cast<suseconds_t>(usecs.count())};
     fd_set fd_select_set;
     FD_ZERO(    &fd_select_set); // NOLINT(readability-isolate-declaration)
     FD_SET (fd, &fd_select_set);
 
     // Try to wait for some output like an event, unfortunately
     // this fails on several DVB cards, so we have a timeout.
-    int ret = 0;
-    do ret = select(fd+1, &fd_select_set, nullptr, nullptr, &select_timeout);
-    while ((-1 == ret) && (EINTR == errno));
+    int ret = select(fd+1, &fd_select_set, nullptr, nullptr, &select_timeout);
+    while ((-1 == ret) && (EINTR == errno))
+        ret = select(fd+1, &fd_select_set, nullptr, nullptr, &select_timeout);
 
     if (-1 == ret)
     {
@@ -1748,6 +1750,7 @@ static struct dtv_properties *dtvmultiplex_to_dtvproperties(uint inputId,
              tuning.m_modSys.toString(),
              current_sys.toString()));
 
+    // C library structure. NOLINTBEGIN(cppcoreguidelines-no-malloc)
     auto *cmdseq = (struct dtv_properties*) calloc(1, sizeof(struct dtv_properties));
     if (!cmdseq)
         return nullptr;
@@ -1758,6 +1761,7 @@ static struct dtv_properties *dtvmultiplex_to_dtvproperties(uint inputId,
         free(cmdseq);
         return nullptr;
     }
+    // NOLINTEND(cppcoreguidelines-no-malloc)
 
     // 20201117 TODO do this only for cx24116 but not for all DVB-S2 demods
     //

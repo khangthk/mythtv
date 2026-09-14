@@ -8,10 +8,15 @@
 
 // Qt
 #include <QtGlobal>
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QMutexLocker>
 #include <QFile>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtProcessorDetection>
+#endif
 
 // MythTV
+#include "mythaverror.h"
 #include "libmythbase/mythconfig.h"
 #include "libmythbase/mythlogging.h"
 #include "mythdeinterlacer.h"
@@ -288,23 +293,20 @@ AVCodecContext *MythCodecMap::GetCodecContext(const AVStream* Stream,
                                               const AVCodec* Codec,
                                               bool NullCodec)
 {
+    if (Stream == nullptr || Stream->codecpar == nullptr)
+        return nullptr;
     QMutexLocker lock(&m_mapLock);
     AVCodecContext* avctx = m_streamMap.value(Stream, nullptr);
-    if (!avctx)
+    if (avctx == nullptr)
     {
-        if (Stream == nullptr || Stream->codecpar == nullptr)
-            return nullptr;
-
         if (NullCodec)
         {
             Codec = nullptr;
         }
-        else
+        else if (Codec == nullptr)
         {
-            if (!Codec)
-                Codec = avcodec_find_decoder(Stream->codecpar->codec_id);
-
-            if (!Codec)
+            Codec = avcodec_find_decoder(Stream->codecpar->codec_id);
+            if (Codec == nullptr)
             {
                 LOG(VB_GENERAL, LOG_WARNING, QString("avcodec_find_decoder fail for %1")
                     .arg(Stream->codecpar->codec_id));
@@ -312,10 +314,10 @@ AVCodecContext *MythCodecMap::GetCodecContext(const AVStream* Stream,
             }
         }
         avctx = avcodec_alloc_context3(Codec);
-        if (avcodec_parameters_to_context(avctx, Stream->codecpar) < 0)
+        if (avctx != nullptr && avcodec_parameters_to_context(avctx, Stream->codecpar) < 0)
             avcodec_free_context(&avctx);
 
-        if (avctx)
+        if (avctx != nullptr)
         {
             avctx->pkt_timebase = Stream->time_base;
             m_streamMap.insert(Stream, avctx);
@@ -384,7 +386,8 @@ MythStreamInfoList::MythStreamInfoList(const QString& filename)
     if (m_errorCode==0)
     {
         ctx = avformat_alloc_context();
-        m_errorCode = avformat_open_input(&ctx, filename.toUtf8(), fmt, nullptr);
+        m_errorCode = avformat_open_input(&ctx, filename.toUtf8().constData(),
+                                          fmt, nullptr);
     }
     if (m_errorCode==0)
         m_errorCode = avformat_find_stream_info(ctx, nullptr);
@@ -420,7 +423,12 @@ MythStreamInfoList::MythStreamInfoList(const QString& filename)
             }
             if (desc != nullptr)
                 info.m_codecName = desc->name;
-            info.m_duration  = stream->duration * stream->time_base.num / stream->time_base.den;
+            if (stream->duration != AV_NOPTS_VALUE)
+                info.m_duration  = stream->duration * stream->time_base.num / stream->time_base.den;
+            else if (ctx->duration != AV_NOPTS_VALUE)
+                info.m_duration  = ctx->duration / AV_TIME_BASE;
+            else
+                info.m_duration  = 0;
             if (info.m_codecType == 'V')
             {
                 if (codecpar != nullptr)
@@ -473,11 +481,7 @@ MythStreamInfoList::MythStreamInfoList(const QString& filename)
                 m_errorMsg = "File could not be opened";
                 break;
             default:
-                std::string errbuf;
-                if (av_strerror_stdstring(m_errorCode, errbuf) == 0)
-                    m_errorMsg = QString::fromStdString(errbuf);
-                else
-                    m_errorMsg = "UNKNOWN";
+                m_errorMsg = QString::fromStdString(av_make_error_stdstring_unknown(m_errorCode));
         }
         LOG(VB_GENERAL, LOG_ERR,
             QString("MythStreamInfoList failed for %1. Error code:%2 Message:%3")

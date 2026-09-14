@@ -4,8 +4,8 @@
 #include <QNetworkInterface>
 
 // MythTV
-#include "libmyth/mythcontext.h"
 #include "libmythbase/mythdb.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythtv/channelsettings.h" // for ChannelTVFormat::GetFormats()
 #include "libmythtv/frequencies.h"
 
@@ -477,6 +477,8 @@ bool parse_dom(MythSettingList &settings, const QDomElement &element,
 #define LOC QString("parse_dom(%1@~%2), error: ") \
             .arg(filename).arg(e.lineNumber())
 
+    QStringList data_list;
+    QStringList display_list;
     bool mFoundGroup = false;
 
     QDomNode n = element.firstChild();
@@ -542,8 +544,8 @@ bool parse_dom(MythSettingList &settings, const QDomElement &element,
                 return false;
             }
 
-            QStringList data_list;
-            QStringList display_list;
+            data_list.clear();
+            display_list.clear();
             if ((MythSetting::kComboBox == dtype) ||
                 (MythSetting::kSelect   == dtype))
             {
@@ -656,6 +658,7 @@ bool parse_settings(MythSettingList &settings, const QString &filename,
         return false;
     }
 
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     QString errorMsg;
     int errorLine = 0;
     int errorColumn = 0;
@@ -669,6 +672,19 @@ bool parse_settings(MythSettingList &settings, const QString &filename,
         f.close();
         return false;
     }
+#else
+    auto parseResult = doc.setContent(&f);
+    if (!parseResult)
+    {
+        LOG(VB_GENERAL, LOG_ERR, QString("parse_settings: ") +
+            QString("Parsing: %1 at line: %2 column: %3")
+                .arg(filename).arg(parseResult.errorLine)
+                .arg(parseResult.errorColumn) +
+            QString("\n\t\t\t%1").arg(parseResult.errorMessage));
+        f.close();
+        return false;
+    }
+#endif
     f.close();
 
     settings.clear();

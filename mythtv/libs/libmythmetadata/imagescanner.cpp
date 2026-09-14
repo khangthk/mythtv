@@ -1,5 +1,7 @@
 #include "imagescanner.h"
 
+#include <thread>
+
 #include "libmythbase/mythcorecontext.h"  // for gCoreContext
 #include "libmythbase/mythlogging.h"
 
@@ -129,8 +131,11 @@ void ImageScanThread<DBFS>::run()
 
     setPriority(QThread::LowPriority);
 
-    do
+    bool at_least_once { true };
+    while (ClearsPending() || at_least_once)
     {
+        at_least_once = false;
+
         // Process all clears before scanning
         while (ClearsPending())
         {
@@ -179,8 +184,13 @@ void ImageScanThread<DBFS>::run()
             StringMap::const_iterator i = paths.constBegin();
             while (i != paths.constEnd() && IsScanning())
             {
+                LOG(VB_FILE, LOG_INFO, QString("Synchronizing %1").arg(i.value()));
+                QElapsedTimer timer;
+                timer.start();
                 SyncSubTree(QFileInfo(i.value()), GALLERY_DB_ID, i.key(), i.value());
                 ++i;
+                LOG(VB_FILE, LOG_INFO, QString("Synchronize took %2 seconds")
+                    .arg(timer.elapsed()/1000));
             }
 
             // Release thumb generator asap
@@ -213,7 +223,7 @@ void ImageScanThread<DBFS>::run()
             // For initial scans pause briefly to give thumb generator a headstart
             // before being deluged by client requests
             if (firstScan)
-                usleep(1s);
+                std::this_thread::sleep_for(1s);
 
             // Notify clients of completion with removed & changed images
             m_dbfs.Notify("IMAGE_DB_CHANGED", mesg);
@@ -221,7 +231,6 @@ void ImageScanThread<DBFS>::run()
             ChangeState(false);
         }
     }
-    while (ClearsPending());
 
     RunEpilog();
 }
@@ -487,7 +496,7 @@ void ImageScanThread<DBFS>::SyncFile(const QFileInfo &fileInfo, int devId,
                          im->m_comment, im->m_date, fileOrient);
 
         // Reset file orientation, retaining existing setting
-        int currentOrient = Orientation(dbIm->m_orientation).GetCurrent(false);
+        int currentOrient = Orientation(dbIm->m_orientation).GetCurrent();
         im->m_orientation = Orientation(currentOrient, fileOrient).Composite();
 
         // Remove it from removed list
@@ -592,8 +601,16 @@ void ImageScanThread<DBFS>::CountFiles(const QStringList &paths)
     for (const auto& sgDir : std::as_const(paths))
     {
         // Ignore missing dirs
-        if (dir.cd(sgDir))
-            CountTree(dir);
+        if (!dir.cd(sgDir))
+            continue;
+        LOG(VB_FILE, LOG_INFO, QString("Counting %1").arg(dir.absolutePath()));
+        int startCount {m_progressTotalCount};
+        QElapsedTimer timer;
+        timer.start();
+        CountTree(dir);
+        LOG(VB_FILE, LOG_INFO, QString("Counted %1 files in %2 seconds")
+            .arg(m_progressTotalCount - startCount)
+            .arg(timer.elapsed()/1000));
     }
     // 0 signifies a scan start
     Broadcast(0);

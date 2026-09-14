@@ -1,8 +1,8 @@
 // Qt
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QCryptographicHash>
 
 // MythTV
-#include "mythlogging.h"
 #include "mythdate.h"
 #include "http/mythhttpdata.h"
 #include "http/mythhttpfile.h"
@@ -113,7 +113,11 @@ void MythHTTPCache::PreConditionCheck(const HTTPResponse& Response)
         auto ParseModified = [](const QString& Modified)
         {
             QDateTime time = QDateTime::fromString(Modified, Qt::RFC2822Date);
-            time.setTimeSpec(Qt::OffsetFromUTC);
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
+            time.setTimeSpec(Qt::UTC);
+#else
+            time.setTimeZone(QTimeZone(QTimeZone::UTC));
+#endif
             return time;
         };
 

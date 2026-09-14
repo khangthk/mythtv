@@ -1,7 +1,3 @@
-// Std C headers
-#include <cstdlib>
-#include <cerrno>
-
 // POSIX headers
 #include <unistd.h>
 #include <fcntl.h>
@@ -9,8 +5,10 @@
 #include <sys/types.h>
 
 // C++ headers
-#include <iostream>
 #include <algorithm>
+#include <cerrno>
+#include <cstdlib>
+#include <iostream>
 
 // Qt headers
 #include <QCoreApplication>
@@ -18,13 +16,14 @@
 // MythTV headers
 #include "libmythbase/compat.h"
 #include "libmythbase/exitcodes.h"
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
 
-#ifdef USING_OSX_FIREWIRE
+#if CONFIG_FIREWIRE_OSX
 #include "darwinfirewiredevice.h"
 #endif
-#ifdef USING_LINUX_FIREWIRE
+#if CONFIG_FIREWIRE_LINUX
 #include "linuxfirewiredevice.h"
 #endif
 #include "firewirechannel.h"
@@ -102,7 +101,7 @@ bool ChannelBase::Init(QString &startchannel, bool setchan)
             m_channels, m_channels[0].m_chanId,
             mplexid_restriction, chanid_restriction, CHANNEL_DIRECTION_UP);
 
-        auto cit = find(m_channels.begin(), m_channels.end(), chanid);
+        auto cit = std::ranges::find(m_channels, chanid, &ChannelInfo::m_chanId);
 
         if ((chanid != 0U) && (cit != m_channels.end()))
         {
@@ -155,6 +154,8 @@ bool ChannelBase::IsTunable(const QString &channum) const
     }
 
     // Fetch tuning data from the database.
+    QString name;
+    QString callsign;
     QString tvformat;
     QString modulation;
     QString freqtable;
@@ -172,6 +173,7 @@ bool ChannelBase::IsTunable(const QString &channum) const
     bool commfree = false;
 
     if (!ChannelUtil::GetChannelData(m_sourceId, chanid, channum,
+                                     name, callsign,
                                      tvformat, modulation, freqtable, freqid,
                                      finetune, frequency, dtv_si_std,
                                      mpeg_prog_num, atsc_major, atsc_minor,
@@ -365,10 +367,11 @@ void ChannelBase::HandleScript(const QString &freqid)
     }
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 bool ChannelBase::ChangeInternalChannel([[maybe_unused]] const QString &freqid,
                                         [[maybe_unused]] uint inputid) const
 {
-#ifdef USING_FIREWIRE
+#if CONFIG_FIREWIRE
     FirewireDevice *device = nullptr;
     QString fwnode = CardUtil::GetFirewireChangerNode(inputid);
     uint64_t guid = string_to_guid(fwnode);
@@ -378,14 +381,13 @@ bool ChannelBase::ChangeInternalChannel([[maybe_unused]] const QString &freqid,
             "on inputid %2, GUID %3 (%4)").arg(freqid).arg(inputid)
             .arg(fwnode, fwmodel));
 
-#ifdef USING_LINUX_FIREWIRE
-    device = new LinuxFirewireDevice(
-        guid, 0, 100, true);
-#endif // USING_LINUX_FIREWIRE
+#if CONFIG_FIREWIRE_LINUX
+    device = new LinuxFirewireDevice(guid, 0, 100, true);
+#endif // CONFIG_FIREWIRE_LINUX
 
-#ifdef USING_OSX_FIREWIRE
+#if CONFIG_FIREWIRE_OSX
     device = new DarwinFirewireDevice(guid, 0, 100);
-#endif // USING_OSX_FIREWIRE
+#endif // CONFIG_FIREWIRE_OSX
 
     if (!device)
         return false;
@@ -716,26 +718,26 @@ ChannelBase *ChannelBase::CreateChannel(
     ChannelBase *channel = nullptr;
     if (genOpt.m_inputType == "DVB")
     {
-#ifdef USING_DVB
+#if CONFIG_DVB
         channel = new DVBChannel(genOpt.m_videoDev, tvrec);
         auto *dvbchannel = dynamic_cast<DVBChannel*>(channel);
         if (dvbchannel != nullptr)
             dvbchannel->SetSlowTuning(dvbOpt.m_dvbTuningDelay);
 #endif
     }
+#if CONFIG_FIREWIRE
     else if (genOpt.m_inputType == "FIREWIRE")
     {
-#ifdef USING_FIREWIRE
         channel = new FirewireChannel(tvrec, genOpt.m_videoDev, fwOpt);
-#endif
     }
-#ifdef USING_HDHOMERUN
+#endif
+#if CONFIG_HDHOMERUN
     else if (genOpt.m_inputType == "HDHOMERUN")
     {
         channel = new HDHRChannel(tvrec, genOpt.m_videoDev);
     }
 #endif
-#ifdef USING_SATIP
+#if CONFIG_SATIP
     else if (genOpt.m_inputType == "SATIP")
     {
         channel = new SatIPChannel(tvrec, genOpt.m_videoDev);
@@ -749,20 +751,20 @@ ChannelBase *ChannelBase::CreateChannel(
         channel = new DummyChannel(tvrec);
         rbFileExt = "mpg";
     }
-#if defined(USING_IPTV) || defined(USING_VBOX)
+#if CONFIG_IPTV || CONFIG_VBOX
     else if ((genOpt.m_inputType == "FREEBOX") || // IPTV
              (genOpt.m_inputType == "VBOX"))
     {
         channel = new IPTVChannel(tvrec, genOpt.m_videoDev);
     }
 #endif
-#ifdef USING_ASI
+#if CONFIG_ASI
     else if (genOpt.m_inputType == "ASI")
     {
         channel = new ASIChannel(tvrec, genOpt.m_videoDev);
     }
 #endif
-#ifdef USING_CETON
+#if CONFIG_CETON
     else if (genOpt.m_inputType == "CETON")
     {
         channel = new CetonChannel(tvrec, genOpt.m_videoDev);
@@ -770,7 +772,7 @@ ChannelBase *ChannelBase::CreateChannel(
 #endif
     else if (genOpt.m_inputType == "V4L2ENC")
     {
-#ifdef USING_V4L2
+#if CONFIG_V4L2
         channel = new V4LChannel(tvrec, genOpt.m_videoDev);
 #endif
         if (genOpt.m_inputType == "MPEG")
@@ -778,7 +780,7 @@ ChannelBase *ChannelBase::CreateChannel(
     }
     else if (CardUtil::IsV4L(genOpt.m_inputType))
     {
-#ifdef USING_V4L2
+#if CONFIG_V4L2
         channel = new V4LChannel(tvrec, genOpt.m_videoDev);
 #endif
         if (genOpt.m_inputType != "HDPVR")

@@ -2,10 +2,8 @@
 
 #include <QtGlobal> // before taglib includes
 
-#include <apetag.h>
-#include <apeitem.h>
-
-#include "libmyth/mythcontext.h"
+#include <taglib/apetag.h>
+#include <taglib/apeitem.h>
 
 // libmythmetadata
 #include "metaiowavpack.h"
@@ -80,7 +78,7 @@ bool MetaIOWavPack::write(const QString &filename, MusicMetadata* mdata)
 
     delete wpfile;
 
-    return (result);
+    return result;
 }
 
 /*!

@@ -3,6 +3,7 @@
 
 // MythTV
 #include <libmythbase/mythcorecontext.h>
+#include <libmythbase/mythlogging.h>
 
 #include "visualizationsettings.h"
 
@@ -76,3 +77,5 @@ void VisualizationSettings::slotSave(void)
 
     Close();
 }
+
+#include "moc_visualizationsettings.cpp"

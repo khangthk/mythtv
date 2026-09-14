@@ -16,8 +16,8 @@
 #define LOC QString("HLSSH[%1](%2): ").arg(m_inputId).arg(m_device)
 
 // BUFFER_SIZE is a multiple of TS_SIZE
-static constexpr qint64 TS_SIZE     { 188           };
-static constexpr qint64 BUFFER_SIZE { 512 * TS_SIZE };
+static constexpr qint64 TS_SIZE     { 188 };
+static constexpr qint64 BUFFER_SIZE { 2048 * TS_SIZE };
 
 QMap<QString,HLSStreamHandler*>  HLSStreamHandler::s_hlshandlers;
 QMap<QString,uint>               HLSStreamHandler::s_hlshandlers_refcnt;
@@ -100,14 +100,14 @@ void HLSStreamHandler::Return(HLSStreamHandler* & ref, int inputid)
 HLSStreamHandler::HLSStreamHandler(const IPTVTuningData& tuning, int inputid)
     : IPTVStreamHandler(tuning, inputid)
 {
-    LOG(VB_GENERAL, LOG_INFO, LOC + "ctor");
-    m_hls        = new HLSReader();
+    LOG(VB_RECORD, LOG_DEBUG, LOC + "ctor");
+    m_hls        = new HLSReader(m_inputId);
     m_readbuffer = new uint8_t[BUFFER_SIZE];
 }
 
 HLSStreamHandler::~HLSStreamHandler(void)
 {
-    LOG(VB_CHANNEL, LOG_INFO, LOC + "dtor");
+    LOG(VB_RECORD, LOG_DEBUG, LOC + "dtor");
     Stop();
     delete m_hls;
     delete[] m_readbuffer;
@@ -122,7 +122,7 @@ void HLSStreamHandler::run(void)
     int nil_cnt = 0;
     std::chrono::milliseconds open_sleep = 500ms;
 
-    LOG(VB_GENERAL, LOG_INFO, LOC + "run() -- begin");
+    LOG(VB_RECORD, LOG_INFO, LOC + "run() -- begin");
 
     SetRunning(true, false, false);
 
@@ -181,7 +181,7 @@ void HLSStreamHandler::run(void)
         {
             LOG(VB_RECORD, LOG_INFO, LOC +
                 QString("Packet not starting with SYNC Byte (got 0x%1)")
-                .arg((char)m_readbuffer[0], 2, 16, QLatin1Char('0')));
+                .arg(static_cast<uint>(m_readbuffer[0]), 2, 16, QLatin1Char('0')));
             continue;
         }
 
@@ -203,7 +203,9 @@ void HLSStreamHandler::run(void)
         }
 
         if (m_hls->IsThrottled())
+        {
             std::this_thread::sleep_for(1s);
+        }
         else if (size < BUFFER_SIZE)
         {
             LOG(VB_RECORD, LOG_DEBUG, LOC +
@@ -223,5 +225,5 @@ void HLSStreamHandler::run(void)
     SetRunning(false, false, false);
     RunEpilog();
 
-    LOG(VB_GENERAL, LOG_INFO, LOC + "run() -- done");
+    LOG(VB_RECORD, LOG_DEBUG, LOC + "run() -- done");
 }

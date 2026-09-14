@@ -58,7 +58,6 @@ class DTVRecorder :
     MPEGStreamData *GetStreamData(void) const { return m_streamData; }
 
     void Reset(void) override; // RecorderBase
-    void ClearStatistics(void) override; // RecorderBase
     RecordingQuality *GetRecordingQuality(const RecordingInfo *r) const override; // RecorderBase
 
     // MPEG Stream Listener
@@ -91,9 +90,13 @@ class DTVRecorder :
     // Common audio/visual processing
     bool ProcessAVTSPacket(const TSPacket &tspacket);
 
+    // MPEG2 PS support (Hauppauge PVR-x50/PVR-500)
+    void FindPSKeyFrames(const uint8_t *buffer, uint len) override; // PSStreamListener
+
   protected:
     virtual void InitStreamData(void);
 
+    void ClearStatistics(void) override; // RecorderBase
     void FinishRecording(void) override; // RecorderBase
     void ResetForNewFile(void) override; // RecorderBase
 
@@ -112,9 +115,6 @@ class DTVRecorder :
     // MPEG4 AVC / H.264 TS support
     bool FindH2645Keyframes(const TSPacket* tspacket);
     void HandleH2645Keyframe(void);
-
-    // MPEG2 PS support (Hauppauge PVR-x50/PVR-500)
-    void FindPSKeyFrames(const uint8_t *buffer, uint len) override; // PSStreamListener
 
     // For handling other (non audio/video) packets
     bool FindOtherKeyframes(const TSPacket *tspacket);
@@ -194,12 +194,18 @@ class DTVRecorder :
     mutable QAtomicInt       m_continuityErrorCount       {0};
     unsigned long long       m_framesSeenCount            {0};
     unsigned long long       m_framesWrittenCount         {0};
-    double                   m_totalDuration              {0.0}; // usec
-    // Calculate m_total_duration as
-    // m_td_base + (m_td_tick_count * m_td_tick_framerate / 2)
+    /// @brief Total milliseconds that have passed since the start of the recording.
+    double                   m_totalDuration              {0.0};
+    /// @brief Milliseconds from the start to m_tdTickCount = 0.
     double                   m_tdBase                     {0.0};
+    /** @brief Count of the number of equivalent interlaced fields that have passed
+               since m_tdBase.
+
+    @note This needs to be divied by 2 to get the number of @e frames corresponding to
+          m_tdTickFramerate.
+    */
     uint64_t                 m_tdTickCount                {0};
-    FrameRate                m_tdTickFramerate            {0};
+    MythAVRational           m_tdTickFramerate            {0};
     SCAN_t                   m_scanType                   {SCAN_t::UNKNOWN_SCAN};
 
     // Music Choice

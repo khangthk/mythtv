@@ -44,10 +44,7 @@
 #include "goom_core.h"
 #include "goom_tools.h"
 
-
-static inline long LRAND()      { return static_cast<long>( RAND() & 0x7fffffff); }
-static inline int  NRAND(int n) { return static_cast<int>( LRAND() % n ); }
-static constexpr double MAXRAND { 2147483648.0 }; /* unsigned 1<<31 as a * * * * float */
+#include "libmythbase/mythrandom.h"
 
 /*****************************************************/
 
@@ -86,33 +83,44 @@ using SimiData = std::array<SIMI,5 * MAX_SIMI>;
 struct Fractal_Struct
 {
 
-	size_t   m_nbSimi;
-	SimiData m_components;
-	int     m_depth, m_col;
-	int     m_count, m_speed;
-	int     m_width, m_height, m_lx, m_ly;
-	DBL     m_rMean, m_drMean, m_dr2Mean;
-	int     m_curPt, m_maxPt;
+	size_t   m_nbSimi     { 0 };
+	SimiData m_components {};
+	int     m_depth       { 0 };
+	int     m_col         { 0 };
+	int     m_count       { 0 };
+	int     m_speed       { 6 };
+	int     m_width       { 0 };
+	int     m_height      { 0 };
+	int     m_lx          { 0 };
+	int     m_ly          { 0 };
+	DBL     m_rMean       { 0.0 };
+	DBL     m_drMean      { 0.0 };
+	DBL     m_dr2Mean     { 0.0 };
+	int     m_curPt       { 0 };
+	int     m_maxPt       { 0 };
 
-	IFSPoint *m_buffer1, *m_buffer2;
+	std::vector<IFSPoint> m_buffer1;
+	std::vector<IFSPoint> m_buffer2;
 //      Pixmap      dbuf;
 //      GC          dbuf_gc;
 };
 
-static FRACTAL *Root = (FRACTAL *) nullptr, *Cur_F;
+static FRACTAL *Root = nullptr;
+static FRACTAL *Cur_F;
 
 /* Used by the Trace recursive method */
 IFSPoint *Buf;
 static int Cur_Pt;
 
 /*****************************************************/
+static constexpr double MAXRAND { 2147483648.0 }; /* unsigned 1<<31 as a * * * * float */
 
 static  DBL
 Gauss_Rand (DBL c, DBL A, DBL S)
 {
-	DBL y = (DBL) LRAND () / MAXRAND;
+	DBL y = static_cast<double>(MythRandom(0, (1U << 31) - 1)) / MAXRAND;
 	y = A * (1.0 - exp (-y * y * S)) / (1.0 - exp (-S));
-	if (NRAND (2))
+	if (rand_bool())
 		return (c + y);
 	return (c - y);
 }
@@ -120,7 +128,7 @@ Gauss_Rand (DBL c, DBL A, DBL S)
 static  DBL
 Half_Gauss_Rand (DBL c, DBL A, DBL S)
 {
-	DBL y = (DBL) LRAND () / MAXRAND;
+	DBL y = static_cast<double>(MythRandom(0, (1U << 31) - 1)) / MAXRAND;
 	y = A * (1.0 - exp (-y * y * S)) / (1.0 - exp (-S));
 	return (c + y);
 }
@@ -143,22 +151,10 @@ Random_Simis (FRACTAL * F, SimiData &simi_set, int offset, int count)
 static void
 free_ifs_buffers (FRACTAL * Fractal)
 {
-	if (Fractal->m_buffer1 != nullptr) {
-		free ((void *) Fractal->m_buffer1);
-		Fractal->m_buffer1 = (IFSPoint *) nullptr;
-	}
-	if (Fractal->m_buffer2 != nullptr) {
-		free ((void *) Fractal->m_buffer2);
-		Fractal->m_buffer2 = (IFSPoint *) nullptr;
-	}
+	Fractal->m_buffer1.clear();
+	Fractal->m_buffer2.clear();
 }
 
-
-static void
-free_ifs (FRACTAL * Fractal)
-{
-	free_ifs_buffers (Fractal);
-}
 
 /***************************************************************/
 
@@ -168,11 +164,7 @@ init_ifs (int width, int height)
 //      printf ("initing ifs\n");
 
 	if (Root == nullptr) {
-		Root = (FRACTAL *) malloc (sizeof (FRACTAL));
-		if (Root == nullptr)
-			return;
-		Root->m_buffer1 = (IFSPoint *) nullptr;
-		Root->m_buffer2 = (IFSPoint *) nullptr;
+		Root = new FRACTAL;
 	}
 	FRACTAL *Fractal = Root;
 
@@ -180,7 +172,7 @@ init_ifs (int width, int height)
 	free_ifs_buffers (Fractal);
 //      fprintf (stderr,"--ifs ok\n");
 
-	int i = (NRAND (4)) + 2;					/* Number of centers */
+	int i = MythRandomInt(2, 5);					/* Number of centers */
 	switch (i) {
 	case 3:
 		Fractal->m_depth = MAX_DEPTH_3;
@@ -217,16 +209,8 @@ init_ifs (int width, int height)
 	for (i = 0; i <= Fractal->m_depth + 2; ++i)
 		Fractal->m_maxPt *= Fractal->m_nbSimi;
 
-	Fractal->m_buffer1 = (IFSPoint *) calloc (Fractal->m_maxPt, sizeof (IFSPoint));
-	if (Fractal->m_buffer1 == nullptr) {
-		free_ifs (Fractal);
-		return;
-	}
-	Fractal->m_buffer2 = (IFSPoint *) calloc (Fractal->m_maxPt, sizeof (IFSPoint));
-	if (Fractal->m_buffer2 == nullptr) {
-		free_ifs (Fractal);
-		return;
-	}
+	Fractal->m_buffer1.resize(Fractal->m_maxPt);
+	Fractal->m_buffer2.resize(Fractal->m_maxPt);
 
 //      printf ("--ifs setting params\n");
 	Fractal->m_speed = 6;
@@ -236,7 +220,7 @@ init_ifs (int width, int height)
 	Fractal->m_count = 0;
 	Fractal->m_lx = (Fractal->m_width - 1) / 2;
 	Fractal->m_ly = (Fractal->m_height - 1) / 2;
-	Fractal->m_col = goom_rand () % (width * height);	/* modif by JeKo */
+	Fractal->m_col = MythRandomInt(0, (width * height) - 1);	/* modif by JeKo */
 
 	Random_Simis (Fractal, Fractal->m_components, 0, 5 * MAX_SIMI);
 
@@ -300,9 +284,9 @@ Transform (SIMI * Simi, F_PT xo, F_PT yo, F_PT * x, F_PT * y)
 	yy = (yy * Simi->m_fR2) / UNIT;
 
 	*x =
-		((xo * Simi->m_fCt - yo * Simi->m_fSt + xx * Simi->m_fCt2 - yy * Simi->m_fSt2) / UNIT ) + Simi->m_fCx;
+		(((xo * Simi->m_fCt) - (yo * Simi->m_fSt) + (xx * Simi->m_fCt2) - (yy * Simi->m_fSt2)) / UNIT ) + Simi->m_fCx;
 	*y =
-		((xo * Simi->m_fSt + yo * Simi->m_fCt + xx * Simi->m_fSt2 + yy * Simi->m_fCt2) / UNIT ) + Simi->m_fCy;
+		(((xo * Simi->m_fSt) + (yo * Simi->m_fCt) + (xx * Simi->m_fSt2) + (yy * Simi->m_fCt2)) / UNIT ) + Simi->m_fCy;
 }
 
 /***************************************************************/
@@ -355,7 +339,7 @@ Draw_Fractal ( void /* ModeInfo * mi */ )
 
 	Cur_Pt = 0;
 	Cur_F = F;
-	Buf = F->m_buffer2;
+	Buf = F->m_buffer2.data();
 	for (Cur = (F->m_components).data(), i = F->m_nbSimi; i; --i, Cur++) {
 		F_PT xo = Cur->m_fCx;
 		F_PT yo = Cur->m_fCy;
@@ -401,9 +385,7 @@ Draw_Fractal ( void /* ModeInfo * mi */ )
 */
 
 	F->m_curPt = Cur_Pt;
-	Buf = F->m_buffer1;
-	F->m_buffer1 = F->m_buffer2;
-	F->m_buffer2 = Buf;
+	F->m_buffer1.swap(F->m_buffer2);
 }
 
 
@@ -413,7 +395,7 @@ draw_ifs ( /* ModeInfo * mi */ int *nbPoints)
 	if (Root == nullptr)
 		return nullptr;
 	FRACTAL *F = Root; // [/*MI_SCREEN(mi)*/0];
-	if (F->m_buffer1 == nullptr)
+	if (F->m_buffer1.empty())
 		return nullptr;
 
 	DBL u = (DBL) (F->m_count) * (DBL) (F->m_speed) / 1000.0;
@@ -432,12 +414,12 @@ draw_ifs ( /* ModeInfo * mi */ int *nbPoints)
 	SIMI *S4 = &F->m_components[4 * F->m_nbSimi];
 
 	for (int i = F->m_nbSimi; i; --i, S++, S1++, S2++, S3++, S4++) {
-		S->m_dCx = u0 * S1->m_dCx + u1 * S2->m_dCx + u2 * S3->m_dCx + u3 * S4->m_dCx;
-		S->m_dCy = u0 * S1->m_dCy + u1 * S2->m_dCy + u2 * S3->m_dCy + u3 * S4->m_dCy;
-		S->m_dR  = u0 * S1->m_dR  + u1 * S2->m_dR  + u2 * S3->m_dR  + u3 * S4->m_dR;
-		S->m_dR2 = u0 * S1->m_dR2 + u1 * S2->m_dR2 + u2 * S3->m_dR2 + u3 * S4->m_dR2;
-		S->m_dA  = u0 * S1->m_dA  + u1 * S2->m_dA  + u2 * S3->m_dA  + u3 * S4->m_dA;
-		S->m_dA2 = u0 * S1->m_dA2 + u1 * S2->m_dA2 + u2 * S3->m_dA2 + u3 * S4->m_dA2;
+		S->m_dCx = (u0 * S1->m_dCx) + (u1 * S2->m_dCx) + (u2 * S3->m_dCx) + (u3 * S4->m_dCx);
+		S->m_dCy = (u0 * S1->m_dCy) + (u1 * S2->m_dCy) + (u2 * S3->m_dCy) + (u3 * S4->m_dCy);
+		S->m_dR  = (u0 * S1->m_dR)  + (u1 * S2->m_dR)  + (u2 * S3->m_dR)  + (u3 * S4->m_dR);
+		S->m_dR2 = (u0 * S1->m_dR2) + (u1 * S2->m_dR2) + (u2 * S3->m_dR2) + (u3 * S4->m_dR2);
+		S->m_dA  = (u0 * S1->m_dA)  + (u1 * S2->m_dA)  + (u2 * S3->m_dA)  + (u3 * S4->m_dA);
+		S->m_dA2 = (u0 * S1->m_dA2) + (u1 * S2->m_dA2) + (u2 * S3->m_dA2) + (u3 * S4->m_dA2);
 	}
 
 	// MI_IS_DRAWN(mi) = True;
@@ -452,12 +434,12 @@ draw_ifs ( /* ModeInfo * mi */ int *nbPoints)
 		S4 = &F->m_components[4 * F->m_nbSimi];
 
 		for (int i = F->m_nbSimi; i; --i, S++, S1++, S2++, S3++, S4++) {
-			S2->m_dCx = 2.0 * S4->m_dCx - S3->m_dCx;
-			S2->m_dCy = 2.0 * S4->m_dCy - S3->m_dCy;
-			S2->m_dR  = 2.0 * S4->m_dR  - S3->m_dR;
-			S2->m_dR2 = 2.0 * S4->m_dR2 - S3->m_dR2;
-			S2->m_dA  = 2.0 * S4->m_dA  - S3->m_dA;
-			S2->m_dA2 = 2.0 * S4->m_dA2 - S3->m_dA2;
+			S2->m_dCx = (2.0 * S4->m_dCx) - S3->m_dCx;
+			S2->m_dCy = (2.0 * S4->m_dCy) - S3->m_dCy;
+			S2->m_dR  = (2.0 * S4->m_dR)  - S3->m_dR;
+			S2->m_dR2 = (2.0 * S4->m_dR2) - S3->m_dR2;
+			S2->m_dA  = (2.0 * S4->m_dA)  - S3->m_dA;
+			S2->m_dA2 = (2.0 * S4->m_dA2) - S3->m_dA2;
 
 			*S1 = *S4;
 		}
@@ -476,7 +458,7 @@ draw_ifs ( /* ModeInfo * mi */ int *nbPoints)
 
 	/* #1 code added by JeKo */
 	(*nbPoints) = Cur_Pt;
-	return F->m_buffer2;
+	return F->m_buffer2.data();
 	/* #1 end */
 }
 
@@ -486,9 +468,6 @@ draw_ifs ( /* ModeInfo * mi */ int *nbPoints)
 void
 release_ifs ()
 {
-	if (Root != nullptr) {
-		free_ifs(Root);
-		free ((void *) Root);
-		Root = (FRACTAL *) nullptr;
-	}
+	delete Root;
+	Root = nullptr;
 }

@@ -9,12 +9,13 @@
 // Licensed under the GPL v2 or later, see LICENSE for details
 //
 //////////////////////////////////////////////////////////////////////////////
+#include "upnpcmgr.h"
 
 #include "libmythbase/configuration.h"
 #include "libmythbase/mythlogging.h"
 
-#include "upnp.h"
-#include "upnpcmgr.h"
+#include "httprequest.h"
+#include "upnpresultcode.h"
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -155,7 +156,7 @@ bool UPnpCMGR::ProcessRequest( HTTPRequest *pRequest )
                 HandleGetFeatureList( pRequest );
                 break;
             default:
-                UPnp::FormatErrorResponse( pRequest, UPnPResult_InvalidAction );
+                pRequest->FormatErrorResponse(UPnPResult_InvalidAction);
                 break;
         }       
         return true;
@@ -190,8 +191,7 @@ void UPnpCMGR::HandleGetCurrentConnectionInfo( HTTPRequest *pRequest )
 
     if ( nId != 0)
     {
-        UPnp::FormatErrorResponse( pRequest,
-                                   UPnPResult_CMGR_InvalidConnectionRef );
+        pRequest->FormatErrorResponse(UPnPResult_CMGR_InvalidConnectionRef);
         return;
     }
 

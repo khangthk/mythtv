@@ -4,14 +4,13 @@
 // C++
 #include <cstdlib>
 
-#include "libmythbase/mythconfig.h"
-
 extern "C"
 {
 //AVFormat/AVCodec
 #include "libavcodec/avcodec.h"
 #include "libavformat/avformat.h"
 
+#include "libmythbase/mythconfig.h"
 //libmpeg2
 #if CONFIG_LIBMPEG2EXTERNAL
 #include <mpeg2dec/mpeg2.h>
@@ -32,8 +31,8 @@ extern "C"
 #include <QDateTime>
 
 // MythTV
-#include "libmythbase/programtypes.h"
 #include "libmythtv/mythavutil.h"
+#include "libmythtv/programtypes.h"
 
 // MythTranscode
 #include "transcodedefs.h"
@@ -293,7 +292,6 @@ class MPEG2fixup
     #define GENERIC_EXIT_DEADLOCK             150
 #else
    #include "libmythbase/exitcodes.h"
-   #include "libmyth/mythcontext.h"
 #endif
 
 /*

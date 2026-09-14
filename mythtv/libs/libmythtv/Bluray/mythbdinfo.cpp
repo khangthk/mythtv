@@ -1,21 +1,23 @@
+#include "mythbdinfo.h"
+
 // Qt
 #include <QDir>
 #include <QCryptographicHash>
 
 // MythTV
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythcdrom.h"
 #include "libmythbase/mythdirs.h"
 #include "libmythbase/mythlogging.h"
 
 #include "io/mythiowrapper.h"
-#include "Bluray/mythbdiowrapper.h"
-#include "Bluray/mythbdinfo.h"
+#include "mythbdiowrapper.h"
 
 // Std
 #include <fcntl.h>
 
 // BluRay
-#ifdef HAVE_LIBBLURAY
+#if HAVE_LIBBLURAY
 #include <libbluray/bluray.h>
 #include <libbluray/log_control.h>
 #include <libbluray/meta_data.h>
@@ -147,6 +149,8 @@ void MythBDInfo::GetNameAndSerialNum(BLURAY* BluRay, QString &Name,
             ba = QByteArray::fromRawData(reinterpret_cast<const char*>(buffer), buffersize);
             crypto.addData(ba);
             SerialNum = QString("%1__gen").arg(QString(crypto.result().toBase64()));
+            // Memory allocated by C library call bd_read_file()
+            // NOLINTNEXTLINE(cppcoreguidelines-no-malloc)
             free(buffer);
             LOG(VB_PLAYBACK, LOG_DEBUG, LogPrefix + QString("Generated serial number '%1'")
                 .arg(SerialNum));

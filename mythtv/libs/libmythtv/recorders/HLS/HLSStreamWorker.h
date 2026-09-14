@@ -1,13 +1,14 @@
 #ifndef HLS_SEGMENT_WORKER_H
 #define HLS_SEGMENT_WORKER_H
 
-#include <QMap>
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QWaitCondition>
 #include <QMutex>
 
 #include "libmythbase/mthread.h"
 
 class HLSReader;
+class MythSingleDownload;
 
 class HLSStreamWorker : public MThread
 {

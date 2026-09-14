@@ -1,11 +1,17 @@
+include(settings2.pro)
+
 CONFIG += $$CCONFIG
-CONFIG += c++17
+CONFIG += c11 c17 c++20 strict_c strict_c++
 
 # Make sure all the Qt header files are marked as system headers
 QMAKE_DEFAULT_INCDIRS += $$[QT_INSTALL_HEADERS]
 INCLUDEPATH += $$[QT_INSTALL_HEADERS]
 
-include(settings2.pro)
+# On Qt5 builds, bump the minimum OSX version number
+# up to one that fully supports C++20.
+lessThan(QT_MAJOR_VERSION, 6) {
+  QMAKE_MACOSX_DEPLOYMENT_TARGET = 13.3
+}
 
 MY_INSTALL_INCLUDE = $${SYSROOT}$${PREFIX}/include
 !contains(MY_INSTALL_INCLUDE, /usr/include$) {
@@ -16,14 +22,13 @@ LIBS *= -L$${SYSROOT}$${PREFIX}/$${LIBDIRNAME}
 
 isEmpty(TARGET_OS) : win32 {
     CONFIG += mingw
-    DEFINES += USING_MINGW WIN32_LEAN_AND_MEAN NOMINMAX
+    DEFINES += WIN32_LEAN_AND_MEAN NOMINMAX
     # Qt4 creates separate compile directories by default. This disables:
     CONFIG -= debug_and_release debug_and_release_target
     # Some shared libs we depend on are installed here:
     LIBS += -L/bin
 }
 
-DEFINES += _GNU_SOURCE
 DEFINES += PREFIX=\"$${PREFIX}\"
 
 INCLUDEPATH += $$CONFIG_INCLUDEPATH
@@ -34,7 +39,6 @@ macx:CONFIG += console
 # figure out compile flags based on qmake info
 
 QMAKE_CXXFLAGS += $$ARCHFLAGS
-QMAKE_CXXFLAGS += $$CONFIG_DIRECTFB_CXXFLAGS
 QMAKE_CXXFLAGS_SHLIB = -DPIC -fPIC
 QMAKE_CXXFLAGS += $$CXXFLAGS $$ECXXFLAGS
 
@@ -50,7 +54,6 @@ QMAKE_CFLAGS += $$CFLAGS
 
 # figure out defines
 
-DEFINES += $$CONFIG_DEFINES
 DEFINES += _FILE_OFFSET_BITS=64
 
 # construct linking path
@@ -63,18 +66,11 @@ QMAKE_LIBDIR_X11 =
 
 EXTRA_LIBS += $$EXTRALIBS
 EXTRA_LIBS += $$FREETYPE_LIBS
-contains(CONFIG_LIBMP3LAME, "yes") {
-  EXTRA_LIBS += -lmp3lame
-}
 EXTRA_LIBS += $$CONFIG_AUDIO_ALSA_LIBS
 EXTRA_LIBS += $$CONFIG_AUDIO_JACK_LIBS
 EXTRA_LIBS += $$CONFIG_FIREWIRE_LIBS
-EXTRA_LIBS += $$CONFIG_DIRECTFB_LIBS
 
 EXTRA_LIBS += $$LOCAL_LIBDIR_X11
-EXTRA_LIBS += $$CONFIG_XV_LIBS
-EXTRA_LIBS += $$CONFIG_XVMC_LIBS
-EXTRA_LIBS += $$CONFIG_OPENGL_VSYNC_LIBS
 
 LIRC_LIBS = $$CONFIG_LIRC_LIBS
 

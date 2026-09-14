@@ -112,12 +112,8 @@ static StandardSetting *TransitionType()
     // Initialise selected transition
     TransitionRegistry availableTransitions(GetMythPainter()->SupportsAnimation());
     TransitionMap transitions = availableTransitions.GetAll();
-    QMapIterator<int, Transition*> i(transitions);
-    while (i.hasNext())
-    {
-        i.next();
+    for (auto i = transitions.cbegin(); i != transitions.cend(); ++i)
         gc->addSelection(i.value()->objectName(), QString::number(i.key()));
-    }
 
     return gc;
 }
@@ -318,3 +314,5 @@ GallerySettings::GallerySettings(bool enable)
     addChild(Password(enable));
     addChild(ClearDb(enable));
 }
+
+#include "moc_galleryconfig.cpp"

@@ -1,12 +1,17 @@
 
 #include "mythuiimageresults.h"
 
+// C++
+#include <ranges>
+
+// Qt
 #include <QDir>
 #include <QFile>
 
-#include "libmythbase/mythcorecontext.h"
+// MythTV
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythdirs.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythui/mythuibuttonlist.h"
 
 #include "metadataimagedownload.h"
@@ -74,7 +79,9 @@ bool ImageSearchResultsDialog::Create()
                 int pos = m_resultsList->GetItemPos(button);
 
                 if (QFile::exists(dlfile))
+                {
                     button->SetImage(dlfile);
+                }
                 else
                 {
                     m_imageDownload->addThumb(info.label,
@@ -101,9 +108,9 @@ void ImageSearchResultsDialog::cleanCacheDir()
     QDir cacheDir(cache);
     QStringList thumbs = cacheDir.entryList(QDir::Files);
 
-    for (auto i = thumbs.crbegin(); i != thumbs.crend(); ++i)
+    for (const auto & thumb : std::ranges::reverse_view(std::as_const(thumbs)))
     {
-        QString filename = QString("%1/%2").arg(cache, *i);
+        QString filename = QString("%1/%2").arg(cache, thumb);
         QFileInfo fi(filename);
         QDateTime lastmod = fi.lastModified();
         if (lastmod.addDays(2) < MythDate::current())
@@ -126,7 +133,7 @@ void ImageSearchResultsDialog::customEvent(QEvent *event)
         ThumbnailData *data = tde->m_thumb;
 
         QString file = data->url;
-        uint pos = data->data.value<uint>();
+        uint pos = data->data.toUInt();
 
         if (file.isEmpty())
             return;
@@ -151,3 +158,4 @@ void ImageSearchResultsDialog::sendResult(MythUIButtonListItem* item)
     Close();
 }
 
+#include "moc_mythuiimageresults.cpp"

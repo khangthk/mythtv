@@ -1,14 +1,15 @@
 // Qt
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QDateTime>
 #include <QDomDocument>
 #include <QImageReader>
 
 // MythTV headers
-#include <libmyth/mythcontext.h>
 #include <libmythbase/mythdate.h>
 #include <libmythbase/mythdbcon.h>
 #include <libmythbase/mythdirs.h>
 #include <libmythbase/mythdownloadmanager.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythbase/mythsorthelper.h>
 #include <libmythbase/netutils.h>
 #include <libmythbase/rssparse.h>
@@ -38,6 +39,7 @@ namespace
         QStringList ret;
 
         QList<QByteArray> exts = QImageReader::supportedImageFormats();
+        ret.reserve(exts.size());
         for (const auto & ext : std::as_const(exts))
             ret.append(QString("*.").append(ext));
 
@@ -196,7 +198,12 @@ void RSSEditPopup::SlotCheckRedirect(QNetworkReply* reply)
 void RSSEditPopup::SlotSave(QNetworkReply* reply)
 {
     QDomDocument document;
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     document.setContent(reply->read(reply->bytesAvailable()), true);
+#else
+    document.setContent(reply->read(reply->bytesAvailable()),
+                        QDomDocument::ParseOption::UseNamespaceProcessing);
+#endif
 
     QString text = document.toString();
 
@@ -552,3 +559,5 @@ void RSSEditor::ListChanged()
     m_changed = true;
     LoadData();
 }
+
+#include "moc_rsseditor.cpp"

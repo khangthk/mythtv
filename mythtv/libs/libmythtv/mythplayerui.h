@@ -7,6 +7,8 @@
 #include "jitterometer.h"
 #include "mythplayer.h"
 
+class MythDisplay;
+
 class MTV_PUBLIC MythPlayerUI : public MythPlayerEditorUI, public MythVideoScanTracker
 {
     Q_OBJECT
@@ -32,7 +34,7 @@ class MTV_PUBLIC MythPlayerUI : public MythPlayerEditorUI, public MythVideoScanT
     virtual void EventStart();
     virtual bool VideoLoop();
     virtual void PreProcessNormalFrame();
-    void ChangeSpeed() override;
+    void InitFrameInterval() override;
     void SetVideoParams(int Width, int Height, double FrameRate, float Aspect,
                         bool ForceUpdate, int ReferenceFrames,
                         FrameScanType Scan = kScan_Ignore,
@@ -43,7 +45,7 @@ class MTV_PUBLIC MythPlayerUI : public MythPlayerEditorUI, public MythVideoScanT
     void SetWatched(bool ForceWatched = false);
 
   protected:
-    void InitFrameInterval() override;
+    void ChangeSpeed() override;
     virtual void DisplayPauseFrame();
     virtual bool DisplayNormalFrame(bool CheckPrebuffer = true);
 
@@ -66,6 +68,8 @@ class MTV_PUBLIC MythPlayerUI : public MythPlayerEditorUI, public MythVideoScanT
 
     bool    m_osdDebug { false };
     QTimer  m_osdDebugTimer;
+
+    MythDisplay *m_display { nullptr };
 };
 
 #endif

@@ -1,4 +1,5 @@
 // MythTV
+#include "libmythbase/mythlogging.h"
 #include "libmythui/mythmainwindow.h"
 #include "mythplayeruibase.h"
 
@@ -28,3 +29,5 @@ MythRender* MythPlayerUIBase::GetRender() const
 {
     return m_render;
 }
+
+#include "moc_mythplayeruibase.cpp"

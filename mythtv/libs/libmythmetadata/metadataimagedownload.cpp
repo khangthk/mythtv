@@ -1,10 +1,13 @@
+// C++
+#include <ranges>
+#include <utility>
+
 // qt
 #include <QCoreApplication>
 #include <QDir>
 #include <QEvent>
 #include <QFileInfo>
 #include <QImage>
-#include <utility>
 
 // myth
 #include "libmythbase/mythcorecontext.h"
@@ -184,8 +187,7 @@ void MetadataImageDownload::run()
 
                     if (dest_file.open(QIODevice::WriteOnly))
                     {
-                        off_t size = dest_file.write(download,
-                                                     download.size());
+                        off_t size = dest_file.write(download);
                         dest_file.close();
                         if (size != download.size())
                         {
@@ -273,7 +275,7 @@ void MetadataImageDownload::run()
                             errored = true;
                             break;
                         }
-                        off_t written = outFile.Write(download,
+                        off_t written = outFile.Write(download.constData(),
                                                       download.size());
                         if (written != download.size())
                         {
@@ -292,8 +294,7 @@ void MetadataImageDownload::run()
                         QFile dest_file(resolvedFN);
                         if (dest_file.open(QIODevice::WriteOnly))
                         {
-                            off_t size = dest_file.write(download,
-                                                         download.size());
+                            off_t size = dest_file.write(download);
                             dest_file.close();
                             if (size != download.size())
                             {
@@ -510,9 +511,9 @@ void cleanThumbnailCacheDir()
     QDir cacheDir(cache);
     QStringList thumbs = cacheDir.entryList(QDir::Files);
 
-    for (auto i = thumbs.crbegin(); i != thumbs.crend(); ++i)
+    for (const auto & thumb : std::ranges::reverse_view(thumbs))
     {
-        QString filename = QString("%1/%2").arg(cache, *i);
+        QString filename = QString("%1/%2").arg(cache, thumb);
         QFileInfo fi(filename);
         QDateTime lastmod = fi.lastModified();
         if (lastmod.addDays(2) < MythDate::current())

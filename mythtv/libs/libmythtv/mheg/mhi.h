@@ -10,6 +10,7 @@
 #include <vector>
 
 // Qt headers
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QWaitCondition>
 #include <QRunnable>
 #include <QString>
@@ -23,7 +24,6 @@
 #include <QSize>                        // for QSize
 
 // MythTV headers
-#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythdeque.h"
 #include "libmythfreemheg/freemheg.h"
 
@@ -164,12 +164,12 @@ class MHIContext : public MHContext, public QRunnable
     bool IsFaceLoaded(void) const { return m_faceLoaded; }
     bool LoadFont(const QString& name);
     bool ImageUpdated(void) const { return m_updated; }
+    void run(void) override; // QRunnable
 
     static const int kStdDisplayWidth = 720;
     static const int kStdDisplayHeight = 576;
 
   protected:
-    void run(void) override; // QRunnable
     void ProcessDSMCCQueue(void);
     void NetworkBootRequested(void);
     void ClearDisplay(void);
@@ -371,20 +371,14 @@ class DSMCCPacket
   public:
     DSMCCPacket(unsigned char *data, int length, int tag,
                 unsigned car, int dbid)
-        : m_data(data),           m_length(length),
-          m_componentTag(tag),    m_carouselId(car),
+        : m_componentTag(tag),    m_carouselId(car),
           m_dataBroadcastId(dbid)
     {
-    }
-
-    ~DSMCCPacket()
-    {
-        free(m_data);
+        m_data.assign(data, data+length);
     }
 
   public:
-    unsigned char *m_data            {nullptr};
-    int            m_length;
+    std::vector<uint8_t> m_data;
     int            m_componentTag;
     unsigned       m_carouselId;
     int            m_dataBroadcastId;

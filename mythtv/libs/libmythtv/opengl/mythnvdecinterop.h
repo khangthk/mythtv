@@ -4,10 +4,9 @@
 // MythTV
 #include "opengl/mythopenglinterop.h"
 
-// FFmpeg
 extern "C" {
-#include "compat/cuda/dynlink_loader.h"
-#include "libavutil/hwcontext_cuda.h"
+#include <ffnvcodec/dynlink_cuda.h>
+struct CudaFunctions;
 }
 
 class MythNVDECInterop : public MythOpenGLInterop
@@ -30,10 +29,10 @@ class MythNVDECInterop : public MythOpenGLInterop
   protected:
     MythNVDECInterop(MythPlayerUI* Player, MythRenderOpenGL* Context);
    ~MythNVDECInterop() override;
+    void           DeleteTextures() override;
 
   private:
     bool           InitialiseCuda();
-    void           DeleteTextures() override;
     void           RotateReferenceFrames(CUdeviceptr Buffer);
     static bool    CreateCUDAPriv(MythRenderOpenGL* GLContext, CudaFunctions*& CudaFuncs,
                                   CUcontext& CudaContext, bool& Retry);

@@ -8,7 +8,12 @@
 #include <csignal>
 #include <cstdlib>
 #include <iostream>
-#ifdef _WIN32
+
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
+#ifdef Q_OS_WINDOWS
 #include <processthreadsapi.h>
 #endif
 
@@ -18,8 +23,8 @@
 #include <QTimer>
 
 // mythtv
-#include <libmyth/mythcontext.h>
-#include <libmythbase/mythcoreutil.h>
+#include <libmythbase/mythcorecontext.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythbase/mythplugin.h>
 #include <libmythbase/mythpluginapi.h>
 #include <libmythbase/mythsystemlegacy.h>
@@ -72,7 +77,7 @@ static bool checkProcess(const QString &lockFile)
     LOG(VB_GENERAL, LOG_NOTICE,
         QString("Checking if PID %1 is still running").arg(pid));
 
-#ifdef _WIN32
+#ifdef Q_OS_WINDOWS
     HANDLE handy = OpenProcess(SYNCHRONIZE|PROCESS_TERMINATE, TRUE, pid);
     return TerminateProcess(handy,0) == 0;
 #else
@@ -256,22 +261,21 @@ static void ArchiveCallback([[maybe_unused]] void *data, QString &selection)
 {
     QString sel = selection.toLower();
 
-    if (sel == "archive_create_dvd")
+    if (sel == "archive_create_dvd") {
         runCreateDVD();
-    else if (sel == "archive_create_archive")
+    } else if (sel == "archive_create_archive") {
         runCreateArchive();
-    else if (sel == "archive_encode_video")
+    } else if (sel == "archive_encode_video") {
         runEncodeVideo();
-    else if (sel == "archive_import_video")
+    } else if (sel == "archive_import_video") {
         runImportVideo();
-    else if (sel == "archive_last_log")
+    } else if (sel == "archive_last_log") {
         runShowLog();
-    else if (sel == "archive_test_dvd")
+    } else if (sel == "archive_test_dvd") {
         runTestDVD();
-    else if (sel == "archive_burn_dvd")
+    } else if (sel == "archive_burn_dvd") {
         runBurnDVD();
-    else
-    {
+    } else {
         // if we have found the mainmenu callback
         // pass the selection on to it
         if (m_callback && m_callbackdata)
@@ -302,7 +306,9 @@ static int runMenu(const QString& which_menu)
 
     // save the callback from the main menu
     if (mainMenu)
+    {
         mainMenu->getCallback(&m_callback, &m_callbackdata);
+    }
     else
     {
         m_callback = nullptr;

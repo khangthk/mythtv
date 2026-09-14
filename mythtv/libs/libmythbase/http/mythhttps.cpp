@@ -46,9 +46,38 @@ bool MythHTTPS::InitSSLServer(QSslConfiguration& Config)
         configdir.chop(1);
     configdir.append(QStringLiteral("/certificates/"));
 
+    auto hostCertPath = gCoreContext->GetSetting("hostSSLCertificate", "");
+    if (hostCertPath.isEmpty())
+        hostCertPath = configdir + "cert.pem";
+    LOG(VB_HTTP, LOG_DEBUG, LOC + "cert " + hostCertPath);
+
+    QSslCertificate hostCert;
+    auto certList = QSslCertificate::fromPath(hostCertPath);
+    if (!certList.isEmpty())
+        hostCert = certList.first();
+
+    if (hostCert.isNull())
+    {
+        LOG(VB_GENERAL, LOG_ERR, LOC + QString("Unable to load host cert from file (%1)").arg(hostCertPath));
+        return false;
+    }
+    if (hostCert.effectiveDate() > QDateTime::currentDateTime())
+    {
+        LOG(VB_GENERAL, LOG_ERR, LOC + QString("Host certificate start date in future (%1)").arg(hostCertPath));
+        return false;
+    }
+    if (hostCert.expiryDate() < QDateTime::currentDateTime())
+    {
+        LOG(VB_GENERAL, LOG_ERR, LOC + QString("Host certificate has expired (%1)").arg(hostCertPath));
+        return false;
+    }
+
+    Config.setLocalCertificate(hostCert);
+
     auto hostKeyPath = gCoreContext->GetSetting("hostSSLKey", "");
     if (hostKeyPath.isEmpty())
         hostKeyPath = configdir + "key.pem";
+    LOG(VB_HTTP, LOG_DEBUG, LOC + "key " + hostKeyPath);
 
     QFile hostKeyFile(hostKeyPath);
     if (!hostKeyFile.exists() || !hostKeyFile.open(QIODevice::ReadOnly))
@@ -59,55 +88,28 @@ bool MythHTTPS::InitSSLServer(QSslConfiguration& Config)
     }
 
     auto rawHostKey = hostKeyFile.readAll();
-    auto hostKey = QSslKey(rawHostKey, QSsl::Rsa, QSsl::Pem, QSsl::PrivateKey);
-    if (!hostKey.isNull())
-    {
-        Config.setPrivateKey(hostKey);
-    }
-    else
+    auto hostKey = QSslKey(rawHostKey, hostCert.publicKey().algorithm(), QSsl::Pem, QSsl::PrivateKey);
+    if (hostKey.isNull())
     {
         LOG(VB_GENERAL, LOG_ERR, LOC + QString("Unable to load host key from file (%1)").arg(hostKeyPath));
         return false;
     }
-
-    auto hostCertPath = gCoreContext->GetSetting("hostSSLCertificate", "");
-    if (hostCertPath.isEmpty())
-        hostCertPath = configdir + "cert.pem";
-
-    QSslCertificate hostCert;
-    auto certList = QSslCertificate::fromPath(hostCertPath);
-    if (!certList.isEmpty())
-        hostCert = certList.first();
-
-    if (!hostCert.isNull())
-    {
-        if (hostCert.effectiveDate() > QDateTime::currentDateTime())
-        {
-            LOG(VB_GENERAL, LOG_ERR, LOC + QString("Host certificate start date in future (%1)").arg(hostCertPath));
-            return false;
-        }
-
-        if (hostCert.expiryDate() < QDateTime::currentDateTime())
-        {
-            LOG(VB_GENERAL, LOG_ERR, LOC + QString("Host certificate has expired (%1)").arg(hostCertPath));
-            return false;
-        }
-
-        Config.setLocalCertificate(hostCert);
-    }
-    else
-    {
-        LOG(VB_GENERAL, LOG_ERR, LOC + QString("Unable to load host cert from file (%1)").arg(hostCertPath));
-        return false;
-    }
+    Config.setPrivateKey(hostKey);
 
     auto caCertPath = gCoreContext->GetSetting("caSSLCertificate", "");
+    bool caCertPathDefault {false};
+    if (caCertPath.isEmpty())
+    {
+        caCertPath = configdir + "cacert.pem";
+        caCertPathDefault = true;
+    }
+    LOG(VB_HTTP, LOG_DEBUG, LOC + "cacert " + caCertPath);
     auto CACertList = QSslCertificate::fromPath(caCertPath);
     if (!CACertList.isEmpty())
     {
         Config.setCaCertificates(CACertList);
     }
-    else if (!caCertPath.isEmpty())
+    else if (!caCertPathDefault)
     {
         // Only warn if a path was actually configured, this isn't an error otherwise
         LOG(VB_GENERAL, LOG_ERR, LOC + QString("Unable to load CA cert file (%1)").arg(caCertPath));
@@ -133,8 +135,10 @@ void MythHTTPS::InitSSLSocket(QSslSocket *Socket, QSslConfiguration& Config)
             LOG(VB_GENERAL, LOG_INFO, LOC + QString("SslError: %1").arg(error.errorString()));
     };
 
-    QObject::connect(Socket, &QSslSocket::encrypted, [Encrypted, Socket] { Encrypted(Socket); } );
-    QObject::connect(Socket, qOverload<const QList<QSslError> &>(&QSslSocket::sslErrors), SSLErrors);
+    QObject::connect(Socket, &QSslSocket::encrypted,
+                     Socket, [Encrypted, Socket] { Encrypted(Socket); } );
+    QObject::connect(Socket, qOverload<const QList<QSslError> &>(&QSslSocket::sslErrors),
+                     Socket, SSLErrors);
     Socket->setSslConfiguration(Config);
     Socket->startServerEncryption();
 }

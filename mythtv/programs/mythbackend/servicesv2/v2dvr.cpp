@@ -24,21 +24,24 @@
 //////////////////////////////////////////////////////////////////////////////
 
 // Qt
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QJsonArray>
 #include <QJsonDocument>
 
 // MythTV
 #include "libmythbase/http/mythhttpmetaservice.h"
 #include "libmythbase/mythcorecontext.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythbase/mythscheduler.h"
+#include "libmythbase/mythsorthelper.h"
 #include "libmythbase/mythversion.h"
-#include "libmythbase/programinfo.h"
 #include "libmythbase/storagegroup.h"
 #include "libmythtv/cardutil.h"
 #include "libmythtv/channelutil.h"
 #include "libmythtv/jobqueue.h"
 #include "libmythtv/playgroup.h"
 #include "libmythtv/programdata.h"
+#include "libmythtv/programinfo.h"
 #include "libmythtv/tv_rec.h"
 
 // MythBackend
@@ -78,6 +81,9 @@ void V2Dvr::RegisterCustomTypes()
     qRegisterMetaType<V2ArtworkInfo*>("V2ArtworkInfo");
     qRegisterMetaType<V2CastMemberList*>("V2CastMemberList");
     qRegisterMetaType<V2CastMember*>("V2CastMember");
+    qRegisterMetaType<V2PlayGroup*>("V2PlayGroup");
+    qRegisterMetaType<V2PowerPriority*>("V2PowerPriority");
+    qRegisterMetaType<V2PowerPriorityList*>("V2PowerPriorityList");
 }
 
 V2Dvr::V2Dvr()
@@ -249,7 +255,8 @@ V2ProgramList* V2Dvr::GetRecordedList( bool           bDescending,
 }
 
 /////////////////////////////////////////////////////////////////////////////
-//
+// Note that you should not specify both Title and TitleRegEx, that is counter-
+// productive and would only work if the TitleRegEx matched the Title.
 /////////////////////////////////////////////////////////////////////////////
 
 V2ProgramList* V2Dvr::GetOldRecordedList( bool             bDescending,
@@ -258,6 +265,8 @@ V2ProgramList* V2Dvr::GetOldRecordedList( bool             bDescending,
                                            const QDateTime &sStartTime,
                                            const QDateTime &sEndTime,
                                            const QString   &sTitle,
+                                           const QString   &TitleRegEx,
+                                           const QString   &SubtitleRegEx,
                                            const QString   &sSeriesId,
                                            int              nRecordId,
                                            const QString   &sSort)
@@ -308,6 +317,18 @@ V2ProgramList* V2Dvr::GetOldRecordedList( bool             bDescending,
         bindings[":Title"] = sTitle;
     }
 
+    if (!TitleRegEx.isEmpty())
+    {
+        clause << "title REGEXP :TitleRegEx";
+        bindings[":TitleRegEx"] = TitleRegEx;
+    }
+
+    if (!SubtitleRegEx.isEmpty())
+    {
+        clause << "subtitle REGEXP :SubtitleRegEx";
+        bindings[":SubtitleRegEx"] = SubtitleRegEx;
+    }
+
     if (!sSeriesId.isEmpty())
     {
         clause << "seriesid = :SeriesId";
@@ -316,20 +337,60 @@ V2ProgramList* V2Dvr::GetOldRecordedList( bool             bDescending,
 
     if (!clause.isEmpty())
     {
-        sSQL += QString(" AND (%1) ").arg(clause.join(" OR "));
+        sSQL += QString(" AND (%1) ").arg(clause.join(" AND "));
     }
 
-    if (sSort == "starttime")
-        sSQL += "ORDER BY starttime ";    // NOLINT(bugprone-branch-clone)
-    else if (sSort == "title")
-        sSQL += "ORDER BY title ";
-    else
-        sSQL += "ORDER BY starttime ";
-
-    if (bDescending)
-        sSQL += "DESC ";
-    else
-        sSQL += "ASC ";
+    QStringList sortByFields;
+    sortByFields << "starttime" <<  "title" <<  "subtitle" << "season" << "episode" << "category"
+                                  <<  "channum" << "rectype" << "recstatus" << "duration" ;
+    QStringList fields = sSort.split(",");
+    // Add starttime as last or only sort.
+        fields << "starttime";
+    sSQL += " ORDER BY ";
+    bool first = true;
+    for (const QString& oneField : std::as_const(fields))
+    {
+        QString field = oneField.simplified().toLower();
+        if (field.isEmpty())
+            continue;
+        if (sortByFields.contains(field))
+        {
+            if (first)
+                first = false;
+            else
+                sSQL += ", ";
+            if (field == "channum")
+            {
+                // this is to sort numerically rather than alphabetically
+                field = "channum*1000-ifnull(regexp_substr(channum,'-.*'),0)";
+            }
+            else if (field == "duration")
+            {
+                field = "timestampdiff(second,starttime,endtime)";
+            }
+            else if (field == "title")
+            {
+                std::shared_ptr<MythSortHelper>sh = getMythSortHelper();
+                QString prefixes = sh->getPrefixes();
+                field = "REGEXP_REPLACE(title,'" + prefixes + "','')";
+            }
+            else if (field == "subtitle")
+            {
+                std::shared_ptr<MythSortHelper>sh = getMythSortHelper();
+                QString prefixes = sh->getPrefixes();
+                field = "REGEXP_REPLACE(subtitle,'" + prefixes + "','')";
+            }
+            sSQL += field;
+            if (bDescending)
+                sSQL += " DESC ";
+            else
+                sSQL += " ASC ";
+        }
+        else
+        {
+            LOG(VB_GENERAL, LOG_WARNING, QString("V2Dvr::GetOldRecordedList() got an unknown sort field '%1' - ignoring").arg(oneField));
+        }
+    }
 
     uint nTotalAvailable = (nStartIndex == 0) ? 1 : 0;
     LoadFromOldRecorded( progList, sSQL, bindings,
@@ -363,6 +424,61 @@ V2ProgramList* V2Dvr::GetOldRecordedList( bool             bDescending,
     pPrograms->setProtoVer      ( MYTH_PROTO_VERSION  );
 
     return pPrograms;
+}
+
+bool       V2Dvr::RemoveOldRecorded   ( int              ChanId,
+                                        const QDateTime &StartTime,
+                                        bool            Reschedule )
+{
+    if (!HAS_PARAMv2("ChanId") || !HAS_PARAMv2("StartTime"))
+        throw QString("Channel ID and StartTime appears invalid.");
+    QString sql("DELETE FROM oldrecorded "
+        " WHERE chanid = :ChanId AND starttime = :StartTime" );
+    MSqlQuery query(MSqlQuery::InitCon());
+    query.prepare(sql);
+    query.bindValue(":ChanId", ChanId);
+    query.bindValue(":StartTime", StartTime);
+    if (!query.exec())
+    {
+        MythDB::DBError("RemoveOldRecorded", query);
+        return false;
+    }
+    if (query.numRowsAffected() <= 0)
+        return false;
+    if (!HAS_PARAMv2("Reschedule"))
+        Reschedule = true;
+    if (Reschedule)
+        RescheduleRecordings();
+    return true;
+}
+
+bool       V2Dvr::UpdateOldRecorded   ( int              ChanId,
+                                        const QDateTime &StartTime,
+                                        bool            Duplicate,
+                                        bool            Reschedule )
+{
+    if (!HAS_PARAMv2("ChanId") || !HAS_PARAMv2("StartTime"))
+        throw QString("Channel ID and StartTime appears invalid.");
+    if (!HAS_PARAMv2("Duplicate"))
+        throw QString("Error: Nothing to change.");
+    QString sql("UPDATE oldrecorded "
+        " SET Duplicate = :Duplicate "
+        " WHERE chanid = :ChanId AND starttime = :StartTime" );
+    MSqlQuery query(MSqlQuery::InitCon());
+    query.prepare(sql);
+    query.bindValue(":Duplicate", Duplicate);
+    query.bindValue(":ChanId", ChanId);
+    query.bindValue(":StartTime", StartTime);
+    if (!query.exec())
+    {
+        MythDB::DBError("UpdateOldRecorded", query);
+        return false;
+    }
+    if (!HAS_PARAMv2("Reschedule"))
+        Reschedule = true;
+    if (Reschedule)
+        RescheduleRecordings();
+    return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -680,22 +796,51 @@ bool V2Dvr::StopRecording(int RecordedId)
 }
 
 /////////////////////////////////////////////////////////////////////////////
-//
+// Supply one of the following
+// RecordedId
+// or
+// ChanId and StartTime
+// or
+// RecordId
 /////////////////////////////////////////////////////////////////////////////
 
 bool V2Dvr::ReactivateRecording(int RecordedId,
-                              int chanid, const QDateTime &StartTime)
+                              int ChanId, const QDateTime &StartTime,
+                              int RecordId )
 {
-    if ((RecordedId <= 0) &&
-        (chanid <= 0 || !StartTime.isValid()))
-        throw QString("Recorded ID or Channel ID and StartTime appears invalid.");
-
     RecordingInfo ri;
     if (RecordedId > 0)
+    {
         ri = RecordingInfo(RecordedId);
+    }
+    else if (ChanId > 0 && StartTime.isValid())
+    {
+        ri = RecordingInfo(ChanId, StartTime.toUTC());
+    }
+    else if (RecordId > 0)
+    {
+        // Find latest recording for that record id
+        MSqlQuery query(MSqlQuery::InitCon());
+        query.prepare("SELECT recordedid FROM recorded "
+                      " WHERE recordid = :RECORDID "
+                      " ORDER BY starttime DESC LIMIT 1");
+        query.bindValue(":RECORDID", RecordId);
+        if (!query.exec())
+        {
+            MythDB::DBError("ReactivateRecording", query);
+            return false;
+        }
+        int recId {0};
+        if (query.next())
+            recId = query.value(0).toInt();
+        else
+            return false;
+        ri = RecordingInfo(recId);
+    }
     else
-        ri = RecordingInfo(chanid, StartTime.toUTC());
-
+    {
+        throw QString("Recorded ID or Channel ID and StartTime or RecordId are invalid.");
+    }
     if (ri.GetChanID() && ri.HasPathname())
     {
         ri.ReactivateRecording();
@@ -758,7 +903,7 @@ bool V2Dvr::AllowReRecord ( int RecordedId, int ChanId, const QDateTime &StartTi
 }
 
 /////////////////////////////////////////////////////////////////////////////
-//
+// Prefer Dvr/UpdateRecordedMetadata. Some day, this should go away.
 /////////////////////////////////////////////////////////////////////////////
 
 bool V2Dvr::UpdateRecordedWatchedStatus ( int RecordedId,
@@ -766,7 +911,7 @@ bool V2Dvr::UpdateRecordedWatchedStatus ( int RecordedId,
                                         const QDateTime &StartTime,
                                         bool  watched)
 {
-    LOG(VB_GENERAL, LOG_WARNING, "Deprecated, use Dvr/UpdateRecordedMetadata.");
+    // LOG(VB_GENERAL, LOG_WARNING, "Deprecated, use Dvr/UpdateRecordedMetadata.");
 
     if ((RecordedId <= 0) &&
         (chanid <= 0 || !StartTime.isValid()))
@@ -873,7 +1018,7 @@ long V2Dvr::GetLastPlayPos( int RecordedId,
 }
 
 /////////////////////////////////////////////////////////////////////////////
-//
+// Prefer Dvr/UpdateRecordedMetadata. Some day, this should go away.
 /////////////////////////////////////////////////////////////////////////////
 
 bool V2Dvr::SetSavedBookmark( int RecordedId,
@@ -882,7 +1027,7 @@ bool V2Dvr::SetSavedBookmark( int RecordedId,
                             const QString &offsettype,
                             long Offset )
 {
-    LOG(VB_GENERAL, LOG_WARNING, "Deprecated, use Dvr/UpdateRecordedMetadata.");
+    // LOG(VB_GENERAL, LOG_WARNING, "Deprecated, use Dvr/UpdateRecordedMetadata.");
 
     if ((RecordedId <= 0) &&
         (chanid <= 0 || !StartTime.isValid()))
@@ -917,6 +1062,7 @@ bool V2Dvr::SetSavedBookmark( int RecordedId,
 /////////////////////////////////////////////////////////////////////////////
 // Set last Play Position. Check if this is supported by first calling
 // Get Last Play Position with -1.
+// Prefer Dvr/UpdateRecordedMetadata. Some day, this should go away.
 /////////////////////////////////////////////////////////////////////////////
 
 bool V2Dvr::SetLastPlayPos( int RecordedId,
@@ -925,7 +1071,7 @@ bool V2Dvr::SetLastPlayPos( int RecordedId,
                             const QString &offsettype,
                             long Offset )
 {
-    LOG(VB_GENERAL, LOG_WARNING, "Deprecated, use Dvr/UpdateRecordedMetadata.");
+    // LOG(VB_GENERAL, LOG_WARNING, "Deprecated, use Dvr/UpdateRecordedMetadata.");
 
     if ((RecordedId <= 0) &&
         (chanid <= 0 || !StartTime.isValid()))
@@ -960,7 +1106,8 @@ bool V2Dvr::SetLastPlayPos( int RecordedId,
 V2CutList* V2Dvr::GetRecordedCutList ( int RecordedId,
                                         int chanid,
                                         const QDateTime &StartTime,
-                                        const QString &offsettype )
+                                        const QString &offsettype,
+                                        bool IncludeFps )
 {
     int marktype = 0;
     if ((RecordedId <= 0) &&
@@ -981,7 +1128,7 @@ V2CutList* V2Dvr::GetRecordedCutList ( int RecordedId,
     else
         marktype = 0;
 
-    V2FillCutList(pCutList, &ri, marktype);
+    V2FillCutList(pCutList, &ri, marktype, IncludeFps);
 
     return pCutList;
 }
@@ -993,7 +1140,8 @@ V2CutList* V2Dvr::GetRecordedCutList ( int RecordedId,
 V2CutList* V2Dvr::GetRecordedCommBreak ( int RecordedId,
                                           int chanid,
                                           const QDateTime &StartTime,
-                                          const QString &offsettype )
+                                          const QString &offsettype,
+                                          bool IncludeFps )
 {
     int marktype = 0;
     if ((RecordedId <= 0) &&
@@ -1014,7 +1162,7 @@ V2CutList* V2Dvr::GetRecordedCommBreak ( int RecordedId,
     else
         marktype = 0;
 
-    V2FillCommBreak(pCutList, &ri, marktype);
+    V2FillCommBreak(pCutList, &ri, marktype, IncludeFps);
 
     return pCutList;
 }
@@ -1035,9 +1183,13 @@ V2CutList* V2Dvr::GetRecordedSeek ( int RecordedId,
 
     auto* pCutList = new V2CutList();
     if (offsettype.toLower() == "bytes")
+    {
         marktype = MARK_GOP_BYFRAME;
+    }
     else if (offsettype.toLower() == "duration")
+    {
         marktype = MARK_DURATION_MS;
+    }
     else
     {
         delete pCutList;
@@ -1185,10 +1337,17 @@ V2InputList* V2Dvr::GetInputList()
 //
 /////////////////////////////////////////////////////////////////////////////
 
-QStringList V2Dvr::GetRecGroupList()
+QStringList V2Dvr::GetRecGroupList( const QString &UsedBy)
 {
     MSqlQuery query(MSqlQuery::InitCon());
-    query.prepare("SELECT recgroup FROM recgroups WHERE recgroup <> 'Deleted' "
+    if (UsedBy.compare("recorded",Qt::CaseInsensitive) == 0)
+        query.prepare("SELECT DISTINCT recgroup FROM recorded "
+            "ORDER BY recgroup");
+    else if (UsedBy.compare("schedule",Qt::CaseInsensitive) == 0)
+        query.prepare("SELECT DISTINCT recgroup FROM record "
+            "ORDER BY recgroup");
+    else
+        query.prepare("SELECT recgroup FROM recgroups WHERE recgroup <> 'Deleted' "
                   "ORDER BY recgroup");
 
     QStringList result;
@@ -1246,6 +1405,139 @@ QStringList V2Dvr::GetRecStorageGroupList()
 QStringList V2Dvr::GetPlayGroupList()
 {
     return PlayGroup::GetNames();
+}
+
+V2PlayGroup* V2Dvr::GetPlayGroup    ( const QString & Name )
+{
+    auto* playGroup = new V2PlayGroup();
+
+    MSqlQuery query(MSqlQuery::InitCon());
+
+    query.prepare("SELECT name, titlematch, skipahead, skipback, timestretch, jump "
+                "FROM playgroup WHERE name = :NAME ");
+    query.bindValue(":NAME", Name);
+
+    if (query.exec())
+    {
+        if (query.next())
+        {
+            playGroup->setName(query.value(0).toString());
+            playGroup->setTitleMatch(query.value(1).toString());
+            playGroup->setSkipAhead(query.value(2).toInt());
+            playGroup->setSkipBack(query.value(3).toInt());
+            playGroup->setTimeStretch(query.value(4).toInt());
+            playGroup->setJump(query.value(5).toInt());
+        }
+        else
+        {
+            throw QString("Play Group Not Found.");
+        }
+   }
+    return playGroup;
+}
+
+bool V2Dvr::RemovePlayGroup    ( const QString & Name )
+{
+
+    if (Name.compare("Default", Qt::CaseInsensitive) == 0)
+        throw QString("ERROR: Cannot delete Default entry");
+    MSqlQuery query(MSqlQuery::InitCon());
+    query.prepare("DELETE FROM playgroup "
+        "WHERE name = :NAME");
+
+    query.bindValue(":NAME", Name);
+
+    return query.exec();
+}
+
+bool V2Dvr::AddPlayGroup    ( const QString & Name,
+                              const QString & TitleMatch,
+                              int             SkipAhead,
+                              int             SkipBack,
+                              int             TimeStretch,
+                              int             Jump )
+{
+    MSqlQuery query(MSqlQuery::InitCon());
+
+    query.prepare("INSERT INTO playgroup "
+        "(name, titlematch, skipahead, skipback, timestretch, jump) "
+        " VALUES(:NAME, :TITLEMATCH, :SKIPAHEAD, :SKIPBACK, :TIMESTRETCH, :JUMP)");
+    query.bindValue(":NAME", Name);
+    query.bindValue(":TITLEMATCH", TitleMatch);
+    query.bindValue(":SKIPAHEAD", SkipAhead);
+    query.bindValue(":SKIPBACK", SkipBack);
+    query.bindValue(":TIMESTRETCH", TimeStretch);
+    query.bindValue(":JUMP", Jump);
+
+    return query.exec();
+}
+
+bool V2Dvr::UpdatePlayGroup ( const QString & Name,
+                              const QString & TitleMatch,
+                              int             SkipAhead,
+                              int             SkipBack,
+                              int             TimeStretch,
+                              int             Jump )
+{
+    if (Name.isEmpty())
+        throw QString("ERROR: Name is not specified");
+
+    bool ok = false;
+
+    QString sql = "UPDATE playgroup SET ";
+    if (HAS_PARAMv2("TitleMatch"))
+    {
+        sql.append(" titlematch = :TITLEMATCH ");
+        ok = true;
+    }
+    if (HAS_PARAMv2("SkipAhead"))
+    {
+        if (ok)
+            sql.append(",");
+        sql.append(" skipahead = :SKIPAHEAD ");
+        ok = true;
+    }
+    if (HAS_PARAMv2("SkipBack"))
+    {
+        if (ok)
+            sql.append(",");
+        sql.append(" skipback = :SKIPBACK ");
+        ok = true;
+    }
+    if (HAS_PARAMv2("TimeStretch"))
+    {
+        if (ok)
+            sql.append(",");
+        sql.append(" timestretch = :TIMESTRETCH ");
+        ok = true;
+    }
+    if (HAS_PARAMv2("Jump"))
+    {
+        if (ok)
+            sql.append(",");
+        sql.append(" jump = :JUMP ");
+        ok = true;
+    }
+    if (ok)
+    {
+        sql.append(" WHERE name = :NAME ");
+        MSqlQuery query(MSqlQuery::InitCon());
+        query.prepare(sql);
+        query.bindValue(":NAME", Name);
+        if (HAS_PARAMv2("TitleMatch"))
+            query.bindValue(":TITLEMATCH", TitleMatch);
+        if (HAS_PARAMv2("SkipAhead"))
+            query.bindValue(":SKIPAHEAD", SkipAhead);
+        if (HAS_PARAMv2("SkipBack"))
+            query.bindValue(":SKIPBACK", SkipBack);
+        if (HAS_PARAMv2("TimeStretch"))
+            query.bindValue(":TIMESTRETCH", TimeStretch);
+        if (HAS_PARAMv2("Jump"))
+            query.bindValue(":JUMP", Jump);
+        if (query.exec())
+            return true;
+    }
+    return false;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1378,8 +1670,9 @@ V2ProgramList* V2Dvr::GetUpcomingList( int  nStartIndex,
                                         int  nCount,
                                         bool bShowAll,
                                         int  nRecordId,
-                                        const QString & RecStatus,
-                                        const QString  &Sort )
+                                        const QString &RecStatus,
+                                        const QString &Sort,
+                                        const QString &RecGroup )
 {
     int nRecStatus = 0;
     if (!RecStatus.isEmpty())
@@ -1387,7 +1680,7 @@ V2ProgramList* V2Dvr::GetUpcomingList( int  nStartIndex,
         // Handle enum name
         QMetaEnum meta = QMetaEnum::fromType<RecStatus::Type>();
         bool ok {false};
-        nRecStatus = meta.keyToValue(RecStatus.toLocal8Bit(), &ok);
+        nRecStatus = meta.keyToValue(RecStatus.toLocal8Bit().constData(), &ok);
         // if enum name not valid try for int nRecStatus
         if (!ok)
             nRecStatus = RecStatus.toInt(&ok);
@@ -1402,7 +1695,8 @@ V2ProgramList* V2Dvr::GetUpcomingList( int  nStartIndex,
                                          bShowAll,
                                          nRecordId,
                                          nRecStatus,
-                                         Sort );
+                                         Sort,
+                                         RecGroup );
 
     pPrograms->setStartIndex    ( nStartIndex     );
     pPrograms->setCount         ( nCount          );
@@ -1969,7 +2263,7 @@ QString V2Dvr::RecStatusToString(const QString & RecStatus)
     // Handle enum name
     QMetaEnum meta = QMetaEnum::fromType<RecStatus::Type>();
     bool ok {false};
-    int value = meta.keyToValue(RecStatus.toLocal8Bit(), &ok);
+    int value = meta.keyToValue(RecStatus.toLocal8Bit().constData(), &ok);
     // if enum name not valid try for int value
     if (!ok)
         value = RecStatus.toInt(&ok);
@@ -1986,7 +2280,7 @@ QString V2Dvr::RecStatusToDescription(const QString &  RecStatus, int recType,
     // Handle enum name
     QMetaEnum meta = QMetaEnum::fromType<RecStatus::Type>();
     bool ok {false};
-    int value = meta.keyToValue(RecStatus.toLocal8Bit(), &ok);
+    int value = meta.keyToValue(RecStatus.toLocal8Bit().constData(), &ok);
     // if enum name not valid try for int value
     if (!ok)
         value = RecStatus.toInt(&ok);
@@ -2111,9 +2405,9 @@ int V2Dvr::ManageJobQueue( const QString   &sAction,
     if (!gCoreContext->GetBoolSettingOnHost(QString("JobAllow%1").arg(sJobName),
                                             sRemoteHost, false))
     {
-        LOG(VB_GENERAL, LOG_ERR, QString("%1 hasn't been allowed on host %2.")
-                                         .arg(sJobName, sRemoteHost));
-        return nReturn;
+        LOG(VB_GENERAL, LOG_INFO, QString("JobAllow%1 hasn't been setup for "
+                                          "host %2 (will be run by default.)")
+                                          .arg(sJobName, sRemoteHost));
     }
 
     if (!JobStartTime.isValid())
@@ -2313,7 +2607,7 @@ bool V2Dvr::UpdateRecordedMetadata ( uint             RecordedId,
             LOG(VB_GENERAL, LOG_ERR, "Recording stars can be 0 to 10.");
             return false;
         }
-        ri.ApplyStarsChange(Stars * 0.1);
+        ri.ApplyStarsChange(Stars * 0.1F);
     }
 
     if (HAS_PARAMv2("Watched"))
@@ -2324,3 +2618,143 @@ bool V2Dvr::UpdateRecordedMetadata ( uint             RecordedId,
 
     return true;
 }
+
+// Get a single record by filling PriorityName, otherwise all records
+V2PowerPriorityList* V2Dvr::GetPowerPriorityList (const QString &PriorityName )
+{
+    auto *pList = new V2PowerPriorityList();
+
+    MSqlQuery query(MSqlQuery::InitCon());
+
+    QString sql("SELECT priorityname, recpriority, selectclause "
+                "FROM powerpriority ");
+
+    if (!PriorityName.isEmpty())
+        sql.append(" WHERE priorityname = :NAME ");
+
+    query.prepare(sql);
+
+    if (!PriorityName.isEmpty())
+        query.bindValue(":NAME", PriorityName);
+
+    if (query.exec())
+    {
+        while (query.next())
+        {
+            V2PowerPriority * pRec = pList->AddNewPowerPriority();
+            pRec->setPriorityName(query.value(0).toString());
+            pRec->setRecPriority(query.value(1).toInt());
+            pRec->setSelectClause(query.value(2).toString());
+        }
+    }
+    else
+    {
+        throw (QString("Error accessing powerpriority table"));
+    }
+
+    return pList;
+}
+
+bool V2Dvr::RemovePowerPriority ( const QString & PriorityName )
+{
+    if (PriorityName.isEmpty())
+        return false;
+
+    MSqlQuery query(MSqlQuery::InitCon());
+    query.prepare("DELETE FROM powerpriority WHERE priorityname = :PRIORITYNAME");
+    query.bindValue(":PRIORITYNAME", PriorityName);
+
+    return query.exec();
+}
+
+bool V2Dvr::AddPowerPriority    ( const QString & PriorityName,
+                                  int             RecPriority,
+                                  const QString & SelectClause )
+{
+    if (PriorityName.isEmpty())
+        throw QString("ERROR: PriorityName is not specified");
+    if (SelectClause.isEmpty())
+        throw QString("ERROR: SelectClause is required");
+    QString msg = CheckPowerQuery(SelectClause);
+    if (! msg.isEmpty() )
+        throw std::move(msg);
+    MSqlQuery query(MSqlQuery::InitCon());
+    query.prepare("INSERT INTO powerpriority "
+                " (priorityname, recpriority, selectclause) "
+                " VALUES(:PRIORITYNAME, :RECPRIORITY, :SELECTCLAUSE) ");
+    query.bindValue(":PRIORITYNAME", PriorityName);
+    query.bindValue(":RECPRIORITY", RecPriority);
+    query.bindValue(":SELECTCLAUSE", SelectClause);
+    if (!query.exec())
+        throw(query.lastError().databaseText());
+    return true;
+}
+
+bool V2Dvr::UpdatePowerPriority ( const QString & PriorityName,
+                                  int             RecPriority,
+                                  const QString & SelectClause )
+{
+    if (PriorityName.isEmpty())
+        throw QString("ERROR: PriorityName is not specified");
+    if (!HAS_PARAMv2("RecPriority") && !HAS_PARAMv2("SelectClause"))
+        throw QString("ERROR: RecPriority or SelectClause is required");
+
+    if (HAS_PARAMv2("SelectClause"))
+    {
+        QString msg = CheckPowerQuery(SelectClause);
+        if (! msg.isEmpty() )
+            throw std::move(msg);
+    }
+    MSqlQuery query(MSqlQuery::InitCon());
+    bool comma = false;
+    QString sql("UPDATE powerpriority SET ");
+    if ( HAS_PARAMv2("RecPriority") )
+    {
+        sql.append(" recpriority = :RECPRIORITY ");
+        comma = true;
+    }
+    if ( HAS_PARAMv2("SelectClause") )
+    {
+        if (comma)
+            sql.append(" , ");
+        sql.append(" selectclause = :SELECTCLAUSE ");
+    }
+    sql.append(" where priorityname = :PRIORITYNAME ");
+    query.prepare(sql);
+    query.bindValue(":PRIORITYNAME", PriorityName);
+    if ( HAS_PARAMv2("RecPriority") )
+        query.bindValue(":RECPRIORITY", RecPriority);
+    if ( HAS_PARAMv2("SelectClause") )
+        query.bindValue(":SELECTCLAUSE", SelectClause);
+    if (!query.exec())
+        throw(query.lastError().databaseText());
+    return query.numRowsAffected() > 0;
+}
+
+QString V2Dvr::CheckPowerQuery(const QString & SelectClause)
+{
+    QString msg;
+    QString sql = QString("SELECT (%1) FROM (recordmatch, record, "
+                           "program, channel, capturecard, "
+                           "oldrecorded) WHERE NULL").arg(SelectClause);
+    while (true)
+    {
+        int i = sql.indexOf("RECTABLE");
+        if (i == -1) break;
+        sql = sql.replace(i, strlen("RECTABLE"), "record");
+    }
+
+    MSqlQuery query(MSqlQuery::InitCon());
+    query.prepare(sql);
+
+    if (!query.exec())
+    {
+        msg = tr("An error was found when checking") + ":\n\n";
+        msg += query.executedQuery();
+        msg += "\n\n" + tr("The database error was") + ":\n";
+        msg += query.lastError().databaseText();
+    }
+    return msg;
+}
+
+#include "moc_v2dvr.cpp"

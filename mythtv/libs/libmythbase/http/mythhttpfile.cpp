@@ -1,3 +1,6 @@
+// C++ headers
+#include <algorithm>
+
 // Qt
 #include <QFile>
 #include <QFileInfo>
@@ -47,7 +50,7 @@ HTTPResponse MythHTTPFile::ProcessFile(const HTTPRequest2& Request)
 
     if (!QFileInfo::exists(file))
     {
-        LOG(VB_GENERAL, LOG_WARNING, LOC + QString("Failed to find '%1'").arg(file));
+        LOG(VB_HTTP, LOG_INFO, LOC + QString("Failed to find '%1'").arg(file));
         Request->m_status = HTTPNotFound;
         return MythHTTPResponse::ErrorResponse(Request);
     }
@@ -64,7 +67,7 @@ HTTPResponse MythHTTPFile::ProcessFile(const HTTPRequest2& Request)
     // Extensions that should not be cached
     static const std::vector<const char *> s_exts = { ".json", ".js", ".html", ".css" };
 
-    if (std::any_of(s_exts.cbegin(), s_exts.cend(),
+    if (std::ranges::any_of(s_exts,
             [&](const char * value) { return file.endsWith(value); }))
         httpfile->m_cacheType = HTTPNoCache;
     else

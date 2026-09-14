@@ -19,6 +19,21 @@
  */
 #include "test_logging.h"
 
+#include <iostream>
+#include <sstream>
+
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
+#include <QTest>
+
+#include "mythconfig.h"
+#include "mythsyslog.h"
+#include "exitcodes.h"
+#include "logging.h"
+#include "mythlogging.h"
+
 void TestLogging::initialize (void)
 {
     QCOMPARE(logLevelGet("force initialization"), LOG_UNKNOWN);
@@ -29,7 +44,7 @@ void TestLogging::test_syslogGetFacility_data (void)
     QTest::addColumn<QString>("string");
     QTest::addColumn<int>("expected");
 
-#ifdef _WIN32
+#ifdef Q_OS_WINDOWS
 #elif defined(Q_OS_ANDROID)
 #else
     QTest::newRow("auth")   << "auth"   << LOG_AUTH;
@@ -46,7 +61,7 @@ void TestLogging::test_syslogGetFacility (void)
     QFETCH(int, expected);
 
     int actual = syslogGetFacility(string);
-#ifdef _WIN32
+#ifdef Q_OS_WINDOWS
     QCOMPARE(actual, -2);
 #elif defined(Q_OS_ANDROID)
     QCOMPARE(actual, -2);
@@ -291,7 +306,7 @@ void TestLogging::test_logPropagateCalc_data (void)
                              << 2 << -1
                              << false
                              << "--verbose general --loglevel info --quiet --quiet";
-#if !defined(_WIN32) && !defined(Q_OS_ANDROID)
+#if !defined(Q_OS_WINDOWS) && !defined(Q_OS_ANDROID)
     QTest::newRow("syslog")  << "general"
                              << 0 << LOG_DAEMON
                              << false
@@ -326,7 +341,7 @@ void TestLogging::test_logPropagateCalc (void)
     std::streambuf* oldCoutBuffer = std::cerr.rdbuf(buffer.rdbuf());
     resetLogging();
     int actualExit = verboseArgParse(argument);
-    logStart("/tmp/test", false, quiet, facility, LOG_INFO, propagate, true);
+    logStart("/tmp/test", false, quiet, facility, LOG_INFO, propagate, false, true);
     std::cerr.rdbuf(oldCoutBuffer);
 
     // Check results
@@ -338,3 +353,5 @@ void TestLogging::test_logPropagateCalc (void)
 }
 
 QTEST_APPLESS_MAIN(TestLogging)
+
+#include "moc_test_logging.cpp"

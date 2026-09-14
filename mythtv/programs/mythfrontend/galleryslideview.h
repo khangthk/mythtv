@@ -27,6 +27,7 @@ public:
     GallerySlideView(MythScreenStack *parent, const char *name, bool editsAllowed);
     ~GallerySlideView() override;
     bool Create() override; // MythScreenType
+    bool keyPressEvent(QKeyEvent *event) override; // MythScreenType
 
 public slots:
     void Start(ImageSlideShowType type, int parentId, int selectedId = 0);
@@ -36,9 +37,10 @@ public slots:
 signals:
     void ImageSelected(int);
 
-private:
-    bool keyPressEvent(QKeyEvent *event) override; // MythScreenType
+protected:
     void customEvent(QEvent *event) override; // MythUIType
+
+private:
     void MenuMain();
     void MenuTransforms(MythMenu &mainMenu);
     void Suspend();
@@ -59,7 +61,7 @@ private slots:
     void Stop();
     void Play(bool useTransition);
     void Play() { Play(true); };
-    static void RepeatOn(int on)       { gCoreContext->SaveSetting("GalleryRepeat", on); }
+    static void RepeatOn(int on);
     static void RepeatOn()             { RepeatOn(1); }
     static void RepeatOff()            { RepeatOn(0); }
     void ShowInfo();

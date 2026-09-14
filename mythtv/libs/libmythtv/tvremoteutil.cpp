@@ -1,11 +1,13 @@
+#include <algorithm>
 #include <chrono> // for milliseconds
 #include <thread> // for sleep_for
 
 #include "libmythbase/mythcorecontext.h"
-#include "libmythbase/programinfo.h"
+#include "libmythbase/mythlogging.h"
 
 #include "cardutil.h"
 #include "inputinfo.h"
+#include "programinfo.h"
 #include "remoteencoder.h"
 #include "tv_rec.h"
 #include "tvremoteutil.h"
@@ -129,7 +131,7 @@ void RemoteCancelNextRecording(uint inputid, bool cancel)
 {
     QStringList strlist(QString("QUERY_RECORDER %1").arg(inputid));
     strlist << "CANCEL_NEXT_RECORDING";
-    strlist << QString::number((cancel) ? 1 : 0);
+    strlist << QString::number(cancel ? 1 : 0);
 
     gCoreContext->SendReceiveStringList(strlist);
 }
@@ -210,11 +212,11 @@ RemoteEncoder *RemoteRequestNextFreeRecorder(int inputid)
         // Try to find the next input with a different name.  If one
         // doesn't exist, just return the current one.
         size_t j = i;
-        do
+        i = (i + 1) % inputs.size();
+        while (i != j && inputs[i].m_displayName == inputs[j].m_displayName)
         {
             i = (i + 1) % inputs.size();
         }
-        while (i != j && inputs[i].m_displayName == inputs[j].m_displayName);
     }
 
     LOG(VB_CHANNEL, LOG_INFO,
@@ -234,7 +236,7 @@ std::vector<uint> RemoteRequestFreeRecorderList(uint excluded_input)
         RemoteRequestFreeInputInfo(excluded_input);
 
     std::vector<uint> inputids;
-    std::transform(inputs.cbegin(), inputs.cend(), std::back_inserter(inputids),
+    std::ranges::transform(inputs, std::back_inserter(inputids),
                    [](const auto & input){ return input.m_inputId; } );
 
     LOG(VB_CHANNEL, LOG_INFO,
@@ -252,7 +254,7 @@ std::vector<uint> RemoteRequestFreeInputList(uint excluded_input)
         RemoteRequestFreeInputInfo(excluded_input);
 
     std::vector<uint> inputids;
-    std::transform(inputs.cbegin(), inputs.cend(), std::back_inserter(inputids),
+    std::ranges::transform(inputs, std::back_inserter(inputids),
                    [](const auto & input){ return input.m_inputId; } );
 
     LOG(VB_CHANNEL, LOG_INFO,
@@ -273,8 +275,12 @@ RemoteEncoder *RemoteRequestFreeRecorderFromList
     for (const auto & recorder : std::as_const(qualifiedRecorders))
     {
         uint inputid = recorder.toUInt();
+#ifdef __cpp_lib_ranges_contains
+        if (std::ranges::contains(inputs, inputid, &InputInfo::m_inputId))
+#else
         auto sameinput = [inputid](const auto & input){ return input.m_inputId == inputid; };
-        if (std::any_of(inputs.cbegin(), inputs.cend(), sameinput))
+        if (std::ranges::any_of(inputs, sameinput))
+#endif
         {
             LOG(VB_CHANNEL, LOG_INFO,
                 QString("RemoteRequestFreeRecorderFromList got input %1")
@@ -473,6 +479,43 @@ bool RemoteGetRecordingStatus(
     }
 
     return isRecording;
+}
+
+int RemoteGetRecordingMask(void)
+{
+    int mask = 0;
+
+    QString cmd = "QUERY_ISRECORDING";
+
+    QStringList strlist( cmd );
+
+    if (!gCoreContext->SendReceiveStringList(strlist) || strlist.isEmpty())
+        return mask;
+
+    int recCount = strlist[0].toInt();
+
+    for (int i = 0, j = 0; j < recCount; i++)
+    {
+        cmd = QString("QUERY_RECORDER %1").arg(i + 1);
+
+        strlist = QStringList( cmd );
+        strlist << "IS_RECORDING"; // clazy:exclude=reserve-candidates
+
+        if (gCoreContext->SendReceiveStringList(strlist) && !strlist.isEmpty())
+        {
+            if (strlist[0].toInt())
+            {
+                mask |= 1<<i;
+                j++;       // count active recorder
+            }
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    return mask;
 }
 
 /* vim: set expandtab tabstop=4 shiftwidth=4: */

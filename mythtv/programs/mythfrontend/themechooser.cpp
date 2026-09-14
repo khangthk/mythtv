@@ -13,9 +13,7 @@
 #include "libmythbase/mythdownloadmanager.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythversion.h"
-#include "libmythbase/programtypes.h"
 #include "libmythbase/remotefile.h"
-#include "libmythbase/remoteutil.h"
 #include "libmythbase/storagegroup.h"
 #include "libmythbase/unziputil.h" // for extractZIP
 #include "libmythtv/mythsystemevent.h"
@@ -32,10 +30,6 @@
 
 // Theme Chooser headers
 #include "themechooser.h"
-
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 2)
-#define capturedView capturedRef
-#endif
 
 #define LOC QString("ThemeChooser: ")
 #define LOC_WARN QString("ThemeChooser, Warning: ")
@@ -167,69 +161,47 @@ void ThemeChooser::Load(void)
         }
     }
 
-    // MYTH_SOURCE_VERSION - examples v29-pre-574-g92517f5, v29-Pre, v29.1-21-ge26a33c
-    QString MythVersion(GetMythSourceVersion());
-    static const QRegularExpression trunkver{"\\Av[0-9]+-pre.*\\z", QRegularExpression::CaseInsensitiveOption};
-    static const QRegularExpression validver{
-        "\\Av[0-9]+.*\\z", QRegularExpression::CaseInsensitiveOption};
+    uint major { 0 };
+    uint minor { 0 };
+    bool devel { false };
+    bool parsed = ParseMythSourceVersion(devel, major, minor);
 
-    auto match = validver.match(MythVersion);
-    if (!match.hasMatch())
+    if (!parsed || devel)
     {
-        LOG(VB_GENERAL, LOG_ERR, QString("Invalid MythTV version %1, will use themes from trunk").arg(MythVersion));
-        MythVersion = "trunk";
-    }
-    match = trunkver.match(MythVersion);
-    if (match.hasMatch())
-        MythVersion = "trunk";
-
-    if (MythVersion == "trunk")
-    {
-        LoadVersion(MythVersion, themesSeen, true);
-        LOG(VB_GUI, LOG_INFO, QString("Loading themes for %1").arg(MythVersion));
+        if (!parsed)
+            LOG(VB_GENERAL, LOG_ERR,
+                QString("Invalid MythTV version %1, will use themes from devel")
+                .arg(GetMythSourceVersion()));
+        LOG(VB_GUI, LOG_INFO, QString("Loading themes for devel"));
+        LoadVersion("trunk", themesSeen, true);
     }
     else
     {
-        MythVersion = MYTH_BINARY_VERSION; // Example: 29.20161017-1
-        // Remove the date part and the rest, eg 29.20161017-1 -> 29
-        MythVersion.remove(kVersionDateRE);
+        QString MythVersion { QString::number(major) };
         LOG(VB_GUI, LOG_INFO, QString("Loading themes for %1").arg(MythVersion));
         if (LoadVersion(MythVersion, themesSeen, true))
         {
-
-            // If a version of the theme for this tag exists, use it...
-            // MYTH_SOURCE_VERSION - examples v29-pre-574-g92517f5, v29-Pre, v29.1-21-ge26a33c
-            static const QRegularExpression subexp{"v[0-9]+\\.([0-9]+)-*", QRegularExpression::CaseInsensitiveOption};
-            // This captures the subversion, i.e. the number after a dot
-            match = subexp.match(GetMythSourceVersion());
-            if (match.hasMatch())
+            for (int idx = minor ; idx > 0; idx--)
             {
                 QString subversion;
-                LOG(VB_GUI, LOG_INFO, QString("Loading version %1").arg(match.capturedView(1).toInt()));
-                for (int idx = match.capturedView(1).toInt(); idx > 0; --idx)
-                {
-                    subversion = MythVersion + "." + QString::number(idx);
-                    LOG(VB_GUI, LOG_INFO, QString("Loading themes for %1").arg(subversion));
-                    LoadVersion(subversion, themesSeen, false);
-                }
-            }
-            else
-            {
-                LOG(VB_GENERAL, LOG_WARNING, QString("Failed to match theme for %1").arg(GetMythSourceVersion()));
+                subversion = MythVersion + "." + QString::number(idx);
+                LOG(VB_GUI, LOG_INFO, QString("Loading themes for %1").arg(subversion));
+                LoadVersion(subversion, themesSeen, false);
             }
 
             ResetBusyPopup();
 
+            // QList doesn't always play well with std::range
+            // NOLINTNEXTLINE(modernize-use-ranges)
             std::sort(m_infoList.begin(), m_infoList.end(), sortThemeNames);
         }
         else
         {
 
-            LOG(VB_GENERAL, LOG_INFO, QString("Failed to load themes for %1, trying trunk").arg(MythVersion));
-            MythVersion = "trunk";
-            if (!LoadVersion(MythVersion, themesSeen, true))
+            LOG(VB_GENERAL, LOG_INFO, QString("Failed to load themes for %1, trying devel").arg(MythVersion));
+            if (!LoadVersion("trunk", themesSeen, true))
             {
-                LOG(VB_GENERAL, LOG_WARNING, QString("Failed to load themes for %1").arg(MythVersion));
+                LOG(VB_GENERAL, LOG_WARNING, QString("Failed to load themes for devel"));
             }
         }
     }
@@ -279,7 +251,9 @@ bool ThemeChooser::LoadVersion(const QString &version,
     {
         QFile test(remoteThemesFile);
         if (test.open(QIODevice::WriteOnly))
+        {
             test.remove();
+        }
         else
         {
             ShowOkPopup(tr("Unable to create '%1'").arg(remoteThemesFile));
@@ -477,7 +451,9 @@ void ThemeChooser::Init(void)
     QString testFile = m_userThemeDir + "/.test";
     QFile test(testFile);
     if (test.open(QIODevice::WriteOnly))
+    {
         test.remove();
+    }
     else
     {
         ShowOkPopup(tr("Error creating test file, %1 themes directory is "
@@ -526,7 +502,9 @@ void ThemeChooser::showPopupMenu(void)
     connect(m_popupMenu, &MythDialogBox::Closed, this, &ThemeChooser::popupClosed);
 
     if (m_popupMenu->Create())
+    {
         popupStack->AddScreen(m_popupMenu);
+    }
     else
     {
         delete m_popupMenu;
@@ -601,9 +579,13 @@ bool ThemeChooser::keyPressEvent(QKeyEvent *event)
         handled = true;
 
         if (action == "MENU")
+        {
             showPopupMenu();
+        }
         else if (action == "DELETE")
+        {
             removeTheme();
+        }
         else if ((action == "ESCAPE") &&
                  (m_fullPreviewShowing))
         {
@@ -693,7 +675,9 @@ void ThemeChooser::saveAndReload(MythUIButtonListItem *item)
         QString testFile = m_userThemeDir + "/.test";
         QFile test(testFile);
         if (test.open(QIODevice::WriteOnly))
+        {
             test.remove();
+        }
         else
         {
             ShowOkPopup(tr("Unable to install theme, %1 themes directory is "
@@ -709,15 +693,9 @@ void ThemeChooser::saveAndReload(MythUIButtonListItem *item)
 
         if (!gCoreContext->GetSetting("ThemeDownloadURL").isEmpty())
         {
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-            QStringList tokens =
-                gCoreContext->GetSetting("ThemeDownloadURL")
-                    .split(";", QString::SkipEmptyParts);
-#else
             QStringList tokens =
                 gCoreContext->GetSetting("ThemeDownloadURL")
                     .split(";", Qt::SkipEmptyParts);
-#endif
             QString origURL = downloadURL;
             downloadURL.replace(tokens[0], tokens[1]);
             LOG(VB_FILE, LOG_WARNING, LOC + QString("Theme download URL overridden from %1 to %2.").arg(origURL, downloadURL));
@@ -822,12 +800,7 @@ void ThemeChooser::customEvent(QEvent *e)
         if (me == nullptr)
             return;
 
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-        QStringList tokens = me->Message().split(" ", QString::SkipEmptyParts);
-#else
         QStringList tokens = me->Message().split(" ", Qt::SkipEmptyParts);
-#endif
-
         if (tokens.isEmpty())
             return;
 
@@ -1013,27 +986,21 @@ bool ThemeChooser::removeThemeDir(const QString &dirname)
 
 ThemeUpdateChecker::ThemeUpdateChecker(void) : m_updateTimer(new QTimer(this))
 {
-    QString version = GetMythSourcePath();
+    uint major { 0 };
+    uint minor { 0 };
+    bool devel { false };
+    bool parsed = ParseMythSourceVersion(devel, major, minor);
 
-    if (!version.isEmpty() && !version.startsWith("fixes/"))
+    if (!parsed || devel)
     {
-        // Treat devel branches as master
         m_mythVersions << "trunk";
     }
     else
     {
-        version = MYTH_BINARY_VERSION; // Example: 0.25.20101017-1
-        version.remove(kVersionDateRE);
-
-        // If a version of the theme for this tag exists, use it...
-        static const QRegularExpression subexp{"v[0-9]+\\.([0-9]+)-*", QRegularExpression::CaseInsensitiveOption};
-        auto match = subexp.match(GetMythSourceVersion());
-        if (match.hasMatch())
-        {
-            for (int idx = match.capturedView(1).toInt(); idx > 0; --idx)
-                m_mythVersions << version + "." + QString::number(idx);
-        }
-        m_mythVersions << version;
+        m_mythVersions.reserve(minor + 1);
+        for (int i = minor ; i > 0; i--)
+            m_mythVersions << QString("%1.%2").arg(major).arg(i);
+        m_mythVersions << QString::number(major);
     }
 
     m_infoPackage = MythCoreContext::GenMythURL(gCoreContext->GetMasterHostName(),
@@ -1177,4 +1144,4 @@ void ThemeUpdateChecker::checkForUpdate(void)
     delete localTheme;
 }
 
-/* vim: set expandtab tabstop=4 shiftwidth=4: */
+#include "moc_themechooser.cpp"

@@ -1,4 +1,4 @@
-import { HttpClientModule } from '@angular/common/http';
+import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -11,11 +11,10 @@ describe('DbsetupComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [ DbsetupComponent ],
-      imports:      [ FormsModule,
-                      HttpClientModule,
-                      RouterTestingModule ]
-    })
+    imports: [FormsModule,
+        RouterTestingModule, DbsetupComponent],
+    providers: [provideHttpClient(withInterceptorsFromDi())]
+})
     .compileComponents();
   });
 

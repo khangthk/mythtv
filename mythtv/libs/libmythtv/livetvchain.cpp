@@ -1,13 +1,13 @@
 #include <algorithm>
 
-#include "libmyth/mythcontext.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythsocket.h"
-#include "libmythbase/programinfo.h"
 
 #include "livetvchain.h"
 #include "cardutil.h"
+#include "programinfo.h"
 
 #define LOC QString("LiveTVChain(%1): ").arg(m_id)
 
@@ -97,7 +97,9 @@ void LiveTVChain::AppendNewProgram(ProgramInfo *pginfo, const QString& channum,
     query.bindValue(":INPUT", inputname);
 
     if (!query.exec() || !query.isActive())
+    {
         MythDB::DBError("Chain: AppendNewProgram", query);
+    }
     else
     {
         LOG(VB_RECORD, LOG_INFO, QString("Chain: Appended@%3 '%1_%2'")
@@ -122,7 +124,9 @@ void LiveTVChain::FinishedRecording(ProgramInfo *pginfo)
     query.bindValue(":START", pginfo->GetRecordingStartTime());
 
     if (!query.exec() || !query.isActive())
+    {
         MythDB::DBError("Chain: FinishedRecording", query);
+    }
     else
     {
         LOG(VB_RECORD, LOG_INFO,
@@ -278,7 +282,9 @@ void LiveTVChain::GetEntryAt(int at, LiveTVChainEntry &entry) const
     int new_at = (size && (at < 0 || at >= size)) ? size - 1 : at;
 
     if (size && new_at >= 0 && new_at < size)
+    {
         entry = m_chain[new_at];
+    }
     else
     {
         LOG(VB_GENERAL, LOG_ERR, QString("GetEntryAt(%1) failed.").arg(at));
@@ -295,7 +301,7 @@ void LiveTVChain::GetEntryAt(int at, LiveTVChainEntry &entry) const
     }
 }
 
-ProgramInfo *LiveTVChain::EntryToProgram(const LiveTVChainEntry &entry)
+ProgramInfo *LiveTVChain::EntryToProgram(const LiveTVChainEntry &entry) const
 {
     auto *pginfo = new ProgramInfo(entry.chanid, entry.starttime);
 
@@ -450,6 +456,7 @@ ProgramInfo *LiveTVChain::DoGetNextProgram(bool up, int curpos, int &newid,
     LiveTVChainEntry oldentry;
     LiveTVChainEntry entry;
     ProgramInfo *pginfo = nullptr;
+    int step = up ? 1 : -1;
 
     GetEntryAt(curpos, oldentry);
 
@@ -464,7 +471,7 @@ ProgramInfo *LiveTVChain::DoGetNextProgram(bool up, int curpos, int &newid,
     {
         // try to find recordings during first pass
         // we'll skip dummy and empty recordings
-        while (!pginfo && newid < m_chain.count() && newid >= 0)
+        while (!pginfo && (newid >= 0) && (newid < m_chain.count()))
         {
             GetEntryAt(newid, entry);
 
@@ -490,7 +497,7 @@ ProgramInfo *LiveTVChain::DoGetNextProgram(bool up, int curpos, int &newid,
 
             if (!pginfo)
             {
-                newid += up ? 1 : -1;
+                newid += step;
             }
         }
 
@@ -498,10 +505,9 @@ ProgramInfo *LiveTVChain::DoGetNextProgram(bool up, int curpos, int &newid,
         {
             // didn't find in first pass, now get back to the next good one
             // as this is the one we will use
-            do
+            newid -= step; // Bring newid back in range of m_chain
+            while (!pginfo && (newid >= 0) && (newid < m_chain.count()))
             {
-                newid += up ? -1 : 1;
-
                 GetEntryAt(newid, entry);
 
                 bool at_last_entry =
@@ -523,8 +529,11 @@ ProgramInfo *LiveTVChain::DoGetNextProgram(bool up, int curpos, int &newid,
                     delete pginfo;
                     pginfo = nullptr;
                 }
+                if (!pginfo)
+                {
+                    newid -= step;
+                }
             }
-            while (!pginfo && newid < m_chain.count() && newid >= 0);
 
             if (!pginfo)
             {
@@ -754,6 +763,7 @@ QStringList LiveTVChain::entriesToStringList() const
 {
     QMutexLocker lock(&m_lock);
     QStringList ret;
+    ret.reserve(1 + (8 * m_chain.size()));
     ret << QString::number(m_maxPos);
     for (const auto & entry : std::as_const(m_chain))
     {

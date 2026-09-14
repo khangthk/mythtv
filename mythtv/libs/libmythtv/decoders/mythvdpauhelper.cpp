@@ -2,6 +2,27 @@
 #include "libmythbase/mythlogging.h"
 #include "mythvideocolourspace.h"
 #include "mythvdpauhelper.h"
+
+extern "C" {
+#include "libavcodec/defs.h"
+}
+
+extern "C" {
+#define Cursor XCursor // Prevent conflicts with Qt6.
+#define pointer Xpointer // Prevent conflicts with Qt6.
+#if defined(_X11_XLIB_H_) && !defined(Bool)
+#define Bool int
+#endif
+#include "vdpau/vdpau_x11.h"
+#undef None            // X11/X.h defines this. Causes compile failure in Qt6.
+#undef Cursor
+#undef pointer
+#undef Bool            // Interferes with cmake moc file compilation
+#undef True            // Interferes with cmake moc file compilation
+#undef False           // Interferes with cmake moc file compilation
+#undef Always          // X11/X.h defines this. Causes compile failure in Qt6.
+}
+
 #include "libmythui/platforms/mythxdisplay.h" // always last
 
 // Std
@@ -234,9 +255,9 @@ static void vdpau_preemption_callback(VdpDevice /*unused*/, void* Opaque)
  * \brief A simple wrapper around VDPAU functionality.
 */
 MythVDPAUHelper::MythVDPAUHelper(AVVDPAUDeviceContext* Context)
-  : m_valid(InitProcs()),
-    m_device(Context->device),
-    m_vdpGetProcAddress(Context->get_proc_address)
+  : m_device(Context->device),
+    m_vdpGetProcAddress(Context->get_proc_address),
+    m_valid(InitProcs())
 {
     if (m_valid)
     {
@@ -254,8 +275,8 @@ static const char* DummyGetError(VdpStatus /*status*/)
 }
 
 MythVDPAUHelper::MythVDPAUHelper(void)
-  : m_createdDevice(true),
-    m_display(MythXDisplay::OpenMythXDisplay(false))
+  : m_display(MythXDisplay::OpenMythXDisplay(false)),
+    m_createdDevice(true)
 {
     if (!m_display)
         return;
@@ -358,20 +379,20 @@ bool MythVDPAUHelper::CheckH264Decode(AVCodecContext *Context)
     }
 
     VdpDecoderProfile profile = 0;
-    switch (Context->profile & ~FF_PROFILE_H264_INTRA)
+    switch (Context->profile & ~AV_PROFILE_H264_INTRA)
     {
-        case FF_PROFILE_H264_BASELINE: profile = VDP_DECODER_PROFILE_H264_BASELINE; break;
-        case FF_PROFILE_H264_CONSTRAINED_BASELINE: profile = VDP_DECODER_PROFILE_H264_CONSTRAINED_BASELINE; break;
-        case FF_PROFILE_H264_MAIN: profile = VDP_DECODER_PROFILE_H264_MAIN; break;
-        case FF_PROFILE_H264_HIGH: profile = VDP_DECODER_PROFILE_H264_HIGH; break;
+        case AV_PROFILE_H264_BASELINE: profile = VDP_DECODER_PROFILE_H264_BASELINE; break;
+        case AV_PROFILE_H264_CONSTRAINED_BASELINE: profile = VDP_DECODER_PROFILE_H264_CONSTRAINED_BASELINE; break;
+        case AV_PROFILE_H264_MAIN: profile = VDP_DECODER_PROFILE_H264_MAIN; break;
+        case AV_PROFILE_H264_HIGH: profile = VDP_DECODER_PROFILE_H264_HIGH; break;
 #ifdef VDP_DECODER_PROFILE_H264_EXTENDED
-        case FF_PROFILE_H264_EXTENDED: profile = VDP_DECODER_PROFILE_H264_EXTENDED; break;
+        case AV_PROFILE_H264_EXTENDED: profile = VDP_DECODER_PROFILE_H264_EXTENDED; break;
 #endif
-        case FF_PROFILE_H264_HIGH_10: profile = VDP_DECODER_PROFILE_H264_HIGH; break;
+        case AV_PROFILE_H264_HIGH_10: profile = VDP_DECODER_PROFILE_H264_HIGH; break;
 #ifdef VDP_DECODER_PROFILE_H264_HIGH_444_PREDICTIVE
-        case FF_PROFILE_H264_HIGH_422:
-        case FF_PROFILE_H264_HIGH_444_PREDICTIVE:
-        case FF_PROFILE_H264_CAVLC_444: profile = VDP_DECODER_PROFILE_H264_HIGH_444_PREDICTIVE; break;
+        case AV_PROFILE_H264_HIGH_422:
+        case AV_PROFILE_H264_HIGH_444_PREDICTIVE:
+        case AV_PROFILE_H264_CAVLC_444: profile = VDP_DECODER_PROFILE_H264_HIGH_444_PREDICTIVE; break;
 #endif
         default: return false;
     }
@@ -598,3 +619,5 @@ QSize MythVDPAUHelper::GetSurfaceParameters(VdpVideoSurface Surface, VdpChromaTy
 
     return {static_cast<int>(width), static_cast<int>(height)};
 }
+
+#include "moc_mythvdpauhelper.cpp"

@@ -1,7 +1,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
-#include <unistd.h>
+#include <thread>
 
 // qt
 #include <QCoreApplication>
@@ -10,7 +10,9 @@
 #include <QTextStream>
 
 // mythtv
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythdbcon.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythui/mythdialogbox.h>
 #include <libmythui/mythmainwindow.h>
 #include <libmythui/mythuibutton.h>
@@ -60,7 +62,7 @@ void showLogViewer(void)
             }
         }
 
-        sleep(1);
+        std::this_thread::sleep_for(1s);
     }
 
     // do any logs exist?
@@ -76,6 +78,14 @@ void showLogViewer(void)
         showWarningDialog(QCoreApplication::translate("LogViewer",
             "Cannot find any logs to show!"));
     }
+}
+
+LogViewer::LogViewer(MythScreenStack *parent)
+    : MythScreenType(parent, "logviewer"),
+      m_autoUpdate(gCoreContext->GetBoolSetting("LogViewerAutoUpdate", true)),
+      m_updateTime(gCoreContext->GetDurSetting<std::chrono::seconds>(
+                       "LogViewerUpdateTime", DEFAULT_UPDATE_TIME))
+{
 }
 
 LogViewer::~LogViewer(void)
@@ -344,3 +354,5 @@ void LogViewer::ShowMenu()
     menuPopup->AddButton(tr("Show Progress Log"), &LogViewer::showProgressLog);
     menuPopup->AddButton(tr("Show Full Log"), &LogViewer::showFullLog);
 }
+
+#include "moc_logviewer.cpp"

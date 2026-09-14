@@ -1,16 +1,18 @@
 // Qt
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QDateTime>
+#include <QTimeZone>
 
 // MythTV
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythdbcon.h"
 #include "libmythbase/mythlogging.h"
-#include "libmythbase/programinfo.h"
-#include "libmythbase/recordingtypes.h"
 #include "libmythtv/channelinfo.h"
 #include "libmythtv/channelutil.h"
+#include "libmythtv/programinfo.h"
 #include "libmythtv/recordingrule.h"
+#include "libmythtv/recordingtypes.h"
 #include "libmythui/mythmainwindow.h"
 #include "libmythui/mythuibutton.h"
 #include "libmythui/mythuibuttonlist.h"
@@ -117,7 +119,7 @@ bool ManualSchedule::Create(void)
         gCoreContext->GetNumSetting("ManualScheduleMinuteIncrement", 5);
     m_startminuteSpin->SetRange(0, 60-minute_increment, minute_increment);
     m_startminuteSpin->SetValue((thisTime.minute()/5)*5);
-    m_durationSpin->SetRange(5,360,5);
+    m_durationSpin->SetRange(5,1440,5);
     m_durationSpin->SetValue(60);
 
     connectSignals();
@@ -183,9 +185,17 @@ void ManualSchedule::dateChanged(void)
     int hr = m_starthourSpin->GetIntValue();
     int min = m_startminuteSpin->GetIntValue();
 
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     m_startDateTime = QDateTime(
         m_nowDateTime.toLocalTime().addDays(m_daysahead).date(),
         QTime(hr, min), Qt::LocalTime).toUTC();
+#else
+    m_startDateTime =
+        QDateTime(m_nowDateTime.toLocalTime().addDays(m_daysahead).date(),
+                  QTime(hr, min),
+                  QTimeZone(QTimeZone::LocalTime))
+        .toUTC();
+#endif
 
     LOG(VB_SCHEDULE, LOG_INFO, QString("Start Date Time: %1")
         .arg(m_startDateTime.toString(Qt::ISODate)));
@@ -193,17 +203,32 @@ void ManualSchedule::dateChanged(void)
     // Note we allow start times up to one hour in the past so
     // if it is 20:25 the user can start a recording at 20:30
     // by first setting the hour and then the minute.
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     QDateTime tmp = QDateTime(
         m_startDateTime.toLocalTime().date(),
         QTime(m_startDateTime.toLocalTime().time().hour(),59,59),
         Qt::LocalTime).toUTC();
+#else
+    QDateTime tmp =
+        QDateTime(m_startDateTime.toLocalTime().date(),
+                  QTime(m_startDateTime.toLocalTime().time().hour(),59,59),
+                  QTimeZone(QTimeZone::LocalTime))
+        .toUTC();
+#endif
     if (tmp < m_nowDateTime)
     {
         hr = m_nowDateTime.toLocalTime().time().hour();
         m_starthourSpin->SetValue(hr);
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
         m_startDateTime =
             QDateTime(m_nowDateTime.toLocalTime().date(),
                       QTime(hr, min), Qt::LocalTime).toUTC();
+#else
+        m_startDateTime = QDateTime(m_nowDateTime.toLocalTime().date(),
+                                    QTime(hr, min),
+                                    QTimeZone(QTimeZone::LocalTime))
+            .toUTC();
+#endif
     }
     connectSignals();
 }
@@ -251,3 +276,5 @@ void ManualSchedule::scheduleCreated(int ruleid)
     if (ruleid > 0)
         Close();
 }
+
+#include "moc_manualschedule.cpp"

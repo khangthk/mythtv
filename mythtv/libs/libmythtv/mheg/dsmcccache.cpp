@@ -54,7 +54,7 @@ QString DSMCCCacheKey::toString() const
 {
     QString result;
     for (int i = 0; i < 4 && i < size(); i++)
-        result += QString("%1").arg(at(i), 2, 16, QChar('0'));
+        result += QString("%1").arg(static_cast<uint>(at(i)), 2, 16, QChar('0'));
     return result;
 }
 
@@ -199,8 +199,7 @@ void DSMCCCache::CacheFileData(const DSMCCCacheReference &ref,
 void DSMCCCache::AddFileInfo(DSMCCCacheDir *pDir, const BiopBinding *pBB)
 {
     QString name;
-    name = QString::fromLatin1(pBB->m_name.m_comps[0].m_id
-                  /*, pBB->m_name.m_comps[0].m_id_len*/);
+    name = QString::fromStdString(pBB->m_name.m_comps[0].m_id);
 
     const DSMCCCacheReference *entry =
         pBB->m_ior.m_profileBody->GetReference();
@@ -217,8 +216,7 @@ void DSMCCCache::AddDirInfo(DSMCCCacheDir *pDir, const BiopBinding *pBB)
 {
     // Is it already there?
     QString name;
-    name = QString::fromLatin1(pBB->m_name.m_comps[0].m_id
-                  /*, pBB->m_name.m_comps[0].m_id_len*/);
+    name = QString::fromStdString(pBB->m_name.m_comps[0].m_id);
     const DSMCCCacheReference *entry =
         pBB->m_ior.m_profileBody->GetReference();
 

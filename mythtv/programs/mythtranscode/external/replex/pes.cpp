@@ -151,9 +151,8 @@ void init_pes_in(pes_in_t *p, int t, ringbuffer *rb, int wi){
         p->mpeg = 0;
 	p->withbuf = wi;
 	
-	if (p->withbuf && !p->buf){
-		p->buf = static_cast<uchar*>(malloc(MAX_PLENGTH*sizeof(uint8_t)));
-		memset(p->buf,0,MAX_PLENGTH*sizeof(uint8_t));
+	if (p->withbuf && p->buf.empty()){
+		p->buf.resize(MAX_PLENGTH);
 	} else if (rb) {
 		p->rbuf = rb;
 	}
@@ -167,10 +166,11 @@ void init_pes_in(pes_in_t *p, int t, ringbuffer *rb, int wi){
 void get_pes (pes_in_t *p, uint8_t *buf, int count, void (*func)(pes_in_t *p))
 {
 	unsigned short *pl = nullptr;
-	bool done = true;
+	bool done = false;
 
 	std::array<uint8_t,3> headr { 0x00, 0x00, 0x01} ;
-	do {
+	while (!done)
+	{
 		int c=0;
 		done = true;
 		while (c < count && (!p->mpeg ||
@@ -184,8 +184,9 @@ void get_pes (pes_in_t *p, uint8_t *buf, int count, void (*func)(pes_in_t *p))
 				c++;
 				break;
 			case 2:
-				if (buf[c] == 0x01) p->found++;
-				else if (buf[c] == 0){
+				if (buf[c] == 0x01) {
+					p->found++;
+				} else if (buf[c] == 0) {
 					p->found = 2;
 				} else {
 					p->found = 0;
@@ -251,8 +252,9 @@ void get_pes (pes_in_t *p, uint8_t *buf, int count, void (*func)(pes_in_t *p))
 					p->flag1 = buf[c];
 					c++;
 					p->found++;
-					if ( (p->flag1 & 0xC0) == 0x80 ) p->mpeg = 2;
-					else {
+					if ( (p->flag1 & 0xC0) == 0x80 ) {
+						p->mpeg = 2;
+					} else {
 						LOG(VB_GENERAL, LOG_ERR,
 						"Error: THIS IS AN MPEG1 FILE");
 						exit(1);
@@ -293,9 +295,9 @@ void get_pes (pes_in_t *p, uint8_t *buf, int count, void (*func)(pes_in_t *p))
 			case PRIVATE_STREAM1:
 
 				if (p->withbuf){
-					memcpy(p->buf, headr.data(), 3);
+					memcpy(p->buf.data(), headr.data(), 3);
 					p->buf[3] = p->cid;
-					memcpy(p->buf+4,p->plen,2);
+					memcpy(p->buf.data()+4,p->plen,2);
 				} else {
 					memcpy(p->hbuf, headr.data(), 3);
 					p->hbuf[3] = p->cid;
@@ -314,7 +316,7 @@ void get_pes (pes_in_t *p, uint8_t *buf, int count, void (*func)(pes_in_t *p))
 					}
 				}
 
-				if ( (p->flag2 & PTS_ONLY) &&  p->found < 14){
+				if ( (p->flag2 & PTS_ONLY) &&  p->found >= 9 && p->found < 14){
 					while (c < count && p->found < 14){
 						p->pts[p->found-9] = buf[c];
 						if (p->withbuf)
@@ -327,7 +329,7 @@ void get_pes (pes_in_t *p, uint8_t *buf, int count, void (*func)(pes_in_t *p))
 					if (c == count) return;
 				}
 
-				if (((p->flag2 & PTS_DTS) == 0xC0) && p->found < 19){
+				if (((p->flag2 & PTS_DTS) == 0xC0) && p->found >= 14 && p->found < 19){
 					while (c < count && p->found < 19){
 						p->dts[p->found-14] = buf[c];
 						if (p->withbuf)
@@ -345,9 +347,9 @@ void get_pes (pes_in_t *p, uint8_t *buf, int count, void (*func)(pes_in_t *p))
 					int l = count -c;
 					if (l+p->found > p->plength+6)
 						l = p->plength+6-p->found;
-					if (p->withbuf)
-						memcpy(p->buf+p->found, buf+c, l);
-					else {
+					if (p->withbuf) {
+						memcpy(p->buf.data()+p->found, buf+c, l);
+					} else {
 						if ( p->found < 
                                                      (unsigned int)p->hlength+9 ){
 							int rest = p->hlength+9-p->found;
@@ -394,7 +396,7 @@ void get_pes (pes_in_t *p, uint8_t *buf, int count, void (*func)(pes_in_t *p))
 				}
 			}
 		} 
-	} while(!done);
+	}
 }
 
 
@@ -437,8 +439,7 @@ static uint16_t scr_ext_ps(const uint8_t *scr)
 static void init_ps(ps_packet *p)
 {
         p->stuff_length=0xF8;
-        p->data = nullptr;
-        p->sheader_length = 0;
+        p->sheader.clear();
         p->audio_bound = 0;
         p->video_bound = 0;
         p->npes = 0;
@@ -446,21 +447,18 @@ static void init_ps(ps_packet *p)
 
 static void kill_ps(ps_packet *p)
 {
-        if (p->data)
-                free(p->data);
         init_ps(p);
 }
 
 static void setlength_ps(ps_packet *p)
 {
 	auto *ll = (short *) p->sheader_llength;
-	p->sheader_length = ntohs(*ll) - 6;
+	p->sheader.resize(ntohs(*ll) - 6);
 }
 
 static void setl_ps(ps_packet *p)
 {
         setlength_ps(p);
-        p->data = (uint8_t *) malloc(p->sheader_length);
 }
 
 
@@ -485,7 +483,7 @@ static int cwrite_ps(uint8_t *buf, ps_packet *p, uint32_t length)
 		count++;
 	}
 
-        if (p->sheader_length){
+        if (!p->sheader.empty()){
                 memcpy(buf+count,headr2.data(),4);
                 count += 4;
                 memcpy(buf+count,p->sheader_llength,2);
@@ -498,8 +496,8 @@ static int cwrite_ps(uint8_t *buf, ps_packet *p, uint32_t length)
 		count++;
 		memcpy(buf+count,&p->reserved,1);
 		count++;
-                memcpy(buf+count,p->data,p->sheader_length);
-                count += p->sheader_length;
+                memcpy(buf+count,p->sheader.data(),p->sheader.size());
+                count += p->sheader.size();
         }
 
         return count;
@@ -566,18 +564,18 @@ static int write_ps_header(uint8_t *buf,
 				     (video_lock << 6)|0x20|video_bound);
 		p.reserved = (uint8_t)(0xFF >> 1);
 
-		p.data[0] = 0xB9;  
-		p.data[1] = 0xE0;  
-		p.data[2] = 0xE8;  
-		p.data[3] = 0xB8;  
-		p.data[4] = 0xC0;  
-		p.data[5] = 0x20;  
-		p.data[6] = 0xbd;  
-		p.data[7] = 0xe0;  
-		p.data[8] = 0x3a;  
-		p.data[9] = 0xBF;  
-		p.data[10] = 0xE0;  
-		p.data[11] = 0x02;  
+		p.sheader[0]  = 0xB9;
+		p.sheader[1]  = 0xE0;
+		p.sheader[2]  = 0xE8;
+		p.sheader[3]  = 0xB8;
+		p.sheader[4]  = 0xC0;
+		p.sheader[5]  = 0x20;
+		p.sheader[6]  = 0xbd;
+		p.sheader[7]  = 0xe0;
+		p.sheader[8]  = 0x3a;
+		p.sheader[9]  = 0xBF;
+		p.sheader[10] = 0xE0;
+		p.sheader[11] = 0x02;
 
 		cwrite_ps(buf, &p, PS_HEADER_L2);
 		kill_ps(&p);
@@ -634,7 +632,7 @@ int write_pes_header(uint8_t id, int length , uint64_t PTS, uint64_t DTS,
 	length -= 6;
 
 	le[0] |= ((uint8_t)(length >> 8) & 0xFF); 
-	le[1] |= ((uint8_t)(length) & 0xFF); 
+	le[1] |= ((uint8_t)length & 0xFF);
 	memcpy(obuf+c,le.data(),2);
 	c += 2;
 
@@ -821,7 +819,7 @@ int write_ac3_pes(  int pack_size, int extcnt, int n,
 	buf[pos] = 0x80 + n;
 	buf[pos+1] = nframes;
 	buf[pos+2] = (ac3_off >> 8)& 0xFF;
-	buf[pos+3] = (ac3_off)& 0xFF;
+	buf[pos+3] = ac3_off& 0xFF;
 	pos += 4;
 
 	int add = ring_read( ac3rbuffer, buf+pos, length-pos);

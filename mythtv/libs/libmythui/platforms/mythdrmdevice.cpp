@@ -1,15 +1,22 @@
+#include "libmythbase/mythconfig.h"
+
 // Qt
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtEnvironmentVariables>
+#include <QtSystemDetection>
+#endif
 #include <QDir>
 #include <QMutex>
-#include <QtGlobal>
 #include <QScreen>
 #include <QGuiApplication>
 
-#ifdef USING_QTPRIVATEHEADERS
+#if CONFIG_QTPRIVATEHEADERS
 #include <qpa/qplatformnativeinterface.h>
 #endif
 
 // MythTV
+#include "libmythbase/mythlogging.h"
 #include "mythedid.h"
 #include "platforms/drm/mythdrmvrr.h"
 #include "platforms/drm/mythdrmencoder.h"
@@ -112,7 +119,7 @@ extern "C" {
  * \note This is called immediately after application startup; all we have for
  * reference is the MythCommandLineParsers instance and any environment variables.
 */
-#ifdef USING_QTPRIVATEHEADERS
+#if CONFIG_QTPRIVATEHEADERS
 MythDRMPtr MythDRMDevice::FindDevice(bool NeedPlanes)
 {
     // Retrieve possible devices and analyse them.
@@ -171,11 +178,17 @@ void MythDRMDevice::SetupDRM(const MythCommandLineParser& CmdLine)
 
     // If we are using eglfs_kms we want atomic operations. No effect on other plugins.
     LOG(VB_GENERAL, LOG_INFO, QString("Exporting '%1=1'").arg(s_kmsAtomic));
-    setenv(s_kmsAtomic, "1", 0);
+    if (!qEnvironmentVariableIsSet(s_kmsAtomic))
+    {
+        qputenv(s_kmsAtomic, "1");
+    }
 
     // Seems to fix occasional issues. Again no impact on other plugins.
     LOG(VB_GENERAL, LOG_INFO, QString("Exporting '%1=1'").arg(s_kmsSetMode));
-    setenv(s_kmsSetMode, "1", 0);
+    if (!qEnvironmentVariableIsSet(s_kmsSetMode))
+    {
+        qputenv(s_kmsSetMode, "1");
+    }
 
     bool plane  = qEnvironmentVariableIsSet(s_kmsPlaneIndex) ||
                   qEnvironmentVariableIsSet(s_kmsPlaneCRTCS);
@@ -283,7 +296,7 @@ void MythDRMDevice::SetupDRM(const MythCommandLineParser& CmdLine)
     {
         LOG(VB_GENERAL, LOG_INFO, QString("Wrote %1:\r\n%2").arg(filename, wrote));
         LOG(VB_GENERAL, LOG_INFO, QString("Exporting '%1=%2'").arg(s_kmsConfigFile, filename));
-        setenv(s_kmsConfigFile, qPrintable(filename), 1);
+        qputenv(s_kmsConfigFile, qPrintable(filename));
     }
     file.close();
 
@@ -291,8 +304,8 @@ void MythDRMDevice::SetupDRM(const MythCommandLineParser& CmdLine)
     auto crtcplane  = QString("%1,%2").arg(device->m_crtc->m_id).arg(guiplane->m_id);
     LOG(VB_GENERAL, LOG_INFO, QString("Exporting '%1=%2'").arg(s_kmsPlaneIndex, planeindex));
     LOG(VB_GENERAL, LOG_INFO, QString("Exporting '%1=%2'").arg(s_kmsPlaneCRTCS, crtcplane));
-    setenv(s_kmsPlaneIndex, qPrintable(planeindex), 1);
-    setenv(s_kmsPlaneCRTCS, qPrintable(crtcplane), 1);
+    qputenv(s_kmsPlaneIndex, qPrintable(planeindex));
+    qputenv(s_kmsPlaneCRTCS, qPrintable(crtcplane));
 
     // Set the zpos if supported
     if (auto zposp = MythDRMProperty::GetProperty("zpos", guiplane->m_properties); zposp.get())
@@ -301,7 +314,7 @@ void MythDRMDevice::SetupDRM(const MythCommandLineParser& CmdLine)
         {
             auto val = QString::number(std::min(range->m_min + 1, range->m_max));
             LOG(VB_GENERAL, LOG_INFO, QString("Exporting '%1=%2'").arg(s_kmsPlaneZpos, val));
-            setenv(s_kmsPlaneZpos, qPrintable(val), 1);
+            qputenv(s_kmsPlaneZpos, qPrintable(val));
         }
     }
 
@@ -316,8 +329,8 @@ void MythDRMDevice::SetupDRM(const MythCommandLineParser& CmdLine)
 MythDRMPtr MythDRMDevice::Create(QScreen *qScreen, const QString &Device,
                                  [[maybe_unused]] bool NeedPlanes)
 {
-#ifdef USING_QTPRIVATEHEADERS
-    auto * app = dynamic_cast<QGuiApplication *>(QCoreApplication::instance());
+#if CONFIG_QTPRIVATEHEADERS
+    auto * app = qobject_cast<QGuiApplication *>(QCoreApplication::instance());
     if (qScreen && app && QGuiApplication::platformName().contains("eglfs", Qt::CaseInsensitive))
     {
         int fd = 0;
@@ -361,7 +374,7 @@ MythDRMPtr MythDRMDevice::Create(QScreen *qScreen, const QString &Device,
         return nullptr;
     }
 
-#ifdef USING_QTPRIVATEHEADERS
+#if CONFIG_QTPRIVATEHEADERS
     if (auto result = std::shared_ptr<MythDRMDevice>(new MythDRMDevice(Device, NeedPlanes)); result && result->m_valid)
         return result;
 #endif
@@ -374,7 +387,7 @@ std::tuple<QString, QStringList> MythDRMDevice::GetDeviceList()
     const QString root(QString(DRM_DIR_NAME) + "/");
     QDir dir(root);
     QStringList namefilters;
-#ifdef __OpenBSD__
+#ifdef Q_OS_OPENBSD
     namefilters.append("drm*");
 #else
     namefilters.append("card*");
@@ -415,7 +428,7 @@ MythDRMDevice::MythDRMDevice(QScreen* qScreen, const QString& Device)
     Authenticate();
 }
 
-#if defined (USING_QTPRIVATEHEADERS)
+#if CONFIG_QTPRIVATEHEADERS
 /*! \brief Constructor used when we have retrieved Qt's relevant DRM handles.
  *
  * If we have Qt private headers available and Qt is using eglfs, then we will
@@ -659,7 +672,7 @@ bool MythDRMDevice::SwitchMode(int ModeIndex)
         return false;
 
     bool result = false;
-#ifdef USING_QTPRIVATEHEADERS
+#if CONFIG_QTPRIVATEHEADERS
     auto crtcid = MythDRMProperty::GetProperty("crtc_id", m_connector->m_properties);
     auto modeid = MythDRMProperty::GetProperty("mode_id", m_crtc->m_properties);
     if (crtcid.get() && modeid.get())
@@ -879,7 +892,7 @@ DRMConn MythDRMDevice::GetConnector() const
     return m_connector;
 }
 
-#if defined (USING_QTPRIVATEHEADERS)
+#if CONFIG_QTPRIVATEHEADERS
 void MythDRMDevice::MainWindowReady()
 {
     // This is causing issues - disabled for now
@@ -914,7 +927,7 @@ void MythDRMDevice::MainWindowReady()
 
 bool MythDRMDevice::QueueAtomics(const MythAtomics& Atomics) const
 {
-    auto * app = dynamic_cast<QGuiApplication *>(QCoreApplication::instance());
+    auto * app = qobject_cast<QGuiApplication *>(QCoreApplication::instance());
     if (!(m_atomic && m_authenticated && app))
         return false;
 

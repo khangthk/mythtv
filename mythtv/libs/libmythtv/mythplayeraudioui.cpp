@@ -1,5 +1,7 @@
 // MythTV
+#include "libmythtv/audio/volumebase.h"
 #include "libmythbase/mythcorecontext.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythui/mythmainwindow.h"
 
 #include "audioplayer.h"
@@ -204,3 +206,4 @@ void MythPlayerAudioUI::AdjustAudioTimecodeOffset(std::chrono::milliseconds Delt
         emit AudioStateChanged({ &m_audio, newwrap });
 }
 
+#include "moc_mythplayeraudioui.cpp"

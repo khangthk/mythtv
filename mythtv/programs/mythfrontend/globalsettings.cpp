@@ -20,8 +20,8 @@
 #include <QtGlobal>
 
 // MythTV headers
-#include "libmyth/dbsettings.h"
-#include "libmyth/langsettings.h"
+#include "libmythui/dbsettings.h"
+#include "libmythui/langsettings.h"
 #include "libmythbase/iso639.h"
 #include "libmythbase/mythconfig.h"
 #include "libmythbase/mythcorecontext.h"
@@ -42,13 +42,13 @@
 #include "libmythui/mythpainterwindow.h"
 #include "libmythui/mythuihelper.h"
 #include "libmythui/themeinfo.h"
-#ifdef USING_OPENGL
+#if CONFIG_OPENGL
 #include "libmythui/opengl/mythrenderopengl.h"
 #endif
-#ifdef USING_AIRPLAY
+#if CONFIG_AIRPLAY
 #include "libmythtv/AirPlay/mythraopconnection.h"
 #endif
-#ifdef USING_VAAPI
+#if CONFIG_VAAPI
 #include "libmythtv/decoders/mythvaapicontext.h"
 #endif
 
@@ -103,7 +103,7 @@ static HostCheckBoxSetting *ChromaUpsampling()
     return gc;
 }
 
-#ifdef USING_VAAPI
+#if CONFIG_VAAPI
 static HostTextEditSetting *VAAPIDevice()
 {
     auto *ge = new HostTextEditSetting("VAAPIDevice");
@@ -130,20 +130,6 @@ static HostTextEditSetting *VAAPIDevice()
     return ge;
 }
 #endif
-
-static HostCheckBoxSetting *FFmpegDemuxer()
-{
-    auto *gc = new HostCheckBoxSetting("FFMPEGTS");
-
-    gc->setLabel(PlaybackSettings::tr("Use FFmpeg's original MPEG-TS demuxer"));
-
-    gc->setValue(false);
-
-    gc->setHelpText(PlaybackSettings::tr("Experimental: Enable this setting to "
-                                         "use FFmpeg's native demuxer. "
-                                         "Try this when encountering playback issues."));
-    return gc;
-}
 
 static HostComboBoxSetting *DisplayRecGroup()
 {
@@ -753,7 +739,7 @@ PlaybackProfileItemConfig::PlaybackProfileItemConfig(
     m_parentConfig(parent),
     m_index(idx)
 {
-    m_maxCpus      = new TransMythUISpinBoxSetting(1, HAVE_THREADS ? VIDEO_MAX_CPUS : 1, 1, 1);
+    m_maxCpus      = new TransMythUISpinBoxSetting(1, VIDEO_MAX_CPUS, 1, 1);
 
     const QString rangeHelp(tr(" Valid formats for the setting are "
         "[nnnn - nnnn], [> nnnn], [>= nnnn], [< nnnn], "
@@ -839,11 +825,7 @@ PlaybackProfileItemConfig::PlaybackProfileItemConfig(
     }
 
     m_maxCpus->setHelpText(
-        tr("Maximum number of CPU cores used for video decoding and filtering.") +
-        (HAVE_THREADS ? "" :
-         tr(" Multithreaded decoding disabled-only one CPU "
-            "will be used, please recompile with "
-            "--enable-ffmpeg-pthreads to enable.")));
+        tr("Maximum number of CPU cores used for video decoding and filtering."));
 
     m_skipLoop->setHelpText(
         tr("When unchecked the deblocking loopfilter will be disabled. ") + "\n" +
@@ -1154,8 +1136,7 @@ bool PlaybackProfileItemConfig::keyPressEvent(QKeyEvent *e)
     if (GetMythMainWindow()->TranslateKeyPress("Global", e, actions))
         return true;
 
-    if (std::any_of(actions.cbegin(), actions.cend(),
-                    [](const QString & action) { return action == "DELETE"; } ))
+    if (actions.contains("DELETE"))
     {
         ShowDeleteDialog();
         return true;
@@ -1989,11 +1970,11 @@ static HostSpinBoxSetting *FrontendIdleTimeout()
 static HostCheckBoxSetting* ConfirmPowerEvent()
 {
     auto * checkbox = new HostCheckBoxSetting("ConfirmPowerEvent");
-    checkbox->setValue(true);
     checkbox->setLabel(MainGeneralSettings::tr("Confirm before suspending/shutting down"));
     checkbox->setHelpText(MainGeneralSettings::tr(
         "If enabled (the default) then the user will always be asked to confirm before the system "
         "is shutdown, suspended or rebooted."));
+    checkbox->setValue(true);
     return checkbox;
 }
 
@@ -2121,6 +2102,25 @@ static HostTextEditSetting *LircDaemonDevice()
     return ge;
 }
 
+#if CONFIG_LIBCEC
+static HostTextEditSetting *CECDevice()
+{
+    auto *ge = new HostTextEditSetting("libCECDevice");
+
+    ge->setLabel(MainGeneralSettings::tr("CEC Device"));
+
+    ge->setValue("/dev/cec0");
+
+    QString help = MainGeneralSettings::tr("CEC Device. Default is /dev/cec0 "
+                                           "if you have only 1 HDMI output "
+                                           "port.");
+    ge->setHelpText(help);
+
+    return ge;
+}
+#endif
+
+
 static HostTextEditSetting *ScreenShotPath()
 {
     auto *ge = new HostTextEditSetting("ScreenShotPath");
@@ -2215,11 +2215,11 @@ static HostComboBoxSetting *LetterboxingColour()
 static HostCheckBoxSetting* StereoDiscard()
 {
     auto * cb = new HostCheckBoxSetting("DiscardStereo3D");
-    cb->setValue(true);
     cb->setLabel(PlaybackSettings::tr("Discard 3D stereoscopic fields"));
     cb->setHelpText(PlaybackSettings::tr(
         "If 'Side by Side' or 'Top and Bottom' 3D material is detected, "
         "enabling this setting will discard one field (enabled by default)."));
+    cb->setValue(true);
     return cb;
 }
 
@@ -2483,7 +2483,9 @@ void HostRefreshRateComboBoxSetting::ChangeResolution(StandardSetting * setting)
     // changed even though the previous value might still be available.  Mark it
     // as unchanged in this case if it wasn't already changed.
     if (wasUnchanged && previousValue == getValue())
+    {
         setChanged(false);
+    }
     else
     {
         if ("640x480" == resolution || "720x480" == resolution)
@@ -3358,7 +3360,7 @@ static HostTextEditSetting *UDPNotifyPort()
     return ge;
 }
 
-#ifdef USING_LIBCEC
+#if CONFIG_LIBCEC
 static HostCheckBoxSetting *CECEnabled()
 {
     auto *gc = new HostCheckBoxSetting("libCECEnabled");
@@ -3417,9 +3419,9 @@ static HostCheckBoxSetting *CECPowerOffTVOnExit()
     return gc;
 }
 
-#endif //USING_LIBCEC
+#endif // CONFIG_LIBCEC
 
-#ifdef USING_AIRPLAY
+#if CONFIG_AIRPLAY
 // AirPlay Settings
 static HostCheckBoxSetting *AirPlayEnabled()
 {
@@ -3899,7 +3901,7 @@ static HostCheckBoxSetting *LCDEnable()
 #ifdef Q_OS_DARWIN
 static HostCheckBoxSetting *MacGammaCorrect()
 {
-    HostCheckBoxSetting *gc = new HostCheckBoxSetting("MacGammaCorrect");
+    auto *gc = new HostCheckBoxSetting("MacGammaCorrect");
 
     gc->setLabel(PlaybackSettings::tr("Enable gamma correction for video"));
 
@@ -3914,7 +3916,7 @@ static HostCheckBoxSetting *MacGammaCorrect()
 
 static HostCheckBoxSetting *MacScaleUp()
 {
-    HostCheckBoxSetting *gc = new HostCheckBoxSetting("MacScaleUp");
+    auto *gc = new HostCheckBoxSetting("MacScaleUp");
 
     gc->setLabel(PlaybackSettings::tr("Scale video as necessary"));
 
@@ -3929,7 +3931,7 @@ static HostCheckBoxSetting *MacScaleUp()
 
 static HostSpinBoxSetting *MacFullSkip()
 {
-    HostSpinBoxSetting *gs = new HostSpinBoxSetting("MacFullSkip", 0, 30, 1, true);
+    auto *gs = new HostSpinBoxSetting("MacFullSkip", 0, 30, 1, true);
 
     gs->setLabel(PlaybackSettings::tr("Frames to skip in fullscreen mode"));
 
@@ -3947,7 +3949,7 @@ static HostSpinBoxSetting *MacFullSkip()
 
 static HostCheckBoxSetting *MacMainEnabled()
 {
-    HostCheckBoxSetting *gc = new HostCheckBoxSetting("MacMainEnabled");
+    auto *gc = new HostCheckBoxSetting("MacMainEnabled");
 
     gc->setLabel(MacMainSettings::tr("Video in main window"));
 
@@ -3965,7 +3967,7 @@ static HostCheckBoxSetting *MacMainEnabled()
 
 static HostSpinBoxSetting *MacMainSkip()
 {
-    HostSpinBoxSetting *gs = new HostSpinBoxSetting("MacMainSkip", 0, 30, 1, true);
+    auto *gs = new HostSpinBoxSetting("MacMainSkip", 0, 30, 1, true);
 
     gs->setLabel(MacMainSettings::tr("Frames to skip"));
 
@@ -3980,7 +3982,7 @@ static HostSpinBoxSetting *MacMainSkip()
 
 static HostSpinBoxSetting *MacMainOpacity()
 {
-    HostSpinBoxSetting *gs = new HostSpinBoxSetting("MacMainOpacity", 0, 100, 5, false);
+    auto *gs = new HostSpinBoxSetting("MacMainOpacity", 0, 100, 5, false);
 
     gs->setLabel(MacMainSettings::tr("Opacity"));
 
@@ -3994,7 +3996,7 @@ static HostSpinBoxSetting *MacMainOpacity()
 
 static HostCheckBoxSetting *MacFloatEnabled()
 {
-    HostCheckBoxSetting *gc = new HostCheckBoxSetting("MacFloatEnabled");
+    auto *gc = new HostCheckBoxSetting("MacFloatEnabled");
 
     gc->setLabel(MacFloatSettings::tr("Video in floating window"));
 
@@ -4010,7 +4012,7 @@ static HostCheckBoxSetting *MacFloatEnabled()
 
 static HostSpinBoxSetting *MacFloatSkip()
 {
-    HostSpinBoxSetting *gs = new HostSpinBoxSetting("MacFloatSkip", 0, 30, 1, true);
+    auto *gs = new HostSpinBoxSetting("MacFloatSkip", 0, 30, 1, true);
 
     gs->setLabel(MacFloatSettings::tr("Frames to skip"));
 
@@ -4025,7 +4027,7 @@ static HostSpinBoxSetting *MacFloatSkip()
 
 static HostSpinBoxSetting *MacFloatOpacity()
 {
-    HostSpinBoxSetting *gs = new HostSpinBoxSetting("MacFloatOpacity", 0, 100, 5, false);
+    auto *gs = new HostSpinBoxSetting("MacFloatOpacity", 0, 100, 5, false);
 
     gs->setLabel(MacFloatSettings::tr("Opacity"));
 
@@ -4040,7 +4042,7 @@ static HostSpinBoxSetting *MacFloatOpacity()
 
 static HostCheckBoxSetting *MacDockEnabled()
 {
-    HostCheckBoxSetting *gc = new HostCheckBoxSetting("MacDockEnabled");
+    auto *gc = new HostCheckBoxSetting("MacDockEnabled");
 
     gc->setLabel(MacDockSettings::tr("Video in the dock"));
 
@@ -4056,7 +4058,7 @@ static HostCheckBoxSetting *MacDockEnabled()
 
 static HostSpinBoxSetting *MacDockSkip()
 {
-    HostSpinBoxSetting *gs = new HostSpinBoxSetting("MacDockSkip", 0, 30, 1, true);
+    auto *gs = new HostSpinBoxSetting("MacDockSkip", 0, 30, 1, true);
 
     gs->setLabel(MacDockSettings::tr("Frames to skip"));
 
@@ -4070,7 +4072,7 @@ static HostSpinBoxSetting *MacDockSkip()
 
 static HostCheckBoxSetting *MacDesktopEnabled()
 {
-    HostCheckBoxSetting *gc = new HostCheckBoxSetting("MacDesktopEnabled");
+    auto *gc = new HostCheckBoxSetting("MacDesktopEnabled");
 
     gc->setLabel(MacDesktopSettings::tr("Video on the desktop"));
 
@@ -4088,7 +4090,7 @@ static HostCheckBoxSetting *MacDesktopEnabled()
 
 static HostSpinBoxSetting *MacDesktopSkip()
 {
-    HostSpinBoxSetting *gs = new HostSpinBoxSetting("MacDesktopSkip", 0, 30, 1, true);
+    auto *gs = new HostSpinBoxSetting("MacDesktopSkip", 0, 30, 1, true);
 
     gs->setLabel(MacDesktopSettings::tr("Frames to skip"));
 
@@ -4108,7 +4110,7 @@ class ShutDownRebootSetting : public GroupSetting
   public:
     ShutDownRebootSetting();
 
-  private slots:
+  public slots:
     void childChanged(StandardSetting* /*unused*/) override;
 
   private:
@@ -4243,9 +4245,10 @@ MainGeneralSettings::MainGeneralSettings()
     remotecontrol->addChild(NetworkControlEnabled());
     remotecontrol->addChild(NetworkControlPort());
     remotecontrol->addChild(UDPNotifyPort());
-#ifdef USING_LIBCEC
+#if CONFIG_LIBCEC
     HostCheckBoxSetting *cec = CECEnabled();
     remotecontrol->addChild(cec);
+    cec->addTargetedChild("1",CECDevice());
     m_cecPowerOnTVAllowed = CECPowerOnTVAllowed();
     m_cecPowerOffTVAllowed = CECPowerOffTVAllowed();
     m_cecPowerOnTVOnStart = CECPowerOnTVOnStart();
@@ -4258,10 +4261,10 @@ MainGeneralSettings::MainGeneralSettings()
             this, &MainGeneralSettings::cecChanged);
     connect(m_cecPowerOffTVAllowed, &MythUICheckBoxSetting::valueChanged,
             this, &MainGeneralSettings::cecChanged);
-#endif // USING_LIBCEC
+#endif // CONFIG_LIBCEC
     addChild(remotecontrol);
 
-#ifdef USING_AIRPLAY
+#if CONFIG_AIRPLAY
     auto *airplay = new GroupSetting();
     airplay->setLabel(tr("AirPlay Settings"));
     airplay->addChild(AirPlayEnabled());
@@ -4274,11 +4277,13 @@ MainGeneralSettings::MainGeneralSettings()
 #endif
 }
 
-#ifdef USING_LIBCEC
+#if CONFIG_LIBCEC
 void MainGeneralSettings::cecChanged(bool /*setting*/)
 {
     if (m_cecPowerOnTVAllowed->boolValue())
+    {
         m_cecPowerOnTVOnStart->setEnabled(true);
+    }
     else
     {
         m_cecPowerOnTVOnStart->setEnabled(false);
@@ -4286,14 +4291,16 @@ void MainGeneralSettings::cecChanged(bool /*setting*/)
     }
 
     if (m_cecPowerOffTVAllowed->boolValue())
+    {
         m_cecPowerOffTVOnExit->setEnabled(true);
+    }
     else
     {
         m_cecPowerOffTVOnExit->setEnabled(false);
         m_cecPowerOffTVOnExit->setValue(false);
     }
 }
-#endif  // USING_LIBCEC
+#endif  // CONFIG_LIBCEC
 
 void MainGeneralSettings::applyChange()
 {
@@ -4310,7 +4317,7 @@ class PlayBackScaling : public GroupSetting
     PlayBackScaling();
     void updateButton(MythUIButtonListItem *item) override; // GroupSetting
 
-  private slots:
+  public slots:
     void childChanged(StandardSetting * /*setting*/) override; // StandardSetting
 
   private:
@@ -4460,8 +4467,6 @@ void PlaybackSettings::Load(void)
     general->addChild(ContinueEmbeddedTVPlay());
     general->addChild(LiveTVIdleTimeout());
 
-    general->addChild(FFmpegDemuxer());
-
     general->addChild(new PlayBackScaling());
     general->addChild(StereoDiscard());
     general->addChild(AspectOverride());
@@ -4479,7 +4484,7 @@ void PlaybackSettings::Load(void)
     advanced->addChild(AudioReadAhead());
     advanced->addChild(ColourPrimaries());
     advanced->addChild(ChromaUpsampling());
-#ifdef USING_VAAPI
+#if CONFIG_VAAPI
     advanced->addChild(VAAPIDevice());
 #endif
 
@@ -4541,7 +4546,7 @@ void PlaybackSettings::Load(void)
     addChild(comms);
 
 #ifdef Q_OS_DARWIN
-    GroupSetting* mac = new GroupSetting();
+    auto* mac = new GroupSetting();
     mac->setLabel(tr("Mac OS X Video Settings"));
     mac->addChild(MacGammaCorrect());
     mac->addChild(MacScaleUp());
@@ -4595,7 +4600,7 @@ OSDSettings::OSDSettings()
 
 GeneralSettings::GeneralSettings()
 {
-    setLabel(tr("General (Basic)"));
+    setLabel(tr("General"));
     auto *general = new GroupSetting();
     general->setLabel(tr("General (Basic)"));
     general->addChild(ChannelOrdering());
@@ -4697,7 +4702,7 @@ class GuiDimension : public GroupSetting
         //QString getValue() override; // StandardSetting
         void updateButton(MythUIButtonListItem *item) override; // GroupSetting
 
-    private slots:
+    public slots:
         void childChanged(StandardSetting * /*setting*/) override; // StandardSetting
     private:
         StandardSetting *m_width   {nullptr};
@@ -4799,7 +4804,7 @@ AppearanceSettings::AppearanceSettings()
     screen->addChild(SmoothTransitions());
     screen->addChild(StartupScreenDelay());
     screen->addChild(GUIFontZoom());
-#ifdef USING_AIRPLAY
+#if CONFIG_AIRPLAY
     screen->addChild(AirPlayFullScreen());
 #endif
 
@@ -4891,41 +4896,11 @@ void ChannelGroupSetting::Save()
         {
             MSqlQuery query(MSqlQuery::InitCon());
             QString newname = m_groupName ? m_groupName->getValue() : "undefined";
-            QString qstr =
-                "INSERT INTO channelgroupnames (name) VALUE (:NEWNAME);";
-            query.prepare(qstr);
-            query.bindValue(":NEWNAME", newname);
-
-            if (!query.exec())
-                MythDB::DBError("ChannelGroupSetting::Save 1", query);
-            else
-            {
-                //update m_groupId
-                QString qstr2 = "SELECT grpid FROM channelgroupnames "
-                                "WHERE name = :NEWNAME;";
-                query.prepare(qstr2);
-                query.bindValue(":NEWNAME", newname);
-                if (!query.exec())
-                    MythDB::DBError("ChannelGroupSetting::Save 2", query);
-                else
-                    if (query.next())
-                        m_groupId = query.value(0).toUInt();
-            }
+            m_groupId = ChannelGroup::AddChannelGroup(newname);
         }
         else
         {
-            MSqlQuery query(MSqlQuery::InitCon());
-            QString qstr = "UPDATE channelgroupnames set name = :NEWNAME "
-                            " WHERE name = :OLDNAME ;";
-            query.prepare(qstr);
-            query.bindValue(":NEWNAME", m_groupName->getValue());
-            query.bindValue(":OLDNAME", getValue());
-
-            if (!query.exec())
-                MythDB::DBError("ChannelGroupSetting::Save 3", query);
-            else
-                if (query.next())
-                    m_groupId = query.value(0).toUInt();
+            ChannelGroup::UpdateChannelGroup( getValue(), m_groupName->getValue());
         }
     }
 
@@ -5020,7 +4995,9 @@ void ChannelGroupSetting::LoadChannelGroupChannels()
     }
 
     if (!query.exec() || !query.isActive())
+    {
         MythDB::DBError("ChannelGroupSetting::LoadChannelGroupChannels", query);
+    }
     else
     {
         while (query.next())
@@ -5148,4 +5125,4 @@ void ChannelGroupsSetting::CreateNewGroup(const QString& name)
     emit settingsChanged(this);
 }
 
-// vim:set sw=4 ts=4 expandtab:
+#include "moc_globalsettings.cpp"

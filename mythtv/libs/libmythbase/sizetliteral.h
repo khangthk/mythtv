@@ -2,7 +2,7 @@
 #define SIZETLITERAL_H
 
 #ifdef __cpp_size_t_suffix
-# warning "This code should be converted to use the c++23 Z/UZ literals."
+# error "This code should be converted to use the c++23 Z/UZ literals."
 #endif
 
 // From https://en.cppreference.com:
@@ -32,9 +32,9 @@
 // at some point in the future when the code is uplifted to compile with
 // -std=c++23 these should be converted to use the compiler supplied Z/UZ.
 
-constexpr ssize_t operator ""  _Z(unsigned long long v)
+constexpr ssize_t operator ""_Z(unsigned long long v)
     { return static_cast<ssize_t>(v); }
-constexpr size_t  operator "" _UZ(unsigned long long v)
+constexpr size_t  operator ""_UZ(unsigned long long v)
     { return static_cast<size_t>(v); }
 
 #endif // SIZETLITERAL_H

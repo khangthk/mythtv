@@ -4,6 +4,7 @@
 // MythTV
 #include "libmyth/mythcontext.h"
 #include "libmythbase/exitcodes.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythsystemlegacy.h"
 #include "libmythui/mythdialogbox.h"
@@ -161,15 +162,8 @@ void ExitPrompter::MainDialogClosed(const QString& /*unused*/, int Id)
 
 void ExitPrompter::HandleExit()
 {
-    // HACK IsFrontendOnly() triggers a popup if there is no BE connection.
-    // We really don't need that right now. This hack prevents it.
-    gContext->SetDisableEventPopup(true);
-
     // first of all find out, if this is a frontend only host...
     bool frontendOnly = gCoreContext->IsFrontendOnly();
-
-    // HACK Undo the hack, just in case we _don't_ quit:
-    gContext->SetDisableEventPopup(false);
 
     // how do you want to quit today?
     bool allowExit     = false;
@@ -178,14 +172,14 @@ void ExitPrompter::HandleExit()
     bool allowStandby  = false;
     bool allowSuspend  = false;
 
+#ifndef Q_OS_ANDROID
     bool haveshutdown = !m_haltCommand.isEmpty();
     bool havereboot   = !m_rebootCommand.isEmpty();
     bool havesuspend  = !m_suspendCommand.isEmpty();
-
-#ifdef Q_OS_ANDROID
-    haveshutdown = false;
-    havereboot   = false;
-    havesuspend  = false;
+#else
+    bool haveshutdown = false;
+    bool havereboot   = false;
+    bool havesuspend  = false;
 #endif
 
     if (m_power)
@@ -296,10 +290,8 @@ void ExitPrompter::Confirm(MythPower::Feature Action)
         default: break;
     }
 
-    gContext->SetDisableEventPopup(true);
     if (!gCoreContext->IsFrontendOnly())
         msg.prepend(tr("Mythbackend is running on this system. "));
-    gContext->SetDisableEventPopup(false);
 
     auto *dlg = new MythConfirmationDialog(ss, msg);
 
@@ -318,3 +310,5 @@ void ExitPrompter::Confirm(MythPower::Feature Action)
         connect(dlg, &MythConfirmationDialog::haveResult, this, qOverload<bool>(&ExitPrompter::DoSuspend));
     ss->AddScreen(dlg);
 }
+
+#include "moc_exitprompt.cpp"

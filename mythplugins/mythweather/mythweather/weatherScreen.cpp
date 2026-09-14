@@ -2,7 +2,7 @@
 #include <vector>
 
 // MythTV headers
-#include <libmyth/mythcontext.h>
+#include <libmythbase/mythlogging.h>
 
 // MythWeather headers
 #include "weather.h"
@@ -49,9 +49,8 @@ bool WeatherScreen::canShowScreen()
         return false;
 
     bool ok = true;
-    QMapIterator<QString, QString> i(m_dataValueMap);
-    while (i.hasNext()) {
-        i.next();
+    for (auto i = m_dataValueMap.cbegin(); i != m_dataValueMap.cend(); ++i)
+    {
         if (i.key().isEmpty())
         {
             LOG(VB_GENERAL, LOG_DEBUG, i.key());
@@ -238,6 +237,4 @@ bool WeatherScreen::keyPressEvent(QKeyEvent *event)
     return GetFocusWidget() && GetFocusWidget()->keyPressEvent(event);
 }
 
-/*
- * vim:ts=4:sw=4:ai:et:si:sts=4
- */
+#include "moc_weatherScreen.cpp"

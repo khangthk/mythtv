@@ -1,9 +1,8 @@
+#include "websocket_mythevent.h"
 
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythevent.h"
 #include "libmythbase/mythlogging.h"
-
-#include "websocket_mythevent.h"
 
 WebSocketMythEvent::WebSocketMythEvent()
 {
@@ -76,3 +75,5 @@ void WebSocketMythEvent::customEvent(QEvent* event)
         emit SendTextMessage(message);
     }
 }
+
+#include "moc_websocket_mythevent.cpp"

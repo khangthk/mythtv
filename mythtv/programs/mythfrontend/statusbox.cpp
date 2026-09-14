@@ -1,4 +1,8 @@
 // Qt
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QHostAddress>
 #include <QNetworkInterface>
 
@@ -11,11 +15,11 @@
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythmiscutil.h"
 #include "libmythbase/mythversion.h"
-#include "libmythbase/remoteutil.h"
 #include "libmythbase/stringutil.h"
 #include "libmythtv/cardutil.h"
 #include "libmythtv/decoders/mythcodeccontext.h"
 #include "libmythtv/jobqueue.h"
+#include "libmythtv/programinforemoteutil.h"
 #include "libmythtv/recordinginfo.h"
 #include "libmythtv/tv.h"
 #include "libmythui/mythdialogbox.h"
@@ -41,7 +45,8 @@ struct LogLine {
 
 void StatusBoxItem::Start(std::chrono::seconds Interval)
 {
-    connect(this, &QTimer::timeout, [this]() { emit UpdateRequired(this); });
+    connect(this, &QTimer::timeout,
+            this, [this]() { emit UpdateRequired(this); });
     start(Interval);
 }
 
@@ -236,13 +241,13 @@ void StatusBox::updateLogList(MythUIButtonListItem *item)
     if (item->GetData().value<MythUICallbackMF>())
     {
         connect(this, &StatusBox::updateLog,
-                item->GetData().value<MythUICallbackMF>());
+                this, item->GetData().value<MythUICallbackMF>());
         emit updateLog();
     }
     else if (item->GetData().value<MythUICallbackMFc>())
     {
         connect(this, &StatusBox::updateLog,
-                item->GetData().value<MythUICallbackMFc>());
+                this, item->GetData().value<MythUICallbackMFc>());
         emit updateLog();
     }
 }
@@ -333,12 +338,12 @@ void StatusBox::clicked(MythUIButtonListItem *item)
             menuPopup->SetReturnEvent(this, "AutoExpireManage");
 
             menuPopup->AddButtonV(tr("Delete Now"), QVariant::fromValue(rec));
-            if ((rec)->GetRecordingGroup() == "LiveTV")
+            if (rec->GetRecordingGroup() == "LiveTV")
             {
                 menuPopup->AddButtonV(tr("Move to Default group"),
                                                        QVariant::fromValue(rec));
             }
-            else if ((rec)->GetRecordingGroup() == "Deleted")
+            else if (rec->GetRecordingGroup() == "Deleted")
             {
                 menuPopup->AddButtonV(tr("Undelete"), QVariant::fromValue(rec));
             }
@@ -357,7 +362,7 @@ void StatusBox::customEvent(QEvent *event)
 {
     if (event->type() == DialogCompletionEvent::kEventType)
     {
-        auto *dce = (DialogCompletionEvent*)(event);
+        auto *dce = (DialogCompletionEvent*)event;
 
         QString resultid  = dce->GetId();
         int     buttonnum = dce->GetResult();
@@ -419,7 +424,7 @@ void StatusBox::customEvent(QEvent *event)
             // button 1 is "Move To Default Group" or "UnDelete" or "Disable AutoExpire"
             else if (buttonnum == 1)
             {
-                if ((rec)->GetRecordingGroup() == "Deleted")
+                if (rec->GetRecordingGroup() == "Deleted")
                 {
                     RemoteUndeleteRecording(rec->GetRecordingID());
                 }
@@ -427,7 +432,7 @@ void StatusBox::customEvent(QEvent *event)
                 {
                     rec->SaveAutoExpire(kDisableAutoExpire);
 
-                    if ((rec)->GetRecordingGroup() == "LiveTV")
+                    if (rec->GetRecordingGroup() == "LiveTV")
                     {
                         RecordingInfo ri(*rec);
                         ri.ApplyRecordRecGroupChange(RecordingInfo::kDefaultRecGroup);
@@ -753,9 +758,6 @@ void StatusBox::doTunerStatus()
 {
     struct info
     {
-        int         m_inputid     {0};
-        bool        m_schedgroup  {false};
-        QString     m_displayname;
         int         m_errored     {0};
         int         m_unavailable {0};
         int         m_sleeping    {0};
@@ -764,8 +766,8 @@ void StatusBox::doTunerStatus()
         int         m_available   {0};
         QStringList m_recordings;
     };
-    QMap<int, struct info> info;
-    QList<int> inputids;
+    QMap<QString, struct info> info;
+    QStringList inputnames;
         
     if (m_iconState)
         m_iconState->DisplayState("tuner");
@@ -780,8 +782,8 @@ void StatusBox::doTunerStatus()
 
     MSqlQuery query(MSqlQuery::InitCon());
     query.prepare(
-        "SELECT cardid, parentid, schedgroup, displayname "
-        "FROM capturecard ORDER BY cardid");
+        "SELECT cardid, displayname "
+        "FROM capturecard ORDER BY displayname, cardid");
 
     if (!query.exec() || !query.isActive())
     {
@@ -792,20 +794,9 @@ void StatusBox::doTunerStatus()
     while (query.next())
     {
         int inputid = query.value(0).toInt();
-        int parentid = query.value(1).toInt();
-
-        // If this is a schedgroup child, attribute all status to the
-        // parent.
-        int infoid = inputid;
-        if (parentid && info[parentid].m_schedgroup)
-            infoid = parentid;
-        else
-        {
-            info[infoid].m_inputid = inputid;
-            info[infoid].m_schedgroup = query.value(2).toBool();
-            info[infoid].m_displayname = query.value(3).toString();
-            inputids.append(inputid);
-        }
+	QString inputname = query.value(1).toString();
+	if (!info.contains(inputname))
+	    inputnames.append(inputname);
 
         QString cmd = QString("QUERY_REMOTEENCODER %1").arg(inputid);
         QStringList strlist( cmd );
@@ -824,24 +815,24 @@ void StatusBox::doTunerStatus()
             int sleepState = strlist[0].toInt();
 
             if (sleepState == -1)
-                info[infoid].m_errored += 1;
+                info[inputname].m_errored += 1;
             else if (sleepState == sStatus_Undefined)
-                info[infoid].m_unavailable += 1;
+                info[inputname].m_unavailable += 1;
             else
-                info[infoid].m_sleeping += 1;
+                info[inputname].m_sleeping += 1;
         }
         else if (state == kState_RecordingOnly ||
                  state == kState_WatchingRecording)
         {
-            info[infoid].m_recording += 1;
+            info[inputname].m_recording += 1;
         }
         else if (state == kState_WatchingLiveTV)
         {
-            info[infoid].m_livetv += 1;
+            info[inputname].m_livetv += 1;
         }
         else
         {
-            info[infoid].m_available += 1;
+            info[inputname].m_available += 1;
         }
 
         if (state == kState_RecordingOnly ||
@@ -857,38 +848,37 @@ void StatusBox::doTunerStatus()
                 QString titlesub = pginfo.GetTitle();
                 if (!pginfo.GetSubtitle().isEmpty())
                     titlesub += QString(" - ") + pginfo.GetSubtitle();
-                info[infoid].m_recordings += titlesub;
+                info[inputname].m_recordings += titlesub;
             }
         }
     }
 
-    for (int inputid : std::as_const(inputids))
+    for (const QString& inputname : std::as_const(inputnames))
     {
         QStringList statuslist;
-        if (info[inputid].m_errored)
-            statuslist << tr("%1 errored").arg(info[inputid].m_errored);
-        if (info[inputid].m_unavailable)
-            statuslist << tr("%1 unavailable").arg(info[inputid].m_unavailable);
-        if (info[inputid].m_sleeping)
-            statuslist << tr("%1 sleeping").arg(info[inputid].m_sleeping);
-        if (info[inputid].m_recording)
-            statuslist << tr("%1 recording").arg(info[inputid].m_recording);
-        if (info[inputid].m_livetv)
-            statuslist << tr("%1 live television").arg(info[inputid].m_livetv);
-        if (info[inputid].m_available)
-            statuslist << tr("%1 available").arg(info[inputid].m_available);
+        if (info[inputname].m_errored)
+            statuslist << tr("%1 errored").arg(info[inputname].m_errored);
+        if (info[inputname].m_unavailable)
+            statuslist << tr("%1 unavailable").arg(info[inputname].m_unavailable);
+        if (info[inputname].m_sleeping)
+            statuslist << tr("%1 sleeping").arg(info[inputname].m_sleeping);
+        if (info[inputname].m_recording)
+            statuslist << tr("%1 recording").arg(info[inputname].m_recording);
+        if (info[inputname].m_livetv)
+            statuslist << tr("%1 live television").arg(info[inputname].m_livetv);
+        if (info[inputname].m_available)
+            statuslist << tr("%1 available").arg(info[inputname].m_available);
 
         QString fontstate;
-        if (info[inputid].m_errored)
+        if (info[inputname].m_errored)
             fontstate = "error";
-        else if (info[inputid].m_unavailable || info[inputid].m_sleeping)
+        else if (info[inputname].m_unavailable || info[inputname].m_sleeping)
             fontstate = "warning";
 
-        QString shortstatus = tr("Input %1 %2: %3")
-            .arg(QString::number(inputid), info[inputid].m_displayname,
-                 statuslist.join(tr(", ")));
+        QString shortstatus = tr("Input %1: %2")
+            .arg(inputname, statuslist.join(tr(", ")));
         QString longstatus = shortstatus + "\n" +
-            info[inputid].m_recordings.join("\n");
+            info[inputname].m_recordings.join("\n");
 
         AddLogLine(shortstatus, helpmsg, longstatus, longstatus, fontstate);
     }
@@ -1081,7 +1071,9 @@ static void disk_usage_with_rec_time_kb(QStringList& out, long long total,
         QString minstring = StatusBox::tr("%n minute(s)", "", minLeft%60);
         QString remainstring = StatusBox::tr("%1 remaining", "time");
         if (minLeft%60 == 0)
+        {
             out<<remainstring.arg(hourstring) + pro;
+        }
         else if (minLeft > 60)
         {
             out<<StatusBox::tr("%1 and %2 remaining", "time")
@@ -1203,7 +1195,8 @@ void StatusBox::doMachineStatus()
         Item->SetText("   " + tr("System time") + ": " + QDateTime::currentDateTime().toString());
     };
     UpdateTime(timebox);
-    connect(timebox, &StatusBoxItem::UpdateRequired, UpdateTime);
+    connect(timebox, &StatusBoxItem::UpdateRequired,
+            timebox, UpdateTime);
     timebox->Start();
 
     // Hostname & IP
@@ -1250,12 +1243,13 @@ void StatusBox::doMachineStatus()
                 Item->SetText(uptimeStr(time));
         };
         StatusBoxItem *uptimeitem = AddLogLine(uptimeStr(uptime));
-        connect(uptimeitem, &StatusBoxItem::UpdateRequired, UpdateUptime);
+        connect(uptimeitem, &StatusBoxItem::UpdateRequired,
+                uptimeitem, UpdateUptime);
         uptimeitem->Start(1min);
     }
 
     // weighted average loads
-#if !defined(_WIN32) && !defined(Q_OS_ANDROID)
+#if !defined(Q_OS_WINDOWS) && !defined(Q_OS_ANDROID)
     auto UpdateLoad = [](StatusBoxItem* Item)
     {
         loadArray loads = getLoadAvgs();
@@ -1264,7 +1258,8 @@ void StatusBox::doMachineStatus()
     };
     StatusBoxItem* loaditem = AddLogLine("");
     UpdateLoad(loaditem);
-    connect(loaditem, &StatusBoxItem::UpdateRequired, UpdateLoad);
+    connect(loaditem, &StatusBoxItem::UpdateRequired,
+            loaditem, UpdateLoad);
     loaditem->Start();
 #endif
 
@@ -1298,8 +1293,10 @@ void StatusBox::doMachineStatus()
         StatusBoxItem* swap = AddLogLine("", machineStr);
         UpdateMem(mem);
         UpdateSwap(swap);
-        connect(mem,  &StatusBoxItem::UpdateRequired, UpdateMem);
-        connect(swap, &StatusBoxItem::UpdateRequired, UpdateSwap);
+        connect(mem,  &StatusBoxItem::UpdateRequired,
+                mem, UpdateMem);
+        connect(swap, &StatusBoxItem::UpdateRequired,
+                swap, UpdateSwap);
         mem->Start(3s);
         swap->Start(3s);
     }
@@ -1324,24 +1321,26 @@ void StatusBox::doMachineStatus()
                 Item->SetText(uptimeStr(time));
             };
             StatusBoxItem *remoteuptime = AddLogLine(uptimeStr(uptime));
-            connect(remoteuptime, &StatusBoxItem::UpdateRequired, UpdateRemoteUptime);
+            connect(remoteuptime, &StatusBoxItem::UpdateRequired,
+                    remoteuptime, UpdateRemoteUptime);
             remoteuptime->Start(1min);
         }
 
         // weighted average loads
-        system_load_array floads;
+        loadArray floads;
         if (RemoteGetLoad(floads))
         {
             auto UpdateRemoteLoad = [](StatusBoxItem* Item)
             {
-                system_load_array loads = { 0.0, 0.0, 0.0 };
+                loadArray loads = { 0.0, 0.0, 0.0 };
                 RemoteGetLoad(loads);
                 Item->SetText(QString("   %1: %2 %3 %4").arg(tr("Load")).arg(loads[0], 1, 'f', 2)
                         .arg(loads[1], 1, 'f', 2).arg(loads[2], 1, 'f', 2));
             };
             StatusBoxItem* remoteloaditem = AddLogLine("");
             UpdateRemoteLoad(remoteloaditem);
-            connect(remoteloaditem, &StatusBoxItem::UpdateRequired, UpdateRemoteLoad);
+            connect(remoteloaditem, &StatusBoxItem::UpdateRequired,
+                    remoteloaditem, UpdateRemoteLoad);
             remoteloaditem->Start();
         }
 
@@ -1371,8 +1370,10 @@ void StatusBox::doMachineStatus()
             StatusBoxItem* rswap = AddLogLine("", machineStr);
             UpdateRemoteMem(rmem);
             UpdateRemoteSwap(rswap);
-            connect(rmem,  &StatusBoxItem::UpdateRequired, UpdateRemoteMem);
-            connect(rswap, &StatusBoxItem::UpdateRequired, UpdateRemoteSwap);
+            connect(rmem,  &StatusBoxItem::UpdateRequired,
+                    rmem, UpdateRemoteMem);
+            connect(rswap, &StatusBoxItem::UpdateRequired,
+                    rswap, UpdateRemoteSwap);
             rmem->Start(10s);
             rswap->Start(11s);
         }
@@ -1381,7 +1382,7 @@ void StatusBox::doMachineStatus()
     // get free disk space
     QString hostnames;
 
-    QList<FileSystemInfo> fsInfos = FileSystemInfo::RemoteGetInfo();
+    FileSystemInfoList fsInfos = FileSystemInfoManager::GetInfoList();
     for (int i = 0; i < fsInfos.size(); ++i)
     {
         // For a single-directory installation just display the totals
@@ -1509,7 +1510,8 @@ void StatusBox::doRenderStatus()
             // Reset the frame counter
             (void)opengl->GetSwapCount();
             UpdateFPS(fps);
-            connect(fps, &StatusBoxItem::UpdateRequired, UpdateFPS);
+            connect(fps, &StatusBoxItem::UpdateRequired,
+                    fps, UpdateFPS);
             fps->Start();
         }
 
@@ -1553,8 +1555,10 @@ void StatusBox::doRenderStatus()
             auto * freemem = AddLogLine("");
             UpdateUsed(used);
             UpdateFree(freemem);
-            connect(used, &StatusBoxItem::UpdateRequired, UpdateUsed);
-            connect(freemem, &StatusBoxItem::UpdateRequired, UpdateFree);
+            connect(used, &StatusBoxItem::UpdateRequired,
+                    used, UpdateUsed);
+            connect(freemem, &StatusBoxItem::UpdateRequired,
+                    freemem, UpdateFree);
             used->Start();
             freemem->Start();
         }
@@ -1669,4 +1673,4 @@ void StatusBox::doAutoExpireList(bool updateExpList)
 
 Q_DECLARE_METATYPE(LogLine)
 
-/* vim: set expandtab tabstop=4 shiftwidth=4: */
+#include "moc_statusbox.cpp"

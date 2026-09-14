@@ -3,6 +3,7 @@
 
 // MythTV
 #include <libmythbase/mythcorecontext.h>
+#include <libmythbase/mythlogging.h>
 
 #include "ratingsettings.h"
 
@@ -75,4 +76,4 @@ void RatingSettings::slotSave(void)
     Close();
 }
 
-
+#include "moc_ratingsettings.cpp"

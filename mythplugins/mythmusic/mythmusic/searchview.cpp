@@ -6,6 +6,7 @@
 
 // MythTV
 #include <libmythbase/mythdb.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythui/mythdialogbox.h>
 #include <libmythui/mythuibuttonlist.h>
 #include <libmythui/mythuitext.h>
@@ -285,7 +286,9 @@ void SearchView::ShowMenu(void)
             if (mdata)
             {
                 if (gPlayer->getCurrentPlaylist() && gPlayer->getCurrentPlaylist()->checkTrack(mdata->ID()))
+                {
                     menu->AddItem(tr("Remove From Playlist"));
+                }
                 else
                 {
                     if (MusicPlayer::getPlayNow())
@@ -494,3 +497,5 @@ void SearchView::trackVisible(MythUIButtonListItem *item)
         }
     }
 }
+
+#include "moc_searchview.cpp"

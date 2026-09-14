@@ -17,6 +17,9 @@
 #include <cstring>                      // for memcpy, memset
 #include <deque>                        // for _Deque_iterator, operator!=
 
+#include "libmythbase/mythconfig.h"
+#include "libmythtv/mythaverror.h"
+#include "libmythtv/mythavframe.h"
 #include "libmythbase/mthread.h"        // for MThread
 #include "libmythbase/mythcorecontext.h"// for MythCoreContext, etc
 #include "libmythbase/mythdb.h"         // for MythDB
@@ -183,7 +186,7 @@ void MHIContext::Restart(int chanid, int sourceid, bool isLive)
         QMutexLocker locker(&m_channelMutex);
         m_channelCache.clear();
     }
-    m_currentStream = (chanid) ? chanid : -1;
+    m_currentStream = chanid ? chanid : -1;
     if (!(tuneinfo & kTuneKeepChnl))
         m_currentChannel = m_currentStream;
 
@@ -244,8 +247,8 @@ void MHIContext::run(void)
     {
         std::chrono::milliseconds toWait = 0ms;
         // Dequeue and process any key presses.
-        int key = 0;
-        do
+        int key = -1;
+        while (key != 0)
         {
             NetworkBootRequested();
             ProcessDSMCCQueue();
@@ -261,7 +264,7 @@ void MHIContext::run(void)
             toWait = m_engine->RunAll();
             if (toWait < 0ms)
                 return;
-        } while (key != 0);
+        }
 
         toWait = (toWait > 1s || toWait <= 0ms) ? 1s : toWait;
 
@@ -273,38 +276,43 @@ void MHIContext::run(void)
 // Dequeue and process any DSMCC packets.
 void MHIContext::ProcessDSMCCQueue(void)
 {
-    DSMCCPacket *packet = nullptr;
-    do
-    {
-        QMutexLocker locker(&m_dsmccLock);
-        packet = m_dsmccQueue.dequeue();
-        if (packet)
-        {
-            m_dsmcc->ProcessSection(
-                packet->m_data,           packet->m_length,
-                packet->m_componentTag,   packet->m_carouselId,
-                packet->m_dataBroadcastId);
+    QMutexLocker locker(&m_dsmccLock);
+    DSMCCPacket *packet = m_dsmccQueue.dequeue();
 
-            delete packet;
-        }
-    } while (packet);
+    while (packet)
+    {
+        m_dsmcc->ProcessSection(
+            packet->m_data.data(),    packet->m_data.size(),
+            packet->m_componentTag,   packet->m_carouselId,
+            packet->m_dataBroadcastId);
+        delete packet;
+
+        locker.unlock();
+        // Allow access to other threads
+        locker.relock();
+        packet = m_dsmccQueue.dequeue();
+    }
 }
 
 void MHIContext::QueueDSMCCPacket(
     unsigned char *data, int length, int componentTag,
     unsigned carouselId, int dataBroadcastId)
 {
-    auto *dataCopy = (unsigned char*) malloc(length * sizeof(unsigned char));
+    DSMCCPacket *dsmcc {nullptr};
 
-    if (dataCopy == nullptr)
+    try
+    {
+        dsmcc = new DSMCCPacket(data, length, componentTag,
+                                carouselId, dataBroadcastId);
+    }
+    catch (const std::bad_alloc& e)
+    {
         return;
+    }
 
-    memcpy(dataCopy, data, length*sizeof(unsigned char));
     {
         QMutexLocker locker(&m_dsmccLock);
-        m_dsmccQueue.enqueue(new DSMCCPacket(dataCopy,     length,
-                                             componentTag, carouselId,
-                                             dataBroadcastId));
+        m_dsmccQueue.enqueue(dsmcc);
     }
     m_engineWait.wakeAll();
 }
@@ -753,12 +761,12 @@ void MHIContext::RequireRedraw(const QRegion & /*region*/)
 
 inline int MHIContext::ScaleX(int n, bool roundup) const
 {
-    return (n * m_displayRect.width() + (roundup ? kStdDisplayWidth - 1 : 0)) / kStdDisplayWidth;
+    return ((n * m_displayRect.width()) + (roundup ? kStdDisplayWidth - 1 : 0)) / kStdDisplayWidth;
 }
 
 inline int MHIContext::ScaleY(int n, bool roundup) const
 {
-    return (n * m_displayRect.height() + (roundup ? kStdDisplayHeight - 1 : 0)) / kStdDisplayHeight;
+    return ((n * m_displayRect.height()) + (roundup ? kStdDisplayHeight - 1 : 0)) / kStdDisplayHeight;
 }
 
 inline QRect MHIContext::Scale(const QRect r) const
@@ -769,12 +777,12 @@ inline QRect MHIContext::Scale(const QRect r) const
 
 inline int MHIContext::ScaleVideoX(int n, bool roundup) const
 {
-    return (n * m_videoRect.width() + (roundup ? kStdDisplayWidth - 1 : 0)) / kStdDisplayWidth;
+    return ((n * m_videoRect.width()) + (roundup ? kStdDisplayWidth - 1 : 0)) / kStdDisplayWidth;
 }
 
 inline int MHIContext::ScaleVideoY(int n, bool roundup) const
 {
-    return (n * m_videoRect.height() + (roundup ? kStdDisplayHeight - 1 : 0)) / kStdDisplayHeight;
+    return ((n * m_videoRect.height()) + (roundup ? kStdDisplayHeight - 1 : 0)) / kStdDisplayHeight;
 }
 
 inline QRect MHIContext::ScaleVideo(const QRect r) const
@@ -798,7 +806,9 @@ void MHIContext::AddToDisplay(const QImage &image, const QRect displayRect, bool
 
     QMutexLocker locker(&m_displayLock);
     if (!bUnder)
+    {
         m_display.push_back(data);
+    }
     else
     {
         // Replace any existing items under the video with this
@@ -807,7 +817,9 @@ void MHIContext::AddToDisplay(const QImage &image, const QRect displayRect, bool
         {
             MHIImageData *old = *it;
             if (!old->m_bUnder)
+            {
                 ++it;
+            }
             else
             {
                 it = m_display.erase(it);
@@ -890,7 +902,7 @@ int MHIContext::GetChannelIndex(const QString &str)
 {
     int nResult = -1;
 
-    do
+    for (int i = 0; i < 1 ; i++) // do once
     {
         if (str.startsWith("dvb://"))
         {
@@ -919,10 +931,12 @@ int MHIContext::GetChannelIndex(const QString &str)
             if (it == m_channelCache.constEnd())
                 break;
             if (transportID < 0)
+            {
                 nResult = Cid(it);
+            }
             else
             {
-                do
+                for ( ; it != m_channelCache.constEnd() ; it++)
                 {
                     if (Tid(it) == transportID)
                     {
@@ -930,14 +944,17 @@ int MHIContext::GetChannelIndex(const QString &str)
                         break;
                     }
                 }
-                while (++it != m_channelCache.constEnd());
             }
         }
         else if (str.startsWith("rec://svc/lcn/"))
         {
             // I haven't seen this yet so this is untested.
             bool ok = false;
-            int channelNo = str.mid(14).toInt(&ok); // Decimal integer
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+            int channelNo = str.midRef(14).toInt(&ok); // Decimal integer
+#else
+            int channelNo = QStringView(str).mid(14).toInt(&ok); // Decimal integer
+#endif
             if (!ok)
                 break;
             MSqlQuery query(MSqlQuery::InitCon());
@@ -966,7 +983,6 @@ int MHIContext::GetChannelIndex(const QString &str)
                 .arg(str));
         }
     }
-    while (false);
 
     LOG(VB_MHEG, LOG_INFO, QString("[mhi] GetChannelIndex %1 => %2")
         .arg(str).arg(nResult));
@@ -1297,7 +1313,7 @@ QRect MHIText::GetBounds(const QString &str, int &strLen, int maxSize)
         if (glyphIndex == 0)
         {
             LOG(VB_MHEG, LOG_INFO, QString("[mhi] Unknown glyph 0x%1")
-                .arg(ch.unicode(),0,16));
+                .arg(static_cast<short>(ch.unicode()),0,16));
             previous = 0;
             continue;
         }
@@ -1694,6 +1710,7 @@ void MHIDLA::DrawArcSector(int /*x*/, int /*y*/, int /*width*/, int /*height*/,
 // self-crossing polygons but we can get the former at least as
 // a result of rounding when drawing ellipses.
 struct lineSeg { int m_yBottom, m_yTop, m_xBottom; float m_slope; };
+Q_DECLARE_TYPEINFO(lineSeg, Q_PRIMITIVE_TYPE);
 
 void MHIDLA::DrawPoly(bool isFilled, const MHPointVec& xArray, const MHPointVec& yArray)
 {
@@ -1878,14 +1895,22 @@ void MHIBitmap::CreateFromMPEG(const unsigned char *data, int length)
     if (!picture)
         return;
 
+    // Automatically clean up memory allocation at function exit
+    auto cleanup_fn = [&](MHIBitmap */*x*/) {
+        pkt.data = buff;
+        av_packet_unref(&pkt);
+        avcodec_free_context(&c);
+    };
+    std::unique_ptr<MHIBitmap,decltype(cleanup_fn)> cleanup { this, cleanup_fn };
+
     c = avcodec_alloc_context3(nullptr);
 
     if (avcodec_open2(c, codec, nullptr) < 0)
-        goto Close;
+        return;
 
     // Copy the data into AVPacket
     if (av_new_packet(&pkt, length) < 0)
-        goto Close;
+        return;
 
     memcpy(pkt.data, data, length);
     buff = pkt.data;
@@ -1910,13 +1935,11 @@ void MHIBitmap::CreateFromMPEG(const unsigned char *data, int length)
                 QString("[mhi] video decode error: %1 (%2)")
                 .arg(av_make_error_stdstring(error, len))
                 .arg(gotPicture));
-            goto Close;
+            return;
         }
-        else
-        {
-            pkt.data = nullptr;
-            pkt.size = 0;
-        }
+
+        pkt.data = nullptr;
+        pkt.size = 0;
     }
 
     if (gotPicture)
@@ -1956,11 +1979,6 @@ void MHIBitmap::CreateFromMPEG(const unsigned char *data, int length)
         }
         av_freep(reinterpret_cast<void*>(&outputbuf));
     }
-
-Close:
-    pkt.data = buff;
-    av_packet_unref(&pkt);
-    avcodec_free_context(&c);
 }
 
 // Scale the bitmap.  Only used for image derived from MPEG I-frames.

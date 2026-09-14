@@ -1,3 +1,6 @@
+// C++ headers
+#include <algorithm>
+
 // MythTV
 #include "mythlogging.h"
 #include "unziputil.h"
@@ -45,7 +48,11 @@ QStringList MythHTTPEncoding::GetMimeTypes(const QString &Accept)
             if (auto index2 = qual.lastIndexOf("="); index2 > -1)
             {
                 bool ok = false;
-                auto newquality = qual.mid(index2 + 1).toFloat(&ok);
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+                auto newquality = qual.midRef(index2 + 1).toFloat(&ok);
+#else
+                auto newquality = QStringView(qual).mid(index2 + 1).toFloat(&ok);
+#endif
                 if (ok)
                     quality = newquality;
             }
@@ -55,11 +62,12 @@ QStringList MythHTTPEncoding::GetMimeTypes(const QString &Accept)
 
     // Sort the list
     auto comp = [](const MimePair& First, const MimePair& Second) { return First.first > Second.first; };
-    std::sort(weightings.begin(), weightings.end(), comp);
+    std::ranges::sort(weightings, comp);
 
     // Build the final result. This will pass through invalid types - which should
     // be handled by the consumer (e.g. wildcard specifiers are not handled).
     QStringList result;
+    result.reserve(weightings.size());
     for (const auto & weight : weightings)
         result.append(weight.second);
 
@@ -152,6 +160,7 @@ void MythHTTPEncoding::GetXMLEncodedParameters(MythHTTPRequest* Request)
     LOG(VB_HTTP, LOG_DEBUG, QString("Found method call (%1)").arg(Request->m_fileName));
 
     auto payload = QDomDocument();
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     QString err_msg;
     int err_line {-1};
     int err_col {-1};
@@ -163,6 +172,18 @@ void MythHTTPEncoding::GetXMLEncodedParameters(MythHTTPRequest* Request)
                                           .arg(err_line).arg(err_col).arg(err_msg));
         return;
     }
+#else
+    auto parseresult = payload.setContent(Request->m_content->constData(),
+                                          QDomDocument::ParseOption::UseNamespaceProcessing);
+    if (!parseresult)
+    {
+        LOG(VB_HTTP, LOG_WARNING, "Unable to parse XML request body");
+        LOG(VB_HTTP, LOG_WARNING, QString("- Error at line %1, column %2, msg: %3")
+            .arg(parseresult.errorLine).arg(parseresult.errorColumn)
+            .arg(parseresult.errorMessage));
+        return;
+    }
+#endif
     QString doc_name = payload.documentElement().localName();
     if (doc_name.compare("envelope", Qt::CaseInsensitive) == 0)
     {
@@ -210,7 +231,8 @@ void MythHTTPEncoding::GetJSONEncodedParameters(MythHTTPRequest* Request)
     }
 
     QJsonObject json = doc.object();
-    foreach(const QString& key, json.keys())
+    QStringList keys = json.keys();
+    for (const QString& key : std::as_const(keys))
     {
         if (!key.isEmpty())
         {

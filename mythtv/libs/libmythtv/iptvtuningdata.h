@@ -13,7 +13,6 @@
 #include <QUrl>
 
 // MythTV headers
-#include "libmythbase/mythlogging.h"
 #include "libmythbase/mythsingledownload.h"
 #include "libmythtv/mythtvexp.h"
 #include "libmythtv/recorders/HLS/HLSReader.h"
@@ -86,14 +85,13 @@ class MTV_PUBLIC IPTVTuningData
         m_bitrate[0] = data_bitrate;
         m_bitrate[1] = fec_bitrate0;
         m_bitrate[2] = fec_bitrate1;
-        if (fec_type.toLower() == "rfc2733")
+        if (fec_type.toLower() == "rfc2733") {
             m_fecType = kRFC2733;
-        else if (fec_type.toLower() == "rfc5109")
+        } else if (fec_type.toLower() == "rfc5109") {
             m_fecType = kRFC5109;
-        else if (fec_type.toLower() == "smpte2022")
+        } else if (fec_type.toLower() == "smpte2022") {
             m_fecType = kSMPTE2022;
-        else
-        {
+        } else {
             m_fecUrl0.clear();
             m_fecUrl1.clear();
         }
@@ -169,16 +167,7 @@ class MTV_PUBLIC IPTVTuningData
 
     static uint GetURLCount(void) { return 3; }
 
-    bool IsValid(void) const
-    {
-        bool ret = (m_dataUrl.isValid() && (IsUDP() || IsRTP() || IsRTSP() || IsHLS() || IsHTTPTS()));
-
-        LOG(VB_CHANNEL, LOG_DEBUG, QString("IPTVTuningdata (%1): IsValid = %2")
-            .arg(m_dataUrl.toString(),
-                 ret ? "true" : "false"));
-
-        return ret;
-    }
+    bool IsValid(void) const;
 
     bool IsUDP(void) const
     {
@@ -205,22 +194,35 @@ class MTV_PUBLIC IPTVTuningData
         return (m_protocol == http_ts);
     }
 
+    // An HLSPlaylist URL is identified as http_ts if download fails.
     void GuessProtocol(void)
     {
-        if (!m_dataUrl.isValid())
-            m_protocol = IPTVTuningData::inValid; // NOLINT(bugprone-branch-clone)
-        else if (m_dataUrl.scheme() == "udp")
-            m_protocol = IPTVTuningData::udp;
-        else if (m_dataUrl.scheme() == "rtp")
-            m_protocol = IPTVTuningData::rtp;
-        else if (m_dataUrl.scheme() == "rtsp")
-            m_protocol = IPTVTuningData::rtsp;
-        else if (((m_dataUrl.scheme() == "http") || (m_dataUrl.scheme() == "https")) && IsHLSPlaylist())
-            m_protocol = IPTVTuningData::http_hls;
-        else if ((m_dataUrl.scheme() == "http") || (m_dataUrl.scheme() == "https"))
-            m_protocol = IPTVTuningData::http_ts;
-        else
+        if (!m_dataUrl.isValid()) { // NOLINT(bugprone-branch-clone)
             m_protocol = IPTVTuningData::inValid;
+        } else if (m_dataUrl.scheme() == "udp") {
+            m_protocol = IPTVTuningData::udp;
+        } else if (m_dataUrl.scheme() == "rtp") {
+            m_protocol = IPTVTuningData::rtp;
+        } else if (m_dataUrl.scheme() == "rtsp") {
+            m_protocol = IPTVTuningData::rtsp;
+        } else if ((m_dataUrl.scheme() == "http") || (m_dataUrl.scheme() == "https")) {
+            QByteArray buffer;
+            if (CanReadHTTP(buffer))
+            {
+                if (IsHLSPlaylist(buffer))
+                    m_protocol = IPTVTuningData::http_hls;
+                else
+                    m_protocol = IPTVTuningData::http_ts;
+            }
+            else
+            {
+                m_protocol = IPTVTuningData::http_ts;   // Breaks the unit test if set to inValid
+            }
+        }
+        else
+        {
+            m_protocol = IPTVTuningData::inValid;
+        }
     }
 
   IPTVProtocol GetProtocol(void) const
@@ -229,41 +231,16 @@ class MTV_PUBLIC IPTVTuningData
   }
 
   protected:
-    bool IsHLSPlaylist(void) const
+
+    // Read first part of the http(s) URL.
+    // This is done to test if we can download from this URL
+    // and 2000 bytes is enough to determine in IsHLSPlaylist
+    // if the file is an HLS playlist or not.
+    //
+    bool CanReadHTTP(QByteArray &buffer) const;
+
+    static bool IsHLSPlaylist(QByteArray &buffer)
     {
-        if (QCoreApplication::instance() == nullptr)
-        {
-            LOG(VB_GENERAL, LOG_ERR, QString("IsHLSPlaylist - No QCoreApplication!!"));
-            return false;
-        }
-
-        QString url = m_dataUrl.toString();
-        auto path = m_dataUrl.path();
-
-        // check url is valid for a playlist before downloading (see trac ticket #12856)
-        if(path.endsWith(".m3u8", Qt::CaseInsensitive) ||
-           path.endsWith(".m3u", Qt::CaseInsensitive))
-        {
-            LOG(VB_RECORD, LOG_INFO, QString("IsHLSPlaylist url ends with either .m3u8 or .m3u %1").arg(url));
-        }
-        else
-        {
-            // not a valid playlist so just return false
-            LOG(VB_RECORD, LOG_INFO, QString("IsHLSPlaylist url does not end with either .m3u8 or .m3u %1").arg(url));
-            return false;
-        }
-
-        QByteArray buffer;
-
-        MythSingleDownload downloader;
-        downloader.DownloadURL(url, &buffer, 5s, 0, 10000);
-        if (buffer.isEmpty())
-        {
-            LOG(VB_GENERAL, LOG_ERR, QString("IsHLSPlaylist - Open Failed: %1\n\t\t\t%2")
-                .arg(downloader.ErrorString(), url));
-            return false;
-        }
-
         QTextStream text(&buffer);
 #if QT_VERSION < QT_VERSION_CHECK(6,0,0)
         text.setCodec("UTF-8");

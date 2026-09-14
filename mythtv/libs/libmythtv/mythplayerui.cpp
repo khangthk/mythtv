@@ -1,7 +1,10 @@
 #include <algorithm>
 
 // MythTV
-#include "libmyth/audio/audiooutput.h"
+#include "libmythtv/audio/audiooutput.h"
+#include "libmythbase/mythconfig.h"
+#include "libmythbase/mythcorecontext.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythui/mythmainwindow.h"
 
 #include "decoders/avformatdecoder.h"
@@ -19,21 +22,22 @@
 MythPlayerUI::MythPlayerUI(MythMainWindow* MainWindow, TV* Tv,
                            PlayerContext *Context, PlayerFlags Flags)
   : MythPlayerEditorUI(MainWindow, Tv, Context, Flags),
-    MythVideoScanTracker(this)
+    MythVideoScanTracker(this),
+    m_display(MainWindow->GetDisplay())
 {
     // Finish setting up the overlays
     m_osd.SetPlayer(this);
     m_captionsOverlay.SetPlayer(this);
 
     // User feedback during slow seeks
-    connect(this, &MythPlayerUI::SeekingSlow, [&](int Count)
+    connect(this, &MythPlayerUI::SeekingSlow, this, [&](int Count)
     {
         UpdateOSDMessage(tr("Searching") + QString().fill('.', Count % 3), kOSDTimeout_Short);
         DisplayPauseFrame();
     });
 
     // Seeking has finished; remove slow seek user feedback window
-    connect(this, &MythPlayerUI::SeekingComplete, [&]()
+    connect(this, &MythPlayerUI::SeekingComplete, this, [&]()
     {
         m_osdLock.lock();
         m_osd.HideWindow(OSD_WIN_MESSAGE);
@@ -41,7 +45,7 @@ MythPlayerUI::MythPlayerUI(MythMainWindow* MainWindow, TV* Tv,
     });
 
     // Seeking has finished; update position on OSD
-    connect(this, &MythPlayerUI::SeekingDone, [&]()
+    connect(this, &MythPlayerUI::SeekingDone, this, [&]()
     {
         UpdateOSDPosition();
     });
@@ -236,7 +240,7 @@ void MythPlayerUI::EventLoop()
     EofState eof = GetEof();
     if (HasReachedEof())
     {
-#ifdef USING_MHEG
+#if CONFIG_MHEG
         if (m_interactiveTV && m_interactiveTV->StreamStarted(false))
         {
             Pause();
@@ -375,7 +379,7 @@ void MythPlayerUI::EventLoop()
 
 void MythPlayerUI::PreProcessNormalFrame()
 {
-#ifdef USING_MHEG
+#if CONFIG_MHEG
     // handle Interactive TV
     if (GetInteractiveTV())
     {
@@ -390,7 +394,7 @@ void MythPlayerUI::PreProcessNormalFrame()
         m_itvLock.unlock();
         m_osdLock.unlock();
     }
-#endif // USING_MHEG
+#endif // CONFIG_MHEG
 }
 
 void MythPlayerUI::ChangeSpeed()
@@ -428,13 +432,13 @@ void MythPlayerUI::VideoStart()
     m_captionsOverlay.Init(visible, aspect);
     m_captionsOverlay.EnableSubtitles(kDisplayNone);
 
-#ifdef USING_MHEG
+#if CONFIG_MHEG
     if (GetInteractiveTV())
     {
         QMutexLocker locker(&m_itvLock);
         m_interactiveTV->Reinit(total, visible, aspect);
     }
-#endif // USING_MHEG
+#endif // CONFIG_MHEG
 
     // If there is a forced text subtitle track (which is possible
     // in e.g. a .mkv container), and forced subtitles are
@@ -497,7 +501,9 @@ bool MythPlayerUI::VideoLoop()
     ProcessCallbacks();
 
     if (m_videoPaused || m_isDummy)
+    {
         DisplayPauseFrame();
+    }
     else if (DisplayNormalFrame())
     {
         if (FlagIsSet(kVideoIsNull) && m_decoder)
@@ -582,7 +588,12 @@ void MythPlayerUI::RefreshPauseFrame()
             if (m_deleteMap.IsEditing())
             {
                 m_osdLock.lock();
-                DeleteMap::UpdateOSD(m_latestVideoTimecode, &m_osd);
+                LOG(VB_PLAYBACK, LOG_DEBUG, LOC + QString("timecode video:%1 audio:%2")
+                    .arg(m_latestVideoTimecode.count()).arg(m_latestAudioTimecode.count()));
+
+                // Use audio timecode when video timecode is not available for DVB audio recordings.
+                auto timecode = m_latestVideoTimecode > 0ms ? m_latestVideoTimecode: m_latestAudioTimecode;
+                DeleteMap::UpdateOSD(timecode, &m_osd);
                 m_osdLock.unlock();
             }
         }
@@ -834,12 +845,18 @@ void MythPlayerUI::GetPlaybackData(InfoMap& Map)
     if (m_decoder)
         Map["videodecoder"] = m_decoder->GetCodecDecoderName();
 
-    Map["framerate"] = QString("%1%2%3")
-            .arg(static_cast<double>(m_outputJmeter.GetLastFPS()), 0, 'f', 2).arg(QChar(0xB1, 0))
+    Map["framerate"] = QString::fromUtf8("%1±%2")
+            .arg(static_cast<double>(m_outputJmeter.GetLastFPS()), 0, 'f', 2)
             .arg(static_cast<double>(m_outputJmeter.GetLastSD()), 0, 'f', 2);
     Map["load"] = m_outputJmeter.GetLastCPUStats();
 
     GetCodecDescription(Map);
+
+    QString displayfps = QString("%1x%2@%3Hz")
+        .arg(m_display->GetResolution().width())
+        .arg(m_display->GetResolution().height())
+        .arg(m_display->GetRefreshRate(), 0, 'f', 2);
+    Map["displayfps"] = displayfps;
 }
 
 void MythPlayerUI::GetCodecDescription(InfoMap& Map)
@@ -994,7 +1011,7 @@ void MythPlayerUI::JumpToStream(const QString &stream)
     ChangeSpeed();
 
     m_playerCtx->SetPlayerChangingBuffers(false);
-#ifdef USING_MHEG
+#if CONFIG_MHEG
     if (m_interactiveTV) m_interactiveTV->StreamStarted();
 #endif
 
@@ -1241,3 +1258,5 @@ void MythPlayerUI::JumpToProgram()
     m_playerCtx->SetPlayerChangingBuffers(false);
     LOG(VB_PLAYBACK, LOG_INFO, LOC + "JumpToProgram - end");
 }
+
+#include "moc_mythplayerui.cpp"

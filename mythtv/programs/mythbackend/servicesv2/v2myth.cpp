@@ -7,10 +7,12 @@
 #include <QNetworkRequest>
 
 // MythTV
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/dbutil.h"
+#include "libmythbase/filesysteminfo.h"
 #include "libmythbase/hardwareprofile.h"
 #include "libmythbase/http/mythhttpmetaservice.h"
-#include "libmythbase/mythcoreutil.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythdbcon.h"
@@ -18,18 +20,23 @@
 #include "libmythbase/mythtimezone.h"
 #include "libmythbase/mythversion.h"
 #include "libmythbase/storagegroup.h"
-#include "libmythbase/version.h"
 #include "libmythbase/mythdownloadmanager.h"
 #include "libmythtv/tv_rec.h"
 
 // MythBackend
-#include "backendcontext.h"
 #include "scheduler.h"
 #include "v2databaseInfo.h"
 #include "v2myth.h"
 #include "v2serviceUtil.h"
 #include "v2versionInfo.h"
 #include "v2wolInfo.h"
+
+#if CONFIG_SYSTEMD_NOTIFY
+#include <systemd/sd-daemon.h>
+static inline void api_sd_notify(const char *str) { sd_notify(0, str); };
+#else
+static inline void api_sd_notify(const char */*str*/) {};
+#endif
 
 // This will be initialised in a thread safe manner on first use
 Q_GLOBAL_STATIC_WITH_ARGS(MythHTTPMetaService, s_service,
@@ -130,8 +137,8 @@ V2ConnectionInfo* V2Myth::GetConnectionInfo( const QString  &sPin )
     pWOL->setRetry             ( params.m_wolRetry     );
     pWOL->setCommand           ( params.m_wolCommand   );
 
-    pVersion->setVersion       ( MYTH_SOURCE_VERSION   );
-    pVersion->setBranch        ( MYTH_SOURCE_PATH      );
+    pVersion->setVersion       ( GetMythSourceVersion());
+    pVersion->setBranch        ( GetMythSourcePath()   );
     pVersion->setProtocol      ( MYTH_PROTO_VERSION    );
     pVersion->setBinary        ( MYTH_BINARY_VERSION   );
     pVersion->setSchema        ( MYTH_DATABASE_VERSION );
@@ -175,7 +182,7 @@ bool V2Myth::SetConnectionInfo(const QString &Host, const QString &UserName, con
     dbparms.m_wolRetry = 3;
     dbparms.m_wolCommand = QString();
 
-    bResult = gContext->SaveDatabaseParams(dbparms);
+    bResult = GetMythDB()->SaveDatabaseParams(dbparms, false);
 
     return bResult;
 }
@@ -338,11 +345,7 @@ V2StorageGroupDirList* V2Myth::GetStorageGroupDirs( const QString &sGroupName,
     {
         V2StorageGroupDir *pStorageGroupDir = pList->AddNewStorageGroupDir();
         QFileInfo fi(query.value(3).toString());
-        int64_t free = 0;
-        int64_t total = 0;
-        int64_t used = 0;
-
-        free = getDiskSpace(query.value(3).toString(), total, used);
+        auto fsInfo = FileSystemInfo(QString(), query.value(3).toString());
 
         pStorageGroupDir->setId            ( query.value(0).toInt()       );
         pStorageGroupDir->setGroupName     ( query.value(1).toString()    );
@@ -350,7 +353,7 @@ V2StorageGroupDirList* V2Myth::GetStorageGroupDirs( const QString &sGroupName,
         pStorageGroupDir->setDirName       ( query.value(3).toString()    );
         pStorageGroupDir->setDirRead       ( fi.isReadable()              );
         pStorageGroupDir->setDirWrite      ( fi.isWritable()              );
-        pStorageGroupDir->setKiBFree       ( free                         );
+        pStorageGroupDir->setKiBFree       ( fsInfo.getFreeSpace()        );
     }
 
     return pList;
@@ -769,6 +772,17 @@ bool V2Myth::PutSetting( const QString &sHostName,
 {
     QString hostName = sHostName;
 
+    if (sKey.toLower() == "apiauthreqd")
+    {
+        QString authorization = MythHTTP::GetHeader(m_request->m_headers,
+            "authorization").trimmed();
+        if (authorization.isEmpty())
+            authorization = m_request->m_queries.value("authorization",{});
+        MythSessionManager *sessionManager = gCoreContext->GetSessionManager();
+        if (sessionManager->GetSession(authorization).GetUserName() != "admin")
+            throw  QString ("Forbidden: PutSetting " + sKey);
+    }
+
     if (hostName == "_GLOBAL_")
         hostName = "";
 
@@ -1112,13 +1126,14 @@ V2BackendInfo* V2Myth::GetBackendInfo( void )
     V2EnvInfo           *pEnv       = pInfo->Env();
     V2LogInfo           *pLog       = pInfo->Log();
 
-    pBuild->setVersion     ( MYTH_SOURCE_VERSION   );
+    pBuild->setVersion     ( GetMythSourceVersion());
     pBuild->setLibX264     ( CONFIG_LIBX264        );
     pBuild->setLibDNS_SD   ( CONFIG_LIBDNS_SD      );
     pEnv->setLANG          ( qEnvironmentVariable("LANG")        );
     pEnv->setLCALL         ( qEnvironmentVariable("LC_ALL")      );
     pEnv->setLCCTYPE       ( qEnvironmentVariable("LC_CTYPE")    );
     pEnv->setHOME          ( qEnvironmentVariable("HOME")        );
+    pEnv->setHttpRootDir   ( m_request->m_root );
     // USER for Linux systems, USERNAME for Windows
     pEnv->setUSER          ( qEnvironmentVariable("USER",
                              qEnvironmentVariable("USERNAME"))   );
@@ -1129,25 +1144,24 @@ V2BackendInfo* V2Myth::GetBackendInfo( void )
     pLog->setLogArgs       ( logPropagateArgs      );
     pEnv->setIsDatabaseIgnored(gCoreContext->GetDB()->IsDatabaseIgnored());
     pEnv->setDBTimezoneSupport(DBUtil::CheckTimeZoneSupport());
-    auto nWebOnly = gContext->getWebOnly();
     QString webOnly;
-    switch (nWebOnly) {
-        case MythContext::kWebOnlyNone:
+    switch (s_WebOnlyStartup) {
+        case kWebOnlyNone:
             webOnly = "NONE";
             break;
-        case MythContext::kWebOnlyDBSetup:
+        case kWebOnlyDBSetup:
             webOnly = "DBSETUP";
             break;
-        case MythContext::kWebOnlyDBTimezone:
+        case kWebOnlyDBTimezone:
             webOnly = "DBTIMEZONE";
             break;
-        case MythContext::kWebOnlyWebOnlyParm:
+        case kWebOnlyWebOnlyParm:
             webOnly = "WEBONLYPARM";
             break;
-        case MythContext::kWebOnlyIPAddress:
+        case kWebOnlyIPAddress:
             webOnly = "IPADDRESS";
             break;
-        case MythContext::kWebOnlySchemaUpdate:
+        case kWebOnlySchemaUpdate:
             webOnly = "SCHEMAUPDATE";
             break;
     }
@@ -1168,18 +1182,39 @@ V2BackendInfo* V2Myth::GetBackendInfo( void )
 bool V2Myth::ManageDigestUser( const QString &sAction,
                                const QString &sUserName,
                                const QString &sPassword,
-                               const QString &sNewPassword,
-                               const QString &sAdminPassword )
+                               const QString &sNewPassword)
 {
 
     DigestUserActions sessionAction = DIGEST_USER_ADD;
+    QString loggedInUser;
+
+    QString authorization = MythHTTP::GetHeader(m_request->m_headers,
+        "authorization").trimmed();
+    if (authorization.isEmpty())
+        authorization = m_request->m_queries.value("authorization",{});
+
+    MythSessionManager *sessionManager = gCoreContext->GetSessionManager();
+
+    // if (!authorization.isEmpty())
+    loggedInUser = sessionManager->GetSession(authorization).GetUserName();
 
     if (sAction == "Add")
+    {
         sessionAction = DIGEST_USER_ADD;
+    }
     else if (sAction == "Remove")
+    {
         sessionAction = DIGEST_USER_REMOVE;
+    }
     else if (sAction == "ChangePassword")
+    {
         sessionAction = DIGEST_USER_CHANGE_PW;
+        if (sPassword.isEmpty() && loggedInUser != "admin" && !loggedInUser.isEmpty())
+        {
+            throw  QString ("Forbidden: ManageDigestUser "
+                + loggedInUser + " Old Password required");
+        }
+    }
     else
     {
         LOG(VB_GENERAL, LOG_ERR, QString("Action must be Add, Remove or "
@@ -1188,9 +1223,70 @@ bool V2Myth::ManageDigestUser( const QString &sAction,
         return false;
     }
 
-    return MythSessionManager::ManageDigestUser(sessionAction, sUserName,
-                                                sPassword, sNewPassword,
-                                                sAdminPassword);
+    if (!loggedInUser.isEmpty()
+        && loggedInUser != "admin" && loggedInUser != sUserName)
+    {
+        throw  QString ("Forbidden: ManageDigestUser " + sessionManager->GetSession(authorization).GetUserName());
+    }
+
+    return sessionManager->ManageDigestUser(sessionAction, sUserName,
+                                                sPassword, sNewPassword);
+                                                // sAdminPassword);
+}
+
+// Login a user to the API Services. Return a session token if
+// valid, empty string if not
+
+QString  V2Myth::LoginUser         (  const QString &UserName,
+                                      const QString &Password,
+                                      const QString &Client )
+{
+    MythSessionManager *sessionManager = gCoreContext->GetSessionManager();
+    QString client;
+
+    if (!HAS_PARAMv2("Client"))
+        client = "webapi_" + gCoreContext->GetHostName();
+    else
+        client = Client + "_" + gCoreContext->GetHostName();
+
+    MythUserSession session = sessionManager->LoginUser(UserName, Password, client);
+
+    QString result = session.GetSessionToken();
+    // Make sure in case of error that the return is an empty string
+    // not the word "null"
+    if (result.isEmpty())
+        result = "";
+    return result;
+}
+
+QStringList V2Myth::GetUsers()
+{
+    MSqlQuery query(MSqlQuery::InitCon());
+
+    if (!query.isConnected())
+        throw( QString( "Database not open while trying to load list of users" ));
+
+    query.prepare(
+        "SELECT username "
+        "FROM users ");
+
+    if (!query.exec())
+    {
+        MythDB::DBError("V2Myth::GetUsers()", query);
+
+        throw( QString( "Database Error executing query." ));
+    }
+
+    // ----------------------------------------------------------------------
+    // return the results of the query
+    // ----------------------------------------------------------------------
+
+    QStringList oList;
+
+    while (query.next())
+        oList.append( query.value(0).toString() );
+
+    return oList;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1260,34 +1356,43 @@ bool V2Myth::ManageScheduler ( bool Enable, bool Disable )
     auto *scheduler = dynamic_cast<Scheduler*>(gCoreContext->GetScheduler());
     if (scheduler == nullptr)
         throw QString("Scheduler is null");
-    // onle and only one of enable and disable must be supplied
+    // One and only one of enable and disable must be supplied
     if (Enable == Disable)
         return false;
     if (Enable)
-        scheduler->EnableScheduling();
-    else
-        scheduler->DisableScheduling();
-    // Stop EIT scanning
-    QMapIterator<uint,TVRec*> iter(TVRec::s_inputs);
-    while (iter.hasNext())
     {
-        iter.next();
-        auto *tvrec = iter.value();
-        tvrec->EnableActiveScan(Enable);
+        scheduler->EnableScheduling();
     }
+    else
+    {
+        scheduler->DisableScheduling();
+        api_sd_notify("STATUS=Scheduling disabled via Services API/Web App.");
+    }
+    // Stop EIT scanning
+    for (auto * tvrec : std::as_const(TVRec::s_inputs))
+        tvrec->EnableActiveScan(Enable);
     return true;
 }
 
-bool V2Myth::Shutdown ( int Retcode, bool Restart )
+bool V2Myth::Shutdown ( int Retcode, bool Restart, bool WebOnly )
 {
     if (Retcode < 0 || Retcode > 255)
         return false;
     if (Restart)
     {
-        // Retcode 258 is a special value to signal to mythbackend to restart
-        // This is designed so that if the execvp fails it will give return code of 2,
-        // indicating failure and maybe causing the service module to restart.
-        Retcode = 258;
+        if (WebOnly)
+        {
+            // Retcode 259 is a special value to signal to mythbackend to restart
+            // in --webonly mode
+            Retcode = 259;
+        }
+        else
+        {
+            // Retcode 258 is a special value to signal to mythbackend to restart
+            // in normal mode
+            Retcode = 258;
+        }
+
     }
     QCoreApplication::exit(Retcode);
     return true;
@@ -1309,3 +1414,5 @@ QString  V2Myth::Proxy ( const QString &urlString)
 
     return {};
 }
+
+#include "moc_v2myth.cpp"

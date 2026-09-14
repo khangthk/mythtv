@@ -35,13 +35,13 @@ MythUIThemeCache::~MythUIThemeCache()
     PruneCacheDir(GetRemoteCacheDir());
     PruneCacheDir(GetThumbnailDir());
 
-    QMutableMapIterator<QString, MythImage *> i(m_imageCache);
-    while (i.hasNext())
+    for (auto i = m_imageCache.begin();
+          i != m_imageCache.end();
+         /* no inc */)
     {
-        i.next();
         i.value()->SetIsInCache(false);
         i.value()->DecrRef();
-        i.remove();
+        i = m_imageCache.erase(i);
     }
     m_cacheTrack.clear();
 
@@ -62,14 +62,13 @@ void MythUIThemeCache::UpdateImageCache()
 {
     QMutexLocker locker(&m_cacheLock);
 
-    QMutableMapIterator<QString, MythImage *> i(m_imageCache);
-
-    while (i.hasNext())
+    for (auto i = m_imageCache.begin();
+          i != m_imageCache.end();
+         /* no inc */)
     {
-        i.next();
         i.value()->SetIsInCache(false);
         i.value()->DecrRef();
-        i.remove();
+        i = m_imageCache.erase(i);
     }
 
     m_cacheTrack.clear();
@@ -195,7 +194,7 @@ void MythUIThemeCache::PruneCacheDir(const QString& dirname)
         QString fullname = fi.filePath();
         if (not fullname.startsWith('/'))
             fullname = dirname + "/" + fullname;
-        int rc = stat(fullname.toLocal8Bit(), &buf);
+        int rc = stat(fullname.toLocal8Bit().constData(), &buf);
         if (rc >= 0)
         {
             if (buf.st_atime < cutoffsecs)
@@ -365,7 +364,7 @@ MythImage* MythUIThemeCache::LoadCacheImage(QString File, const QString& Label,
                     else
                     {
                         LOG(VB_GUI | VB_FILE, LOG_WARNING, LOC +
-                            QString("LoadCacheImage: Could not load :%1")
+                            QString("LoadCacheImage: Could not load: %1")
                             .arg(cachefilepath));
 
                         ret->SetIsInCache(false);

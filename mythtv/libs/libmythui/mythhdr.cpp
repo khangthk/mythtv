@@ -1,8 +1,10 @@
+#include "libmythbase/mythconfig.h"
+
 // MythTV
 #include "mythhdr.h"
 #include "mythdisplay.h"
 
-#if defined (USING_DRM) && defined (USING_QTPRIVATEHEADERS)
+#if CONFIG_DRM && CONFIG_QTPRIVATEHEADERS
 #include "platforms/drm/mythdrmhdr.h"
 #endif
 
@@ -34,7 +36,7 @@ MythHDRPtr MythHDR::Create([[maybe_unused]] MythDisplay* MDisplay,
     // Only try and create a controllable device if the display supports HDR
     if (std::get<0>(Desc) > SDR)
     {
-#if defined (USING_DRM) && defined (USING_QTPRIVATEHEADERS)
+#if CONFIG_DRM && CONFIG_QTPRIVATEHEADERS
         result = MythDRMHDR::Create(MDisplay, Desc);
 #endif
     }
@@ -82,3 +84,5 @@ QStringList MythHDR::TypesToString() const
 {
     return MythHDR::TypesToString(m_supportedTypes);
 }
+
+#include "moc_mythhdr.cpp"

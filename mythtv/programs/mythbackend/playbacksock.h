@@ -8,10 +8,11 @@
 #include <QMutex>
 #include <QSize>
 
-#include "libmythbase/programinfo.h"  // ProgramInfo
-#include "libmythbase/programtypes.h" // RecStatus::Type
+#include "libmythbase/filesysteminfo.h"
 #include "libmythbase/referencecounter.h"
 #include "libmythtv/inputinfo.h"
+#include "libmythtv/programinfo.h"  // ProgramInfo
+#include "libmythtv/recordingstatus.h" // RecStatus::Type
 
 class MythSocket;
 class MainServer;
@@ -27,7 +28,7 @@ enum PlaybackSockEventsMode : std::uint8_t {
 class PlaybackSock : public ReferenceCounter
 {
   public:
-    PlaybackSock(MainServer *parent, MythSocket *lsock,
+    PlaybackSock(MythSocket *lsock,
                  QString lhostname, PlaybackSockEventsMode eventsMode);
 
     void SetDisconnected(void) { m_disconnected = true; }
@@ -60,7 +61,7 @@ class PlaybackSock : public ReferenceCounter
     QString getIP(void) const { return m_ip; }
 
     bool GoToSleep(void);
-    void GetDiskSpace(QStringList &o_strlist);
+    FileSystemInfoList GetDiskSpace();
     int DeleteFile(const QString &filename, const QString &sgroup);
     int StopRecording(const ProgramInfo *pginfo);
     int CheckRecordingActive(const ProgramInfo *pginfo);
@@ -128,8 +129,6 @@ class PlaybackSock : public ReferenceCounter
     QMutex                  m_sockLock;
 
     bool                    m_disconnected  {false};
-
-    MainServer             *m_parent        {nullptr};
 };
 
 #endif

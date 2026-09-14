@@ -9,15 +9,10 @@
 #
 
 set(HEADERS_TO_INSTALL1
-    bufferedsocketdevice.h
     eventing.h
-    htmlserver.h
     httprequest.h
     httpserver.h
-    mmembuf.h
     mythxmlclient.h
-    serverSideScripting.h
-    servicehost.h
     soapclient.h
     ssdp.h
     ssdpcache.h
@@ -28,14 +23,13 @@ set(HEADERS_TO_INSTALL1
     upnpcmgr.h
     upnpdevice.h
     upnphelpers.h
+    upnpresultcode.h
     upnpsubscription.h
-    upnptaskcache.h
     upnptaskevent.h
     upnptasknotify.h
     upnptasksearch.h
     upnputil.h
-    wsdl.h
-    xsd.h)
+    )
 
 set(HEADERS_TO_INSTALL2
     serializers/jsonSerializer.h serializers/serializer.h
@@ -46,23 +40,14 @@ set(HEADERS_TO_INSTALL2
 #
 add_library(
   mythupnp
-  bufferedsocketdevice.cpp
-  bufferedsocketdevice.h
+  blockingtcpsocket.cpp
+  blockingtcpsocket.h
   eventing.cpp
   eventing.h
-  htmlserver.cpp
-  htmlserver.h
   httprequest.cpp
   httprequest.h
   httpserver.cpp
   httpserver.h
-  mbroadcastsocketdevice.h
-  mmembuf.cpp
-  mmembuf.h
-  mmulticastsocketdevice.cpp
-  mmulticastsocketdevice.h
-  msocketdevice.cpp
-  msocketdevice.h
   mythxmlclient.cpp
   mythxmlclient.h
   serializers/jsonSerializer.cpp
@@ -74,17 +59,14 @@ add_library(
   serializers/xmlplistSerializer.h
   serializers/xmlSerializer.cpp
   serializers/xmlSerializer.h
-  servicehost.cpp
-  servicehost.h
-  serviceHosts/rttiServiceHost.h
-  services/rtti.cpp
-  services/rtti.h
   soapclient.cpp
   soapclient.h
   ssdp.cpp
   ssdp.h
   ssdpcache.cpp
   ssdpcache.h
+  ssdpextension.cpp
+  ssdpextension.h
   taskqueue.cpp
   taskqueue.h
   upnp.cpp
@@ -102,11 +84,11 @@ add_library(
   upnphelpers.h
   upnpmsrr.cpp
   upnpmsrr.h
+  upnpresultcode.h
   upnpserviceimpl.cpp
   upnpserviceimpl.h
   upnpsubscription.cpp
   upnpsubscription.h
-  upnptaskcache.h
   upnptaskevent.cpp
   upnptaskevent.h
   upnptasknotify.cpp
@@ -119,10 +101,7 @@ add_library(
   websocket.h
   websocket_extensions/websocket_mythevent.cpp
   websocket_extensions/websocket_mythevent.h
-  wsdl.cpp
-  wsdl.h
-  xsd.cpp
-  xsd.h)
+  )
 
 #
 # All remaining target information
@@ -140,23 +119,11 @@ target_link_libraries(
   mythupnp
   PUBLIC Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Network
          Qt${QT_VERSION_MAJOR}::Sql Qt${QT_VERSION_MAJOR}::Xml mythbase
-         mythservicecontracts)
+  )
 
 #
 # conditionally included code
 #
-if(UNIX)
-  target_sources(mythupnp PRIVATE msocketdevice_unix.cpp)
-elseif(WIN32)
-  target_sources(mythupnp PRIVATE msocketdevice_win.cpp)
-endif()
-
-if(TARGET Qt${QT_VERSION_MAJOR}::Script)
-  target_link_libraries(mythupnp PUBLIC Qt${QT_VERSION_MAJOR}::Script
-                                        Qt${QT_VERSION_MAJOR}::ScriptTools)
-  target_sources(mythupnp PRIVATE serverSideScripting.cpp serverSideScripting.h)
-endif()
-
 if(APPLE)
   # set(QMAKE_LFLAGS_SHLIB -flat_namespace)
 endif()

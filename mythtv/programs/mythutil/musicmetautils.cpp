@@ -1,13 +1,17 @@
 // qt
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtEnvironmentVariables>
+#endif
 #include <QDir>
 #include <QDomDocument>
 #include <QProcess>
 
 // libmyth* headers
-#include "libmyth/mythcontext.h"
 #include "libmythbase/exitcodes.h"
 #include "libmythbase/mythchrono.h"
 #include "libmythbase/mythconfig.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdirs.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/storagegroup.h"
@@ -328,7 +332,7 @@ static int CalcTrackLength(const MythUtilCommandLineParser &cmdline)
     avformat_close_input(&inputFC);
     inputFC = nullptr;
 
-    std::chrono::seconds dbLength = duration_cast<std::chrono::seconds>(mdata->Length());
+    auto dbLength = duration_cast<std::chrono::seconds>(mdata->Length());
     if (dbLength != duration)
     {
         LOG(VB_GENERAL, LOG_INFO, QString("The length of this track in the database was %1s "
@@ -360,6 +364,20 @@ public:
 
 static int FindLyrics(const MythUtilCommandLineParser &cmdline)
 {
+
+#ifdef Q_OS_DARWIN
+    QString path = QCoreApplication::applicationDirPath();
+    qputenv("PYTHONPATH",
+           QString("%1/../Resources/lib/%2:%1/../Resources/lib/%2/site-packages:%1/../Resources/lib/%2/lib-dynload:%3")
+           .arg(path)
+           .arg(QFileInfo(PYTHON_EXE).fileName())
+           .arg(QProcessEnvironment::systemEnvironment().value("PYTHONPATH"))
+           .toUtf8().constData());
+    QString PYTHON_LOCAL_EXE = path + QFileInfo(PYTHON_EXE).fileName();
+#else
+    QString PYTHON_LOCAL_EXE = QString(PYTHON_EXE);
+#endif
+
     // make sure our lyrics cache directory exists
     QString lyricsDir = GetConfDir() + "/MythMusic/Lyrics/";
     QDir dir(lyricsDir);
@@ -407,7 +425,9 @@ static int FindLyrics(const MythUtilCommandLineParser &cmdline)
             // if the user specified a specific grabber assume they want to
             // re-search for the lyrics using the given grabber
             if (grabberName != "ALL")
+            {
                 QFile::remove(lyricsFile);
+            }
             else
             {
                 // load these lyrics to speed up future lookups
@@ -500,11 +520,12 @@ static int FindLyrics(const MythUtilCommandLineParser &cmdline)
     {
         QStringList args { scripts.at(x), "-v" };
         QProcess p;
-        p.start(PYTHON_EXE, args);
+        p.start(PYTHON_LOCAL_EXE, args);
         p.waitForFinished(-1);
         QString result = p.readAllStandardOutput();
 
         QDomDocument domDoc;
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
         QString errorMsg;
         int errorLine = 0;
         int errorColumn = 0;
@@ -516,6 +537,18 @@ static int FindLyrics(const MythUtilCommandLineParser &cmdline)
                 QString("\n\t\t\tError at line: %1  column: %2 msg: %3").arg(errorLine).arg(errorColumn).arg(errorMsg));
             continue;
         }
+#else
+        auto parseResult = domDoc.setContent(result);
+        if (!parseResult)
+        {
+            LOG(VB_GENERAL, LOG_ERR,
+                QString("FindLyrics: Could not parse version from %1").arg(scripts.at(x)) +
+                QString("\n\t\t\tError at line: %1  column: %2 msg: %3")
+                .arg(parseResult.errorLine).arg(parseResult.errorColumn)
+                .arg(parseResult.errorMessage));
+            continue;
+        }
+#endif
 
         QDomNodeList itemList = domDoc.elementsByTagName("grabber");
         QDomNode itemNode = itemList.item(0);
@@ -549,7 +582,7 @@ static int FindLyrics(const MythUtilCommandLineParser &cmdline)
                            QString("--album=%1").arg(album),
                            QString("--title=%1").arg(title),
                            QString("--filename=%1").arg(filename) };
-        p.start(PYTHON_EXE, args);
+        p.start(PYTHON_LOCAL_EXE, args);
         p.waitForFinished(-1);
         QString result = p.readAllStandardOutput();
 

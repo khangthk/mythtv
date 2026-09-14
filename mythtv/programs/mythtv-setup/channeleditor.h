@@ -1,7 +1,7 @@
 #ifndef CHANNELEDITOR_H
 #define CHANNELEDITOR_H
 
-#include "libmyth/standardsettings.h"
+#include "libmythui/standardsettings.h"
 #include "libmythui/mythscreentype.h"
 
 class MythUIButton;
@@ -17,6 +17,8 @@ class ChannelEditor : public MythScreenType
 
     bool Create(void) override; // MythScreenType
     bool keyPressEvent(QKeyEvent *event) override; // MythScreenType
+
+  protected:
     void customEvent(QEvent *event) override; // MythUIType
 
   protected slots:

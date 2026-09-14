@@ -11,6 +11,7 @@
 #ifndef V2BACKENDSTATUS_H_
 #define V2BACKENDSTATUS_H_
 
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QDateTime>
 #include <QString>
 #include <QVariantList>
@@ -151,6 +152,9 @@ class V2BackendStatus : public QObject
     SERVICE_PROPERTY2( QDateTime   , AsOf            )
     SERVICE_PROPERTY2( QString     , Version         )
     SERVICE_PROPERTY2( QString     , ProtoVer        )
+    SERVICE_PROPERTY2( QString     , HostName        )
+    SERVICE_PROPERTY2( QString     , SourceVer)
+    SERVICE_PROPERTY2( QString     , SourcePath)
     SERVICE_PROPERTY2( QVariantList, Encoders )
     SERVICE_PROPERTY2( QVariantList, Scheduled )
     SERVICE_PROPERTY2( QVariantList, Frontends )

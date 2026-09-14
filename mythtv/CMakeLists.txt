@@ -5,6 +5,13 @@
 #
 
 #
+# Catch running cmake in the wrong directory.
+#
+if(NOT SUPER_VERSION)
+  message(FATAL_ERROR "You must run cmake from the parent of this directory.")
+endif()
+
+#
 # Can use cmake features introduced in 3.20.  Super-project has already
 # validated the higher version required for android.
 #
@@ -13,8 +20,7 @@ cmake_minimum_required(VERSION 3.20)
 #
 # Validate parameters
 #
-foreach(_param IN ITEMS SUPER_SOURCE_DIR SUPER_VERSION MYTHTV_SOURCE_VERSION
-                        MYTHTV_SOURCE_BRANCH)
+foreach(_param IN ITEMS SUPER_SOURCE_DIR SUPER_VERSION)
   if(${_param} STREQUAL "")
     message(FATAL_ERROR "${_param} is a required parameter")
   endif()
@@ -30,13 +36,6 @@ endif()
 # From the sources:
 list(APPEND CMAKE_MODULE_PATH "${SUPER_SOURCE_DIR}/cmake")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-
-#
-# Require the C++17 standard, and allow compiler extensions.
-#
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS ON)
 
 #
 # Set CMake features
@@ -71,12 +70,16 @@ include(VersionInformation)
 #
 message(STATUS "Including user overrides ${MYTH_USER_OVERRIDES2}")
 include(${MYTH_USER_OVERRIDES2} OPTIONAL)
+if(NOT MYTH_RUN_PREFIX)
+  set(MYTH_RUN_PREFIX ${CMAKE_INSTALL_PREFIX})
+endif()
 
 #
 # Inject code from cmake provided modules
 #
 include(CMakePushCheckState)
 include(CTest)
+list(APPEND CMAKE_CTEST_ARGUMENTS "--output-on-failure")
 include(CheckTypeSize)
 include(GNUInstallDirs)
 
@@ -126,13 +129,12 @@ include(StaticAnalysis)
 #
 # Check compiler and installed header files
 #
-include(CompilerCaching)
 include(SetCompilerOptions)
 include(MythCheckIncludes)
-include(CheckExternalLibraries)
 include(MythFindFFmpeg)
-include(MythFindQt)
-add_compile_definitions(QT_DISABLE_DEPRECATED_BEFORE=${QT_MIN_VERSION_HEX})
+include(CheckExternalLibraries)
+include(MythCheckBindings)
+include(MythFindPackages)
 
 # Debian policy requires that shared libraries be installed without executable
 # permission.  Fedora policy requires that shared libraries be installed with
@@ -146,7 +148,6 @@ set(CMAKE_INSTALL_SO_NO_EXE OFF)
 include(ResetTargetSuffixes)
 reset_target_suffixes(${MYTH_VERSIONED_EXTENSIONS})
 
-include(MythFindPackages)
 include(PrintProperties)
 
 #
@@ -156,12 +157,6 @@ include(PrintProperties)
 # been built by the superpackage.
 #
 add_subdirectory(external)
-
-#
-# Allow all subsequently included directories to find the MythTV (myth)config.h
-# file.
-#
-include_directories(${PROJECT_BINARY_DIR})
 
 #
 # Find all the libs created by installed external projects
@@ -174,8 +169,8 @@ endif()
 # FreeBSD hack. Make sure that the include directories populated by the
 # superpackage show up before FreeBSD's default /usr/local directory.  This
 # ensures that the proper versions of ffmpeg and exiv2 will be found while
-# building MythTV.
-if(CMAKE_SYSTEM_NAME STREQUAL "FreeBSD" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+# building MythTV.  Same for other BSD based distributions.
+if(CMAKE_SYSTEM_NAME MATCHES "BSD" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin")
   include_directories(BEFORE ${CMAKE_INSTALL_FULL_INCLUDEDIR})
   include_directories(BEFORE ${CMAKE_INSTALL_FULL_INCLUDEDIR}/mythtv)
 endif()
@@ -216,6 +211,29 @@ endif()
 set(CMAKE_INSTALL_RPATH ${base} ${base}/../lib ${base}/../lib64)
 
 #
+# Check the ENABLE_FRONTEND/BACKEND options.
+#
+if(ENABLE_FRONTEND)
+  set(CONFIG_FRONTEND TRUE)
+else()
+  message(
+    WARNING
+      "Disabling the frontend is only intended to aid porting.  THIS WILL BREAK THINGS.  You are on your own now."
+  )
+endif()
+
+if(ENABLE_BACKEND)
+  set(CONFIG_BACKEND TRUE)
+  # The CONFIG_IPTV flag should always be set when building a backend.
+  set(CONFIG_IPTV TRUE)
+else()
+  message(
+    WARNING
+      "Disabling the backend is only intended to aid porting.  THIS WILL BREAK THINGS.  You are on your own now."
+  )
+endif()
+
+#
 # Need to build libmythmpeg2 on all platforms.  The original "configure" build
 # system has an exception for windows builds, which use an external mpeg2
 # library.
@@ -244,19 +262,22 @@ add_subdirectory(bindings)
 set_target_properties(
   myth
   mythbase
-  mythdvdnav
-  mythfreemheg
-  mythfreesurround
   mythmetadata
   mythmpeg2
   mythprotoserver
-  mythservicecontracts
   mythtv
   mythui
   mythupnp
   PROPERTIES SOVERSION ${CMAKE_PROJECT_VERSION_MAJOR}
              VERSION
              ${CMAKE_PROJECT_VERSION_MAJOR}.${CMAKE_PROJECT_VERSION_MINOR})
+if(TARGET mythfreemheg)
+  set_target_properties(
+    mythfreemheg
+    PROPERTIES SOVERSION ${CMAKE_PROJECT_VERSION_MAJOR}
+               VERSION
+               ${CMAKE_PROJECT_VERSION_MAJOR}.${CMAKE_PROJECT_VERSION_MINOR})
+endif()
 
 #
 # Dump build status information, ala the "configure" script.

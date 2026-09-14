@@ -83,11 +83,12 @@ class ExternalStreamHandler : public StreamHandler
                                    int majorid);
     ~ExternalStreamHandler(void) override { CloseApp(); }
 
-    void run(void) override; // MThread
     void PriorityEvent(int fd) override; // DeviceReaderCB
 
     QString GetDescription(void) { return m_loc; }
     QString UpdateDescription(void);
+    bool IsDamaged(void) const { return m_damaged; }
+    void ClearDamaged(void) { m_damaged = false; }
     bool IsAppOpen(void);
     bool IsTSOpen(void);
     bool HasTuner(void) const { return m_hasTuner; }
@@ -99,10 +100,10 @@ class ExternalStreamHandler : public StreamHandler
     void UnlockReplay(bool enable_replay = false)
         { m_replay = enable_replay; m_replayLock.unlock(); }
     void ReplayStream(void);
-    bool StartStreaming(void);
+    bool StartStreaming(bool recording);
     bool StopStreaming(void);
 
-    bool CheckForError(void);
+    bool Monitor(void);
 
     void PurgeBuffer(void);
 
@@ -119,6 +120,9 @@ class ExternalStreamHandler : public StreamHandler
                      std::chrono::milliseconds timeout = 4s,
                      uint retry_cnt = 3);
     int APIVersion(void) const { return m_apiVersion; }
+
+  protected:
+    void run(void) override; // MThread
 
   private:
     int  StreamingCount(void) const;
@@ -144,6 +148,8 @@ class ExternalStreamHandler : public StreamHandler
     QByteArray    m_replayBuffer;
     bool          m_replay               {false};
     bool          m_xon                  {false};
+    bool          m_recording            {false};
+    bool          m_damaged              {false};
 
     // for implementing Get & Return
     static QMutex                            s_handlersLock;

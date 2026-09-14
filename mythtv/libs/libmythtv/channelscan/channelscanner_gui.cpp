@@ -33,7 +33,13 @@
 // Std C++
 #include <algorithm>
 
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
+
 // MythTV headers
+#include "libmythbase/mythconfig.h"
 #include "libmythui/mythdialogbox.h"
 
 #include "channelscanner_gui.h"
@@ -82,13 +88,13 @@ void ChannelScannerGUI::HandleEvent(const ScannerEvent *scanEvent)
         }
 
         bool success = (m_iptvScanner != nullptr);
-#ifdef USING_VBOX
+#if CONFIG_VBOX
         success |= (m_vboxScanner != nullptr);
 #endif
-#if !defined( USING_MINGW ) && !defined( _MSC_VER )
+#ifndef Q_OS_WINDOWS
         success |= (m_externRecScanner != nullptr);
 #endif
-#ifdef USING_HDHOMERUN
+#if CONFIG_HDHOMERUN
         success |= (m_hdhrScanner != nullptr);
 #endif
 
@@ -178,3 +184,5 @@ void ChannelScannerGUI::MonitorProgress(bool lock, bool strength,
         m_scanStage = nullptr;
     }
 }
+
+#include "moc_channelscanner_gui.cpp"

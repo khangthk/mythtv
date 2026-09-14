@@ -9,11 +9,12 @@
 #include <QThread>
 
 // MythTV
-#include <libmyth/audio/audiooutput.h>
-#include <libmyth/mythcontext.h>
+#include <libmythtv/audio/audiooutput.h>
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythdbcon.h>
 #include <libmythbase/mythdirs.h>
 #include <libmythbase/mythdownloadmanager.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythbase/mythversion.h>
 #include <libmythui/mythdialogbox.h>
 #include <libmythui/mythmainwindow.h>
@@ -100,11 +101,11 @@ void LyricsView::customEvent(QEvent *event)
     {
         findLyrics();
     }
-    else if (event->type() == OutputEvent::kInfo)
+    else if (event->type() == AudioOutput::Event::kInfo)
     {
         if (m_autoScroll)
         {
-            auto *oe = dynamic_cast<OutputEvent *>(event);
+            auto *oe = dynamic_cast<AudioOutput::Event *>(event);
             MusicMetadata *curMeta = gPlayer->getCurrentMetadata();
 
             if (!oe || !curMeta)
@@ -567,17 +568,10 @@ bool EditLyricsDialog::keyPressEvent(QKeyEvent *event)
 void EditLyricsDialog::loadLyrics(void)
 {
     QString lyrics;
-    LyricsLineMap::iterator i = m_sourceData->lyrics()->begin();
-    while (i != m_sourceData->lyrics()->end())
-    {
-        LyricsLine *line = (*i);
-        ++i;
-
-        lyrics += line->toString(m_syncronizedCheck->GetBooleanCheckState());
-
-        if (i != m_sourceData->lyrics()->end())
-            lyrics += '\n';
-    }
+    bool sync = m_syncronizedCheck->GetBooleanCheckState();
+    for (const auto* line : std::as_const(*m_sourceData->lyrics()))
+        lyrics += line->toString(sync) + '\n';
+    lyrics.chop(1); // Remove the final LF
 
     m_lyricsEdit->SetText(lyrics);
 }
@@ -661,3 +655,5 @@ void EditLyricsDialog::cancelPressed(void )
     emit haveResult(false);
     Close();
 }
+
+#include "moc_lyricsview.cpp"

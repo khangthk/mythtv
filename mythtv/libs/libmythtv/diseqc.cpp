@@ -5,9 +5,10 @@
  */
 
 // Std C headers
+#include <algorithm>
 #include <cstring>
 #include <cmath>
-#include <unistd.h>
+#include <thread>
 
 // POSIX headers
 #include <sys/time.h>
@@ -16,7 +17,9 @@
 #include <QString>
 
 // MythTV headers
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/compat.h"
+#include "libmythbase/mythchrono.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythlogging.h"
@@ -24,7 +27,7 @@
 #include "diseqc.h"
 #include "dtvmultiplex.h"
 
-#ifdef USING_DVB
+#if CONFIG_DVB
 #   include "recorders/dvbtypes.h"
 #else
 static constexpr uint8_t SEC_VOLTAGE_13  { 0 };
@@ -33,15 +36,15 @@ static constexpr uint8_t SEC_VOLTAGE_OFF { 2 };
 #endif
 
 // DiSEqC sleep intervals per eutelsat spec
-static constexpr useconds_t DISEQC_SHORT_WAIT     {  15 * 1000 };
-static constexpr useconds_t DISEQC_LONG_WAIT      { 100 * 1000 };
-static constexpr useconds_t DISEQC_POWER_ON_WAIT  { 500 * 1000 };
-static constexpr useconds_t DISEQC_POWER_OFF_WAIT { (1000 * 1000) - 1 };
+static constexpr std::chrono::milliseconds DISEQC_SHORT_WAIT     {  15ms };
+static constexpr std::chrono::milliseconds DISEQC_LONG_WAIT      { 100ms };
+static constexpr std::chrono::milliseconds DISEQC_POWER_ON_WAIT  { 500ms };
+static constexpr std::chrono::milliseconds DISEQC_POWER_OFF_WAIT {    1s };
 
-#ifdef USING_DVB
+#if CONFIG_DVB
 // Number of times to retry ioctls after receiving ETIMEDOUT before giving up
 static constexpr uint8_t    TIMEOUT_RETRIES       { 10 };
-static constexpr useconds_t TIMEOUT_WAIT          { 250 * 1000 };
+static constexpr std::chrono::milliseconds TIMEOUT_WAIT          { 250ms };
 
 // Framing byte
 static constexpr uint8_t    DISEQC_FRM            { 0xe0 };
@@ -452,7 +455,9 @@ bool DiSEqCDevTree::Store(uint cardid, const QString &device)
     // store changed and new nodes
     uint devid = 0;
     if (m_root && m_root->Store())
+    {
         devid = m_root->GetDeviceID();
+    }
     else if (m_root)
     {
         LOG(VB_GENERAL, LOG_ERR, LOC + "Failed to save DiSEqC tree.");
@@ -479,20 +484,21 @@ bool DiSEqCDevTree::Store(uint cardid, const QString &device)
     return true;
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 bool DiSEqCDevTree::SetTone([[maybe_unused]] bool on) const
 {
     bool success = false;
 
-#ifdef USING_DVB
+#if CONFIG_DVB
     for (uint retry = 0; !success && (retry < TIMEOUT_RETRIES); retry++)
     {
         if (ioctl(m_fdFrontend, FE_SET_TONE,
                   on ? SEC_TONE_ON : SEC_TONE_OFF) == 0)
             success = true;
         else
-            usleep(TIMEOUT_WAIT);
+            std::this_thread::sleep_for(TIMEOUT_WAIT);
     }
-#endif // USING_DVB
+#endif // CONFIG_DVB
 
     if (!success)
         LOG(VB_GENERAL, LOG_ERR, LOC + "FE_SET_TONE failed" + ENO);
@@ -522,7 +528,7 @@ bool DiSEqCDevTree::Execute(const DiSEqCDevSettings &settings,
     if (m_root->IsCommandNeeded(settings, tuning))
     {
         SetTone(false);
-        usleep(DISEQC_SHORT_WAIT);
+        std::this_thread::sleep_for(DISEQC_SHORT_WAIT);
     }
 
     return m_root->Execute(settings, tuning);
@@ -638,7 +644,7 @@ void DiSEqCDevTree::SetRoot(DiSEqCDevDevice *root)
     delete old_root;
 }
 
-#ifdef USING_DVB
+#if CONFIG_DVB
 static bool send_diseqc(int fd, const dvb_diseqc_master_cmd cmd)
 {
     bool success = false;
@@ -648,7 +654,7 @@ static bool send_diseqc(int fd, const dvb_diseqc_master_cmd cmd)
         if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, &cmd) == 0)
             success = true;
         else
-            usleep(TIMEOUT_WAIT);
+            std::this_thread::sleep_for(TIMEOUT_WAIT);
     }
 
     if (!success)
@@ -659,7 +665,7 @@ static bool send_diseqc(int fd, const dvb_diseqc_master_cmd cmd)
 
     return success;
 }
-#endif //USING_DVB
+#endif // CONFIG_DVB
 
 /** \fn DiSEqCDevTree::SendCommand(uint,uint,uint,uint,cmd_vec_t &)
  *  \brief Sends a DiSEqC command.
@@ -669,6 +675,7 @@ static bool send_diseqc(int fd, const dvb_diseqc_master_cmd cmd)
  *  \param data_len Length of optional data.
  *  \param data Pointer to optional data.
  */
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 bool DiSEqCDevTree::SendCommand([[maybe_unused]] uint adr,
                                 [[maybe_unused]] uint cmd,
                                 [[maybe_unused]] uint repeats,
@@ -681,11 +688,11 @@ bool DiSEqCDevTree::SendCommand([[maybe_unused]] uint adr,
         return false;
     }
 
-#ifndef USING_DVB
+#if !CONFIG_DVB
 
     return false;
 
-#else // if USING_DVB
+#else // if CONFIG_DVB
 
     bool resend_cmd = false;
 
@@ -697,7 +704,7 @@ bool DiSEqCDevTree::SendCommand([[maybe_unused]] uint adr,
     mcmd.msg_len = data.size() + 3;
 
     if (!data.empty())
-        std::copy(data.cbegin(), data.cend(), mcmd.msg + 3);
+        std::ranges::copy(data, mcmd.msg + 3);
 
     // diagnostic
     QString cmdstr;
@@ -724,12 +731,12 @@ bool DiSEqCDevTree::SendCommand([[maybe_unused]] uint adr,
         if (!resend_cmd)
             mcmd.msg[0] |= DISEQC_FRM_REPEAT;
 
-        usleep(DISEQC_SHORT_WAIT);
+        std::this_thread::sleep_for(DISEQC_SHORT_WAIT);
     }
 
     return true;
 
-#endif // USING_DVB
+#endif // CONFIG_DVB
 }
 
 /**
@@ -749,7 +756,7 @@ bool DiSEqCDevTree::ResetDiseqc(bool hard_reset, bool is_SCR)
         LOG(VB_CHANNEL, LOG_INFO, LOC + "Power-cycling DiSEqC Bus");
 
         SetVoltage(SEC_VOLTAGE_OFF);
-        usleep(DISEQC_POWER_OFF_WAIT);
+        std::this_thread::sleep_for(DISEQC_POWER_OFF_WAIT);
         diseqc_bus_already_reset = false;
     }
 
@@ -757,9 +764,9 @@ bool DiSEqCDevTree::ResetDiseqc(bool hard_reset, bool is_SCR)
     {
         // make sure the bus is powered
         SetVoltage(SEC_VOLTAGE_18);
-        usleep(DISEQC_POWER_ON_WAIT);
+        std::this_thread::sleep_for(DISEQC_POWER_ON_WAIT);
         // some DiSEqC devices need more time. see #8465
-        usleep(DISEQC_POWER_ON_WAIT);
+        std::this_thread::sleep_for(DISEQC_POWER_ON_WAIT);
 
         // issue a global reset command
         LOG(VB_CHANNEL, LOG_INFO, LOC + "Resetting DiSEqC Bus");
@@ -777,7 +784,7 @@ bool DiSEqCDevTree::ResetDiseqc(bool hard_reset, bool is_SCR)
         LOG(VB_CHANNEL, LOG_INFO, LOC + "Skipping reset: already done for this SCR bus");
     }
 
-    usleep(DISEQC_LONG_WAIT);
+    std::this_thread::sleep_for(DISEQC_LONG_WAIT);
 
     return true;
 }
@@ -811,15 +818,15 @@ bool DiSEqCDevTree::SetVoltage(uint voltage)
 
     bool success = false;
 
-#ifdef USING_DVB
+#if CONFIG_DVB
     for (uint retry = 0; !success && retry < TIMEOUT_RETRIES; retry++)
     {
         if (ioctl(m_fdFrontend, FE_SET_VOLTAGE, voltage) == 0)
             success = true;
         else
-            usleep(TIMEOUT_WAIT);
+            std::this_thread::sleep_for(TIMEOUT_WAIT);
     }
-#endif // USING_DVB
+#endif // CONFIG_DVB
 
     if (!success)
     {
@@ -1121,7 +1128,7 @@ bool DiSEqCDevSwitch::Execute(const DiSEqCDevSettings &settings,
         if (m_children[pos]->IsCommandNeeded(settings, tuning))
         {
             LOG(VB_CHANNEL, LOG_INFO, LOC + "Waiting for switch");
-            usleep(DISEQC_LONG_WAIT);
+            std::this_thread::sleep_for(DISEQC_LONG_WAIT);
         }
 
         m_lastPos = pos;
@@ -1359,11 +1366,12 @@ void DiSEqCDevSwitch::SetNumPorts(uint num_ports)
     m_numPorts = num_ports;
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 bool DiSEqCDevSwitch::ExecuteLegacy([[maybe_unused]] const DiSEqCDevSettings &settings,
                                     [[maybe_unused]] const DTVMultiplex &tuning,
                                     [[maybe_unused]] uint pos)
 {
-#if defined(USING_DVB) && defined(FE_DISHNETWORK_SEND_LEGACY_CMD)
+#if CONFIG_DVB && defined(FE_DISHNETWORK_SEND_LEGACY_CMD)
     static const cmd_vec_t kSw21Cmds  { 0x34, 0x65, };
     static const cmd_vec_t kSw42Cmds  { 0x46, 0x17, };
     static const cmd_vec_t kSw64VCmds { 0x39, 0x4b, 0x0d, };
@@ -1425,7 +1433,7 @@ bool DiSEqCDevSwitch::ExecuteLegacy([[maybe_unused]] const DiSEqCDevSettings &se
 #endif // !FE_DISHNETWORK_SEND_LEGACY_CMD
 }
 
-#ifdef USING_DVB
+#if CONFIG_DVB
 static bool set_tone(int fd, fe_sec_tone_mode tone)
 {
     bool success = false;
@@ -1435,7 +1443,7 @@ static bool set_tone(int fd, fe_sec_tone_mode tone)
         if (ioctl(fd, FE_SET_TONE, tone) == 0)
             success = true;
         else
-            usleep(TIMEOUT_WAIT);
+            std::this_thread::sleep_for(TIMEOUT_WAIT);
     }
 
     if (!success)
@@ -1445,9 +1453,9 @@ static bool set_tone(int fd, fe_sec_tone_mode tone)
 
     return success;
 }
-#endif // USING_DVB
+#endif // CONFIG_DVB
 
-#ifdef USING_DVB
+#if CONFIG_DVB
 static bool set_voltage(int fd, fe_sec_voltage volt)
 {
     bool success = false;
@@ -1457,7 +1465,7 @@ static bool set_voltage(int fd, fe_sec_voltage volt)
         if (0 == ioctl(fd, FE_SET_VOLTAGE, volt))
             success = true;
         else
-            usleep(TIMEOUT_WAIT);
+            std::this_thread::sleep_for(TIMEOUT_WAIT);
     }
 
     if (!success)
@@ -1467,9 +1475,9 @@ static bool set_voltage(int fd, fe_sec_voltage volt)
 
     return success;
 }
-#endif // USING_DVB
+#endif // CONFIG_DVB
 
-#ifdef USING_DVB
+#if CONFIG_DVB
 static bool mini_diseqc(int fd, fe_sec_mini_cmd cmd)
 {
     bool success = false;
@@ -1479,7 +1487,7 @@ static bool mini_diseqc(int fd, fe_sec_mini_cmd cmd)
         if (ioctl(fd, FE_DISEQC_SEND_BURST, cmd) == 0)
             success = true;
         else
-            usleep(TIMEOUT_WAIT);
+            std::this_thread::sleep_for(TIMEOUT_WAIT);
     }
 
     if (!success)
@@ -1490,8 +1498,9 @@ static bool mini_diseqc(int fd, fe_sec_mini_cmd cmd)
 
     return success;
 }
-#endif // USING_DVB
+#endif // CONFIG_DVB
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 bool DiSEqCDevSwitch::ExecuteTone(const DiSEqCDevSettings &/*settings*/,
                                   const DTVMultiplex &/*tuning*/,
                                   uint pos)
@@ -1499,15 +1508,16 @@ bool DiSEqCDevSwitch::ExecuteTone(const DiSEqCDevSettings &/*settings*/,
     LOG(VB_CHANNEL, LOG_INFO, LOC + "Changing to Tone switch port " +
             QString("%1/2").arg(pos + 1));
 
-#ifdef USING_DVB
+#if CONFIG_DVB
     if (set_tone(m_tree.GetFD(), (0 == pos) ? SEC_TONE_OFF : SEC_TONE_ON))
         return true;
-#endif // USING_DVB
+#endif // CONFIG_DVB
 
     LOG(VB_GENERAL, LOG_ERR, LOC + "Setting Tone Switch failed." + ENO);
     return false;
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 bool DiSEqCDevSwitch::ExecuteVoltage([[maybe_unused]] const DiSEqCDevSettings &settings,
                                      [[maybe_unused]] const DTVMultiplex &tuning,
                                      uint pos)
@@ -1515,19 +1525,20 @@ bool DiSEqCDevSwitch::ExecuteVoltage([[maybe_unused]] const DiSEqCDevSettings &s
     LOG(VB_CHANNEL, LOG_INFO, LOC + "Changing to Voltage Switch port " +
             QString("%1/2").arg(pos + 1));
 
-#ifdef USING_DVB
+#if CONFIG_DVB
     if (set_voltage(m_tree.GetFD(),
                     (0 == pos) ? SEC_VOLTAGE_13 : SEC_VOLTAGE_18))
     {
         return true;
     }
-#endif // USING_DVB
+#endif // CONFIG_DVB
 
     LOG(VB_GENERAL, LOG_ERR, LOC + "Setting Voltage Switch failed." + ENO);
 
     return false;
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 bool DiSEqCDevSwitch::ExecuteMiniDiSEqC([[maybe_unused]] const DiSEqCDevSettings &settings,
                                         [[maybe_unused]] const DTVMultiplex &tuning,
                                         uint pos)
@@ -1535,10 +1546,10 @@ bool DiSEqCDevSwitch::ExecuteMiniDiSEqC([[maybe_unused]] const DiSEqCDevSettings
     LOG(VB_CHANNEL, LOG_INFO, LOC + "Changing to MiniDiSEqC Switch port " +
             QString("%1/2").arg(pos + 1));
 
-#ifdef USING_DVB
+#if CONFIG_DVB
     if (mini_diseqc(m_tree.GetFD(), (0 == pos) ? SEC_MINI_A : SEC_MINI_B))
         return true;
-#endif // USING_DVB
+#endif // CONFIG_DVB
 
     LOG(VB_GENERAL, LOG_ERR, LOC + "Setting Mini DiSEqC Switch failed." + ENO);
 
@@ -1712,7 +1723,7 @@ bool DiSEqCDevRotor::Execute(const DiSEqCDevSettings &settings,
         m_reset = false;
         if (success)
             // prevent tuning parameters overriding rotor parameters
-            usleep(DISEQC_LONG_WAIT);
+            std::this_thread::sleep_for(DISEQC_LONG_WAIT);
     }
 
     // chain to child
@@ -2113,7 +2124,7 @@ bool DiSEqCDevSCR::Execute(const DiSEqCDevSettings &settings, const DTVMultiplex
     bool     high_band  = lnb->IsHighBand(tuning);
     bool     horizontal = lnb->IsHorizontal(tuning);
     uint32_t frequency  = lnb->GetIntermediateFrequency(settings, tuning);
-    uint t = ((frequency / 1000 + m_scrFrequency + 2) / 4) - 350;
+    uint t = (((frequency / 1000) + m_scrFrequency + 2) / 4) - 350;
 
     // retrieve position settings (value should be 0 or 1)
     auto scr_position = (dvbdev_pos_t)int(settings.GetValue(GetDeviceID()));
@@ -2195,7 +2206,7 @@ bool DiSEqCDevSCR::SendCommand(uint cmd,
     // power on bus
     if (!m_tree.SetVoltage(SEC_VOLTAGE_18))
         return false;
-    usleep(DISEQC_LONG_WAIT);
+    std::this_thread::sleep_for(DISEQC_LONG_WAIT);
 
     // send command
     bool ret = m_tree.SendCommand(DISEQC_ADR_SW_ALL, cmd, repeats, data);
@@ -2215,7 +2226,7 @@ uint DiSEqCDevSCR::GetVoltage(const DiSEqCDevSettings &/*settings*/,
 
 uint32_t DiSEqCDevSCR::GetIntermediateFrequency(const uint32_t frequency) const
 {
-    uint t = ((frequency / 1000 + m_scrFrequency + 2) / 4) - 350;
+    uint t = (((frequency / 1000) + m_scrFrequency + 2) / 4) - 350;
     return (((t + 350) * 4) * 1000) - frequency;
 }
 

@@ -8,6 +8,8 @@
 #include "goomconfig.h"
 #include "tentacle3d.h"
 
+#include "libmythbase/mythrandom.h"
+
 static constexpr float  D { 256.0F };
 
 static constexpr size_t nbgrid      {  6 };
@@ -16,24 +18,24 @@ static constexpr int8_t definitionz { 45 };
 
 static float cycle = 0.0F;
 static std::array<grid3d *,nbgrid> grille;
-static float *vals;
+static floatvec vals;
 
 void tentacle_free (void) {
-	free (vals);
+	vals.clear();
 	for (auto & tmp : grille) {
 		grid3d_free(&tmp);
 	}
 }
 
 void tentacle_new (void) {
-	v3d center = {0,-17.0,0};
-	vals = (float*)malloc ((definitionx+20)*sizeof(float));
+	v3d center = {.x=0, .y=-17.0, .z=0};
+	vals.resize(definitionx+20);
 	
 	for (auto & tmp : grille) {
-		int z = 45+(goom_rand()%30);
-		int x = 85+(goom_rand()%5);
+		int z = MythRandomInt(45, 74);
+		int x = MythRandomInt(85, 89);
 		center.z = z;
-		tmp = grid3d_new (x,definitionx,z,definitionz+(goom_rand()%10),center);
+		tmp = grid3d_new(x, definitionx, z, definitionz + MythRandomInt(0, 9), center);
 		center.y += 8;
 	}
 }
@@ -89,10 +91,10 @@ static void pretty_move (float lcycle, float *dist,float *dist2, float *rotangle
 	static int s_happens = 0;
 	static int s_lock = 0;
 
-	if (s_happens)
+	if (s_happens) {
 		s_happens -= 1;
-	else if (s_lock == 0) {
-		s_happens = iRAND(200)?0:100+iRAND(60);
+	} else if (s_lock == 0) {
+		s_happens = !rand_bool(200) ? 0 : MythRandomInt(100, 159);
 		s_lock = s_happens * 3 / 2;
 	}
 	else {
@@ -101,41 +103,41 @@ static void pretty_move (float lcycle, float *dist,float *dist2, float *rotangle
 //	happens = 1;
 	
 	float tmp = s_happens?8.0F:0;
-	*dist2 = s_distT2 = (tmp + 15.0F*s_distT2)/16.0F;
+	*dist2 = s_distT2 = (tmp + (15.0F*s_distT2))/16.0F;
 
-	tmp = 30+D-90.0F*(1.0F+sinf(lcycle*19/20));
+	tmp = 30+D-(90.0F*(1.0F+sinf(lcycle*19/20)));
 	if (s_happens)
 		tmp *= 0.6F;
 
-	*dist = s_distT = (tmp + 3.0F*s_distT)/4.0F;
+	*dist = s_distT = (tmp + (3.0F*s_distT))/4.0F;
 
 	if (!s_happens){
-		tmp = M_PI_F*sinf(lcycle)/32+3*M_PI_F/2;
+		tmp = (M_PI_F*sinf(lcycle)/32)+(3*M_PI_F/2);
 	}
 	else {
-		static int s_rotation {0};
-		s_rotation = iRAND(500)?s_rotation:iRAND(2);
+		static bool s_rotation {false};
+		s_rotation = !rand_bool(500) ? s_rotation : rand_bool();
 		if (s_rotation)
 			lcycle *= 2.0F*M_PI_F;
 		else
 			lcycle *= -1.0F*M_PI_F;
-		tmp = lcycle - (M_PI_F*2.0F) * floorf(lcycle/(M_PI_F*2.0F));
+		tmp = lcycle - ((M_PI_F*2.0F) * floorf(lcycle/(M_PI_F*2.0F)));
 	}
 	
-	if (fabsf(tmp-s_rot) > fabsf(tmp-(s_rot+2.0F*M_PI_F))) {
-		s_rot = (tmp + 15.0F*(s_rot+2*M_PI_F)) / 16.0F;
+	if (fabsf(tmp-s_rot) > fabsf(tmp-(s_rot+(2.0F*M_PI_F)))) {
+		s_rot = (tmp + (15.0F*(s_rot+(2*M_PI_F)))) / 16.0F;
 		if (s_rot>2.0F*M_PI_F)
 			s_rot -= 2.0F*M_PI_F;
 		*rotangle = s_rot;
 	}
-	else if (fabsf(tmp-s_rot) > fabsf(tmp-(s_rot-2.0F*M_PI_F))) {
-		s_rot = (tmp + 15.0F*(s_rot-2.0F*M_PI_F)) / 16.0F;
+	else if (fabsf(tmp-s_rot) > fabsf(tmp-(s_rot-(2.0F*M_PI_F)))) {
+		s_rot = (tmp + (15.0F*(s_rot-(2.0F*M_PI_F)))) / 16.0F;
 		if (s_rot<0.0F)
 			s_rot += 2.0F*M_PI_F;
 		*rotangle = s_rot;
 	}
 	else {
-		*rotangle = s_rot = (tmp + 15.0F*s_rot) / 16.0F;
+		*rotangle = s_rot = (tmp + (15.0F*s_rot)) / 16.0F;
 	}
 }
 
@@ -164,8 +166,8 @@ void tentacle_update(int *buf, int *back, int W, int H, GoomDualData& data, floa
 		static int s_col = (0x28<<(ROUGE*8))|(0x2c<<(VERT*8))|(0x5f<<(BLEU*8));
 		static int s_dstCol = 0;
 
-		if ((s_lig<6.3F)&&(iRAND(30)==0))
-			s_dstCol=iRAND(3);
+		if ((s_lig < 6.3F) && rand_bool(30))
+			s_dstCol = MythRandomInt(0, 2);
 
 		s_col = evolutecolor(s_col,s_colors[s_dstCol],0xff,0x01);
 		s_col = evolutecolor(s_col,s_colors[s_dstCol],0xff00,0x0100);
@@ -178,7 +180,7 @@ void tentacle_update(int *buf, int *back, int W, int H, GoomDualData& data, floa
 		lightencolor(&color,(s_lig * 2.0F) + 2.0F);
 		lightencolor(&colorlow,(s_lig/3.0F)+0.67F);
 
-		rapport = 1.0F + 2.0F * (rapport - 1.0F);
+		rapport = 1.0F + (2.0F * (rapport - 1.0F));
                 rapport *= 1.2F;
 		rapport = std::min(rapport, 1.12F);
 		
@@ -186,7 +188,7 @@ void tentacle_update(int *buf, int *back, int W, int H, GoomDualData& data, floa
 
 		for (auto & tmp : grille) {
 			for (int tmp2=0;tmp2<definitionx;tmp2++) {
-				float val = (float)(ShiftRight(data[0][iRAND(511)],10)) * rapport;
+				float val = (float)(ShiftRight(data[0][MythRandomInt(0, 510)],10)) * rapport;
 				vals[tmp2] = val;
 			}
 			

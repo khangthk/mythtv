@@ -1,4 +1,5 @@
 // MythTV
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythui/mythmainwindow.h"
 #include "libmythui/vulkan/mythdebugvulkan.h"
@@ -43,9 +44,9 @@ QStringList MythVideoOutputVulkan::GetAllowedRenderers(MythCodecID CodecId)
 }
 
 MythVideoOutputVulkan::MythVideoOutputVulkan(MythMainWindow* MainWindow, MythRenderVulkan* Render,
-                                             MythPainterVulkan* Painter, MythDisplay* Display,
+                                             MythPainterVulkan* Painter, MythDisplay* MDisplay,
                                              const MythVideoProfilePtr& VideoProfile, QString& Profile)
-  : MythVideoOutputGPU(MainWindow, Render, Painter, Display, VideoProfile, Profile),
+  : MythVideoOutputGPU(MainWindow, Render, Painter, MDisplay, VideoProfile, Profile),
     MythVulkanObject(Render)
 {
     static VideoFrameTypes s_vulkanRenderFormats =
@@ -132,3 +133,5 @@ void MythVideoOutputVulkan::EndFrame()
     if (m_video)
         m_video->EndFrame();
 }
+
+#include "moc_mythvideooutputvulkan.cpp"

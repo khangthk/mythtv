@@ -1,4 +1,8 @@
 // qt
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QCoreApplication>
 #include <QRunnable>
 #include <QString>
@@ -8,18 +12,18 @@
 #include <QNetworkCookie>
 #include <QAuthenticator>
 #include <QTextStream>
+#include <QTimeZone>
 #include <QNetworkProxy>
 #include <QMutexLocker>
 #include <QUrl>
 #include <QTcpSocket>
 
 #include <cstdlib>
-#include <unistd.h> // for usleep()
+#include <thread>
 
 // libmythbase
 #include "compat.h"
 #include "mythcorecontext.h"
-#include "mythcoreutil.h"
 #include "mthreadpool.h"
 #include "mythdirs.h"
 #include "mythevent.h"
@@ -157,13 +161,13 @@ MythDownloadManager *GetMythDownloadManager(void)
     auto *tmpDLM = new MythDownloadManager();
     tmpDLM->start();
     while (!tmpDLM->getQueueThread())
-        usleep(10000);
+        std::this_thread::sleep_for(10ms);
 
     tmpDLM->moveToThread(tmpDLM->getQueueThread());
     tmpDLM->setRunThread();
 
     while (!tmpDLM->isRunning())
-        usleep(10000);
+        std::this_thread::sleep_for(10ms);
 
     downloadManager = tmpDLM;
 
@@ -200,7 +204,7 @@ void MythDownloadManager::run(void)
     m_queueThread = QThread::currentThread();
 
     while (!m_runThread)
-        usleep(50ms);
+        std::this_thread::sleep_for(50ms);
 
     m_manager = new QNetworkAccessManager(this);
     m_diskCache = new QNetworkDiskCache(this);
@@ -292,7 +296,9 @@ void MythDownloadManager::run(void)
             }
 
             if (dlInfo->m_url.startsWith("myth://"))
+            {
                 downloadRemoteFile(dlInfo);
+            }
             else
             {
                 QMutexLocker cLock(&m_cookieLock);
@@ -711,7 +717,11 @@ void MythDownloadManager::downloadQNetworkRequest(MythDownloadInfo *dlInfo)
             {
                 QDateTime loadDate =
                     MythDate::fromString(dateString, kDateFormat);
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
                 loadDate.setTimeSpec(Qt::UTC);
+#else
+                loadDate.setTimeZone(QTimeZone(QTimeZone::UTC));
+#endif
                 if (loadDate.secsTo(now) <= 720)
                 {
                     dlInfo->m_preferCache = true;
@@ -812,7 +822,7 @@ bool MythDownloadManager::downloadNow(MythDownloadInfo *dlInfo, bool deleteInfo)
     // Special handling for link-local
     // Not needed for Windows because windows does not need
     // the scope id.
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
     if (dlInfo->m_url.startsWith("http://[fe80::",Qt::CaseInsensitive))
         return downloadNowLinkLocal(dlInfo, deleteInfo);
 #endif
@@ -865,7 +875,7 @@ bool MythDownloadManager::downloadNow(MythDownloadInfo *dlInfo, bool deleteInfo)
     return success;
 }
 
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
 /** \brief Download blocking methods with link-local address.
  *
  * Special processing for IPV6 link-local addresses, which
@@ -923,7 +933,7 @@ bool MythDownloadManager::downloadNowLinkLocal(MythDownloadInfo *dlInfo, bool de
     QUrl url(dlInfo->m_url);
     QString host(url.host());
     int port(url.port(80));
-    if (ok && PortChecker::resolveLinkLocal(host, port))
+    if (ok && PortChecker{}.resolveLinkLocal(host, port))
     {
         QString reqType;
         switch (dlInfo->m_requestType)
@@ -954,10 +964,8 @@ bool MythDownloadManager::downloadNowLinkLocal(MythDownloadInfo *dlInfo, bool de
         requestMessage.append("POST ");
         requestMessage.append(path.toLatin1());
         requestMessage.append(" HTTP/1.1\r\n");
-        QHashIterator<QByteArray, QByteArray> it(headers);
-        while (it.hasNext())
+        for (auto it = headers.cbegin(); it != headers.cend(); ++it)
         {
-            it.next();
             requestMessage.append(it.key());
             requestMessage.append(": ");
             requestMessage.append(it.value());
@@ -1024,16 +1032,20 @@ void MythDownloadManager::cancelDownload(const QStringList &urls, bool block)
     m_infoLock->lock();
     for (const auto& url : std::as_const(urls))
     {
-        QMutableListIterator<MythDownloadInfo*> lit(m_downloadQueue);
-        while (lit.hasNext())
+        for (auto lit = m_downloadQueue.begin();
+             lit != m_downloadQueue.end();
+             /* no inc */)
         {
-            lit.next();
-            MythDownloadInfo *dlInfo = lit.value();
+            MythDownloadInfo *dlInfo = *lit;
             if (dlInfo->m_url == url)
             {
                 if (!m_cancellationQueue.contains(dlInfo))
                     m_cancellationQueue.append(dlInfo);
-                lit.remove();
+                lit = m_downloadQueue.erase(lit);
+            }
+            else
+            {
+                ++lit;
             }
         }
 
@@ -1066,7 +1078,7 @@ void MythDownloadManager::cancelDownload(const QStringList &urls, bool block)
 
     while (!m_cancellationQueue.isEmpty())
     {
-        usleep(50ms); // re-test in another 50ms
+        std::this_thread::sleep_for(50ms); // re-test in another 50ms
     }
 }
 
@@ -1074,11 +1086,11 @@ void MythDownloadManager::downloadCanceled()
 {
     QMutexLocker locker(m_infoLock);
 
-    QMutableListIterator<MythDownloadInfo*> lit(m_cancellationQueue);
-    while (lit.hasNext())
+    for (auto lit = m_cancellationQueue.begin();
+         lit != m_cancellationQueue.end();
+         /* no inc */)
     {
-        lit.next();
-        MythDownloadInfo *dlInfo = lit.value();
+        MythDownloadInfo *dlInfo = *lit;
         dlInfo->m_lock.lock();
 
         if (dlInfo->m_reply)
@@ -1087,7 +1099,7 @@ void MythDownloadManager::downloadCanceled()
                 LOC + QString("Aborting download - user request"));
             dlInfo->m_reply->abort();
         }
-        lit.remove();
+        lit = m_cancellationQueue.erase(lit);
         if (dlInfo->m_done)
         {
             dlInfo->m_lock.unlock();
@@ -1295,11 +1307,18 @@ void MythDownloadManager::downloadFinished(MythDownloadInfo *dlInfo)
 
         // HACK Insert a Date header into the cached metadata if one doesn't
         // already exist
-        QUrl fileUrl = dlInfo->m_url;
+        QUrl fileUrl { dlInfo->m_url };
         QString redirectLoc;
         int limit = 0;
         while (!(redirectLoc = getHeader(fileUrl, "Location")).isNull())
         {
+            QUrl redirUrl { redirectLoc };
+            if (!redirUrl.isValid())
+            {
+                LOG(VB_GENERAL, LOG_WARNING, QString("Invalid redirect %1 for %2")
+                    .arg(redirectLoc, fileUrl.toString()));
+                return;
+            }
             if (limit == CACHE_REDIRECTION_LIMIT)
             {
                 LOG(VB_GENERAL, LOG_WARNING, QString("Cache Redirection limit "
@@ -1522,7 +1541,7 @@ bool MythDownloadManager::saveFile(const QString &outFile,
         if (written < 0)
         {
             failure_cnt++;
-            usleep(50ms);
+            std::this_thread::sleep_for(50ms);
             continue;
         }
 
@@ -1588,7 +1607,11 @@ QDateTime MythDownloadManager::GetLastModified(const QString &url)
             {
                 QDateTime loadDate =
                     MythDate::fromString(date, kDateFormat);
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
                 loadDate.setTimeSpec(Qt::UTC);
+#else
+                loadDate.setTimeZone(QTimeZone(QTimeZone::UTC));
+#endif
                 if (loadDate.secsTo(now) <= 1200) // 20 Minutes
                 {
                     result = urlData.lastModified().toUTC();
@@ -1803,5 +1826,4 @@ void MythCookieJar::save(const QString &filename)
         stream << cookie.toRawForm() << Qt::endl;
 }
 
-
-/* vim: set expandtab tabstop=4 shiftwidth=4: */
+#include "moc_mythdownloadmanager.cpp"

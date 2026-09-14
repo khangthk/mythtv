@@ -5,7 +5,6 @@
 #include <QEvent>
 
 // MythTV
-#include <libmyth/mythcontext.h>
 #include <libmythbase/mythlogging.h>
 #include <libmythui/mythmainwindow.h>
 #include <libmythui/mythuihelper.h>
@@ -372,7 +371,10 @@ bool MythBrowser::keyPressEvent(QKeyEvent *event)
         }
         else if (action == "ESCAPE")
         {
-            GetScreenStack()->PopScreen();
+            if (activeBrowser()->CanGoBack())
+                activeBrowser()->Back();
+            else
+                GetScreenStack()->PopScreen();
         }
         else if (action == "PREVTAB")
         {
@@ -403,3 +405,5 @@ bool MythBrowser::keyPressEvent(QKeyEvent *event)
 }
 
 
+
+#include "moc_mythbrowser.cpp"

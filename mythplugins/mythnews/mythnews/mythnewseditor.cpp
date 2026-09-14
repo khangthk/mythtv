@@ -1,8 +1,8 @@
 
 // MythTV headers
-#include <libmyth/mythcontext.h>
 #include <libmythbase/mythdate.h>
 #include <libmythbase/mythdbcon.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythui/mythdialogbox.h>
 #include <libmythui/mythmainwindow.h>
 #include <libmythui/mythuibutton.h>
@@ -135,3 +135,5 @@ void MythNewsEditor::Save(void)
     }
     Close();
 }
+
+#include "moc_mythnewseditor.cpp"

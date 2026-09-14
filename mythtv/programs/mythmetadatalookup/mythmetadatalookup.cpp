@@ -1,12 +1,16 @@
 // C headers
-#include <unistd.h>
+#include <unistd.h> // close
 
 // C++ headers
 #include <iostream>
 #include <memory>
+#include <thread>
 
 // Qt headers
 #include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtEnvironmentVariables>
+#endif
 #include <QCoreApplication>
 #include <QEventLoop>
 #ifdef Q_OS_DARWIN
@@ -15,30 +19,19 @@
 
 // MythTV
 #include "libmyth/mythcontext.h"
-#include "libmythbase/cleanupguard.h"
 #include "libmythbase/exitcodes.h"
+#include "libmythbase/mythappname.h"
 #include "libmythbase/mythconfig.h"
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythmiscutil.h"
 #include "libmythbase/mythtranslation.h"
 #include "libmythbase/mythversion.h"
-#include "libmythbase/signalhandling.h"
 #include "libmythtv/jobqueue.h"
 
 // MythMetadataLookup
 #include "lookup.h"
 #include "mythmetadatalookup_commandlineparser.h"
-
-namespace
-{
-    void cleanup()
-    {
-        delete gContext;
-        gContext = nullptr;
-        SignalHandler::Done();
-    }
-}
 
 int main(int argc, char *argv[])
 {
@@ -66,12 +59,12 @@ int main(int argc, char *argv[])
 
 #ifdef Q_OS_DARWIN
     QString path = QCoreApplication::applicationDirPath();
-    setenv("PYTHONPATH",
-           QString("%1/../Resources/lib/%2/site-packages:%3")
+    qputenv("PYTHONPATH",
+           QString("%1/../Resources/lib/%2:%1/../Resources/lib/%2/site-packages:%1/../Resources/lib/%2/lib-dynload:%3")
            .arg(path)
            .arg(QFileInfo(PYTHON_EXE).fileName())
            .arg(QProcessEnvironment::systemEnvironment().value("PYTHONPATH"))
-           .toUtf8().constData(), 1);
+           .toUtf8().constData());
 #endif
 
     int retval = cmdline.ConfigureLogging();
@@ -82,14 +75,8 @@ int main(int argc, char *argv[])
     // Don't listen to console input
     close(0);
 
-    CleanupGuard callCleanup(cleanup);
-
-#ifndef _WIN32
-    SignalHandler::Init();
-#endif
-
-    gContext = new MythContext(MYTH_BINARY_VERSION);
-    if (!gContext->Init(false))
+    MythContext context {MYTH_BINARY_VERSION};
+    if (!context.Init(false))
     {
         LOG(VB_GENERAL, LOG_ERR, "Failed to init MythContext, exiting.");
         return GENERIC_EXIT_NO_MYTHCONTEXT;
@@ -99,7 +86,7 @@ int main(int argc, char *argv[])
 
     MythTranslation::load("mythfrontend");
 
-    std::unique_ptr<LookerUpper> lookup {new LookerUpper};
+    std::unique_ptr<LookerUpper> lookup = std::make_unique<LookerUpper>();
 
     LOG(VB_GENERAL, LOG_INFO,
             "Testing grabbers and metadata sites for functionality...");
@@ -154,7 +141,7 @@ int main(int argc, char *argv[])
 
     while (lookup->StillWorking())
     {
-        sleep(1);
+        std::this_thread::sleep_for(1s);
         qApp->processEvents();
     }
 

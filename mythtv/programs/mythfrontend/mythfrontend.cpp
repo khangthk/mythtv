@@ -1,3 +1,5 @@
+#include "libmythbase/mythconfig.h"
+
 // C/C++
 #include <cerrno>
 #include <csignal>
@@ -5,9 +7,14 @@
 #include <fcntl.h>
 #include <iostream>
 #include <memory>
+#include "zlib.h"
 
 // Qt
 #include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtEnvironmentVariables>
+#include <QtSystemDetection>
+#endif
 #ifdef Q_OS_ANDROID
 #if QT_VERSION < QT_VERSION_CHECK(6,0,0)
 #include <QtAndroidExtras>
@@ -17,6 +24,8 @@
 #define QAndroidJniObject QJniObject
 #endif
 #endif
+#include <QChar>     // Fix Qt6 GCC SFINAE warning
+#include <QBitArray> // Fix Qt6 GCC SFINAE warning
 #include <QApplication>
 #include <QDir>
 #include <QEvent>
@@ -28,31 +37,36 @@
 #include <QProcessEnvironment>
 #endif
 #include <QTimer>
+#if CONFIG_QTWEBENGINE
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+#include <QtWebEngineQuick>
+#else
+#include <QtWebEngine>
+#endif
+#endif
 
 // MythTV
-#include "libmyth/audio/audiooutput.h"
-#include "libmyth/langsettings.h"
+#include "libmythtv/audio/audiooutput.h"
+#include "libmythui/langsettings.h"
 #include "libmyth/mythcontext.h"
-#include "libmyth/mythmediamonitor.h"
-#include "libmyth/standardsettings.h"
-#include "libmythbase/cleanupguard.h"
+#include "libmythui/standardsettings.h"
 #include "libmythbase/compat.h"  // For SIG* on MinGW
 #include "libmythbase/exitcodes.h"
 #include "libmythbase/hardwareprofile.h"
 #include "libmythbase/lcddevice.h"
+#include "libmythbase/mythappname.h"
 #include "libmythbase/mythcdrom.h"
-#include "libmythbase/mythconfig.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythdbcon.h"
 #include "libmythbase/mythdirs.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythbase/mythmiscutil.h"
 #include "libmythbase/mythplugin.h"
 #include "libmythbase/mythsystemlegacy.h"
 #include "libmythbase/mythtranslation.h"
 #include "libmythbase/mythversion.h"
-#include "libmythbase/programinfo.h"
 #include "libmythbase/referencecounter.h"
-#include "libmythbase/remoteutil.h"
 #include "libmythbase/signalhandling.h"
 #include "libmythmetadata/cleanup.h"
 #include "libmythmetadata/globals.h"
@@ -61,9 +75,11 @@
 #include "libmythtv/mythsystemevent.h"
 #include "libmythtv/playgroup.h"
 #include "libmythtv/previewgeneratorqueue.h"
+#include "libmythtv/programinfo.h"
 #include "libmythtv/scheduledrecording.h"
 #include "libmythtv/tv.h"
 #include "libmythtv/tvremoteutil.h"
+#include "libmythui/mediamonitor.h"
 #include "libmythui/mythmainwindow.h"
 #include "libmythui/myththemedmenu.h"
 #include "libmythui/mythuihelper.h"
@@ -114,12 +130,12 @@
 #include "libmythtv/DVD/mythdvdbuffer.h"
 
 // AirPlay
-#ifdef USING_AIRPLAY
+#if CONFIG_AIRPLAY
 #include "libmythtv/AirPlay/mythairplayserver.h"
 #include "libmythtv/AirPlay/mythraopdevice.h"
 #endif
 
-#ifdef USING_LIBDNS_SD
+#if CONFIG_LIBDNS_SD
 #include <QScopedPointer>
 #include "libmythbase/bonjourregister.h"
 #endif
@@ -223,7 +239,7 @@ namespace
     /// This dialog is used when playing something from the "Watch
     /// Videos" page. Playing from the "Watch Recordings" page uses
     /// the code in PlaybackBox::createPlayFromMenu.
-    class BookmarkDialog : MythScreenType
+    class BookmarkDialog : public MythScreenType
     {
         Q_DECLARE_TR_FUNCTIONS(BookmarkDialog)
 
@@ -268,23 +284,30 @@ namespace
             return true;
         }
 
+      protected:
         void customEvent(QEvent *event) override // MythUIType
         {
             if (event->type() != DialogCompletionEvent::kEventType)
                 return;
 
-            auto *dce = (DialogCompletionEvent*)(event);
+            auto *dce = (DialogCompletionEvent*)event;
             QString buttonText = dce->GetResultText();
 
             if (dce->GetId() != "bookmarkdialog")
                 return;
 
             if (buttonText == m_btnPlayLast)
+            {
                 TV::StartTV(m_pgi, kStartTVNoFlags);
+            }
             else if (buttonText == m_btnPlayBookmark)
+            {
                 TV::StartTV(m_pgi, kStartTVIgnoreLastPlayPos );
+            }
             else if (buttonText == m_btnPlayBegin)
+            {
                 TV::StartTV(m_pgi, kStartTVIgnoreLastPlayPos | kStartTVIgnoreBookmark);
+            }
             else if (buttonText == m_btnClearBookmark)
             {
                 m_pgi->SaveBookmark(0);
@@ -319,8 +342,7 @@ namespace
     void cleanup()
     {
         QCoreApplication::processEvents();
-        DestroyMythMainWindow();
-#ifdef USING_AIRPLAY
+#if CONFIG_AIRPLAY
         MythRAOPDevice::Cleanup();
         MythAirplayServer::Cleanup();
 #endif
@@ -346,13 +368,6 @@ namespace
             delete g_settingsHelper;
             g_settingsHelper = nullptr;
         }
-
-        delete gContext;
-        gContext = nullptr;
-
-        ReferenceCounter::PrintDebug();
-
-        SignalHandler::Done();
     }
 }
 
@@ -786,21 +801,12 @@ static void RunGallery()
 
 static void playDisc()
 {
-    //
-    //  Get the command string to play a DVD
-    //
-
-    bool isBD = false;
-
-    QString command_string =
-            gCoreContext->GetSetting("mythdvd.DVDPlayerCommand");
-    QString bluray_mountpoint =
+    // Check for Bluray
+    LOG(VB_MEDIA, LOG_DEBUG, "Checking for BluRay medium");
+    const QString bluray_mountpoint =
             gCoreContext->GetSetting("BluRayMountpoint", "/media/cdrom");
     QDir bdtest(bluray_mountpoint + "/BDMV");
-
-    if (bdtest.exists() || MythCDROM::inspectImage(bluray_mountpoint) == MythCDROM::kBluray)
-        isBD = true;
-
+    const bool isBD = (bdtest.exists() || MythCDROM::inspectImage(bluray_mountpoint) == MythCDROM::kBluray);
     if (isBD)
     {
         GetMythUI()->AddCurrentLocation("playdisc");
@@ -811,8 +817,22 @@ static void playDisc()
                                          0, 0, "", 0min, "", "", true);
 
         GetMythUI()->RemoveCurrentLocation();
+        return;
     }
-    else
+
+    MediaMonitor *mediaMonitor = MediaMonitor::GetMediaMonitor();
+    if (!mediaMonitor)
+    {
+        LOG(VB_MEDIA, LOG_ERR, "Could not access media monitor");
+        return;
+    }
+
+    // Check for DVD
+    LOG(VB_MEDIA, LOG_DEBUG, "Checking for DVD medium");
+    const bool isDVD = mediaMonitor->IsActive()
+                     ? !mediaMonitor->GetMedias(MEDIATYPE_DVD).isEmpty() 
+                     : MythCDROM::inspectImage(MediaMonitor::defaultDVDdevice()) == MythCDROM::kDVD;
+    if (isDVD)
     {
         QString dvd_device = MediaMonitor::defaultDVDdevice();
 
@@ -821,13 +841,16 @@ static void playDisc()
 
         GetMythUI()->AddCurrentLocation("playdisc");
 
+        //  Get the command string to play a DVD
+        QString command_string =
+                gCoreContext->GetSetting("mythdvd.DVDPlayerCommand");
         if ((command_string.indexOf("internal", 0, Qt::CaseInsensitive) > -1) ||
             (command_string.length() < 1))
         {
 #ifdef Q_OS_DARWIN
             // Convert a BSD 'leaf' name into a raw device path
             QString filename = "dvd://dev/r";   // e.g. 'dvd://dev/rdisk2'
-#elif defined(_WIN32)
+#elif defined(Q_OS_WINDOWS)
             QString filename = "dvd:";          // e.g. 'dvd:E\\'
 #else
             QString filename = "dvd:/";         // e.g. 'dvd://dev/sda'
@@ -860,13 +883,32 @@ static void playDisc()
             GetMythMainWindow()->activateWindow();
         }
         GetMythUI()->RemoveCurrentLocation();
+        return;
+    }
+
+    // Check for Audio CD
+    LOG(VB_MEDIA, LOG_DEBUG, "Checking for audio CD medium");
+    if (mediaMonitor->IsActive())
+    {
+        auto audioMedia = mediaMonitor->GetMedias(MEDIATYPE_AUDIO | MEDIATYPE_MIXED);
+        if (!audioMedia.isEmpty())
+        {
+            for (auto *medium : std::as_const(audioMedia))
+            {
+                if (medium->isUsable()) {
+                    LOG(VB_MEDIA, LOG_DEBUG, QString("Found usable audio/mixed device %1").arg(medium->getDevicePath()));
+                    mediaMonitor->JumpToMediaHandler(medium, true);
+                    return;
+                }
+            }
+        }
     }
 }
 
 /////////////////////////////////////////////////
 //// Media handlers
 /////////////////////////////////////////////////
-static void handleDVDMedia(MythMediaDevice *dvd)
+static void handleDVDMedia(MythMediaDevice *dvd, bool /*forcePlayback*/)
 {
     if (!dvd)
         return;
@@ -888,7 +930,7 @@ static void handleDVDMedia(MythMediaDevice *dvd)
     }
 }
 
-static void handleGalleryMedia(MythMediaDevice *dev)
+static void handleGalleryMedia(MythMediaDevice *dev, bool forcePlayback)
 {
     // Only handle events for media that are newly mounted
     if (!dev || (dev->getStatus() != MEDIASTAT_MOUNTED
@@ -910,7 +952,7 @@ static void handleGalleryMedia(MythMediaDevice *dev)
         }
     }
 
-    if (gCoreContext->GetBoolSetting("GalleryAutoLoad", false))
+    if (forcePlayback || gCoreContext->GetBoolSetting("GalleryAutoLoad", false))
     {
         LOG(VB_GUI, LOG_INFO, "Main: Autostarting Gallery for new media");
         GetMythMainWindow()->JumpTo(JUMP_GALLERY_DEFAULT);
@@ -921,7 +963,7 @@ static void handleGalleryMedia(MythMediaDevice *dev)
     }
 }
 
-static void TVMenuCallback([[maybe_unused]] void *data, QString &selection)
+static void TVMenuCallback(void * /* data */, QString &selection)
 {
     QString sel = selection.toLower();
 
@@ -934,7 +976,9 @@ static void TVMenuCallback([[maybe_unused]] void *data, QString &selection)
     }
 
     if (sel == "tv_watch_live")
+    {
         startTVNormal();
+    }
     else if (sel.startsWith("tv_watch_recording"))
     {
         // use selection here because its case is untouched
@@ -1339,7 +1383,7 @@ static bool RunMenu(const QString& themedir, const QString& themename)
     {
         LOG(VB_GENERAL, LOG_NOTICE, QString("Found mainmenu.xml for theme '%1'")
                 .arg(themename));
-        g_menu->setCallback(TVMenuCallback, gContext);
+        g_menu->setCallback(TVMenuCallback, nullptr);
         GetMythMainWindow()->GetMainStack()->AddScreen(g_menu);
         return true;
     }
@@ -1771,11 +1815,12 @@ static void ReloadKeys(void)
 
 static void SetFuncPtrs(void)
 {
-    TV::SetFuncPtr("playbackbox", (void *)PlaybackBox::RunPlaybackBox);
+    TV::SetFuncPtr("playbackbox",   (void *)PlaybackBox::RunPlaybackBox);
     TV::SetFuncPtr("viewscheduled", (void *)ViewScheduled::RunViewScheduled);
-    TV::SetFuncPtr("programguide", (void *)GuideGrid::RunProgramGuide);
-    TV::SetFuncPtr("programfinder", (void *)RunProgramFinder);
+    TV::SetFuncPtr("programguide",  (void *)GuideGrid::RunProgramGuide);
+    TV::SetFuncPtr("programlist",   (void *)ProgLister::RunProgramList);
     TV::SetFuncPtr("scheduleeditor", (void *)ScheduleEditor::RunScheduleEditor);
+    TV::SetFuncPtr("programfinder",  (void *)RunProgramFinder);
 }
 
 /**
@@ -1942,7 +1987,7 @@ static bool WasAutomaticStart(void)
 }
 
 // from https://www.raspberrypi.org/forums/viewtopic.php?f=33&t=16897
-// The old way of revoking root with setuid(getuid()) 
+// The old way of revoking root with setuid(getuid())
 // causes system hang in certain cases on raspberry pi
 
 static int revokeRoot (void)
@@ -1980,29 +2025,30 @@ Q_DECL_EXPORT int main(int argc, char **argv)
         return GENERIC_EXIT_OK;
     }
 
+#if CONFIG_QTWEBENGINE
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+    QtWebEngineQuick::initialize();
+#else
+    QtWebEngine::initialize();
+#endif
+#endif
+
     MythDisplay::ConfigureQtGUI(1, cmdline);
     QApplication::setSetuidAllowed(true);
     QApplication a(argc, argv);
     QCoreApplication::setApplicationName(MYTH_APPNAME_MYTHFRONTEND);
-    CleanupGuard callCleanup(cleanup);
 
 #ifdef Q_OS_DARWIN
     QString path = QCoreApplication::applicationDirPath();
-    setenv("PYTHONPATH",
-           QString("%1/../Resources/lib/%2/site-packages:%3")
+    qputenv("PYTHONPATH",
+           QString("%1/../Resources/lib/%2:%1/../Resources/lib/%2/site-packages:%1/../Resources/lib/%2/lib-dynload:%3")
            .arg(path)
            .arg(QFileInfo(PYTHON_EXE).fileName())
            .arg(QProcessEnvironment::systemEnvironment().value("PYTHONPATH"))
-           .toUtf8().constData(), 1);
+           .toUtf8().constData());
 #endif
 
-#ifndef _WIN32
-    SignalHandler::Init();
-    SignalHandler::SetHandler(SIGUSR1, handleSIGUSR1);
-    SignalHandler::SetHandler(SIGUSR2, handleSIGUSR2);
-#endif
-
-#if defined(Q_OS_ANDROID)
+#ifdef Q_OS_ANDROID
     auto config = QSslConfiguration::defaultConfiguration();
     config.setCaCertificates(QSslConfiguration::systemCaCertificates());
     QSslConfiguration::setDefaultConfiguration(config);
@@ -2026,16 +2072,20 @@ Q_DECL_EXPORT int main(int argc, char **argv)
         MythMainWindow::ParseGeometryOverride(cmdline.toString("geometry"));
 
     fe_sd_notify("STATUS=Connecting to database.");
-    gContext = new MythContext(MYTH_BINARY_VERSION, true);
+    MythContext context {MYTH_BINARY_VERSION, true};
     gCoreContext->SetAsFrontend(true);
 
     cmdline.ApplySettingsOverride();
-    if (!gContext->Init(true, bPromptForBackend, bBypassAutoDiscovery))
+    if (!context.Init(true, bPromptForBackend, bBypassAutoDiscovery))
     {
         LOG(VB_GENERAL, LOG_ERR, "Failed to init MythContext, exiting.");
         gCoreContext->SetExiting(true);
         return GENERIC_EXIT_NO_MYTHCONTEXT;
     }
+    context.setCleanup(cleanup);
+
+    SignalHandler::SetHandler(SIGUSR1, handleSIGUSR1);
+    SignalHandler::SetHandler(SIGUSR2, handleSIGUSR2);
 
     cmdline.ApplySettingsOverride();
 
@@ -2079,7 +2129,7 @@ Q_DECL_EXPORT int main(int argc, char **argv)
         LOG(VB_GENERAL, LOG_NOTICE, "Appearance settings and language have "
                                     "been reset to defaults. You will need to "
                                     "restart the frontend.");
-        gContext-> saveSettingsCache();
+        context.saveSettingsCache();
         return GENERIC_EXIT_OK;
     }
 
@@ -2088,6 +2138,15 @@ Q_DECL_EXPORT int main(int argc, char **argv)
     if (maxImageSize >=0)
         QImageReader::setAllocationLimit(maxImageSize);
 #endif
+    LOG(VB_GENERAL, LOG_DEBUG,
+        QString("Built against zlib %1, linked against %2.")
+        .arg(ZLIB_VERSION, zlibVersion()));
+    QList<QByteArray> formats = QImageReader::supportedImageFormats();
+    QString format_str = formats.takeFirst();
+    for (const auto& format : std::as_const(formats))
+        format_str += ", " + format;
+    LOG(VB_GENERAL, LOG_DEBUG, QString("Supported image formats: %1").arg(format_str));
+
     QCoreApplication::setSetuidAllowed(true);
 
     if (revokeRoot() != 0)
@@ -2096,7 +2155,7 @@ Q_DECL_EXPORT int main(int argc, char **argv)
         return GENERIC_EXIT_NOT_OK;
     }
 
-#ifdef USING_LIBDNS_SD
+#if CONFIG_LIBDNS_SD
     // this needs to come after gCoreContext has been initialised
     // (for hostname) - hence it is not in MediaRenderer
     QScopedPointer<BonjourRegister> bonjour(new BonjourRegister());
@@ -2149,14 +2208,14 @@ Q_DECL_EXPORT int main(int argc, char **argv)
     // when we may have a new render device). This also ensures the support checks
     // are done immediately and are not reliant on semi-random settings initialisation.
     QObject::connect(mainWindow, &MythMainWindow::SignalWindowReady,
-                     []() { MythVideoProfile::InitStatics(true); } );
+                     mainWindow, []() { MythVideoProfile::InitStatics(true); } );
 
     mainWindow->Init(false);
     mainWindow->setWindowTitle(QCoreApplication::translate("(MythFrontendMain)",
                                                "MythTV Frontend",
                                                "Main window title"));
 
-#ifdef USING_AIRPLAY
+#if CONFIG_AIRPLAY
     if (gCoreContext->GetBoolSetting("AirPlayEnabled", true))
     {
         fe_sd_notify("STATUS=Initializing AirPlay");
@@ -2252,7 +2311,8 @@ Q_DECL_EXPORT int main(int argc, char **argv)
 
     fe_sd_notify("STATUS=Creating housekeeper");
     auto *housekeeping = new HouseKeeper();
-#ifdef __linux__
+    housekeeping->RegisterTask(new DBConnPurgeTask());
+#ifdef Q_OS_LINUX
  #ifdef CONFIG_BINDINGS_PYTHON
     housekeeping->RegisterTask(new HardwareProfileTask());
  #endif
@@ -2265,9 +2325,13 @@ Q_DECL_EXPORT int main(int argc, char **argv)
         QStringList plugins = g_pmanager->EnumeratePlugins();
 
         if (plugins.contains(cmdline.toString("runplugin")))
+        {
             g_pmanager->run_plugin(cmdline.toString("runplugin"));
+        }
         else if (plugins.contains("myth" + cmdline.toString("runplugin")))
+        {
             g_pmanager->run_plugin("myth" + cmdline.toString("runplugin"));
+        }
         else
         {
             LOG(VB_GENERAL, LOG_ERR,
@@ -2284,7 +2348,9 @@ Q_DECL_EXPORT int main(int argc, char **argv)
         MythMainWindow *mmw = GetMythMainWindow();
 
         if (mmw->DestinationExists(cmdline.toString("jumppoint")))
+        {
             mmw->JumpTo(cmdline.toString("jumppoint"));
+        }
         else
         {
             LOG(VB_GENERAL, LOG_ERR,
@@ -2315,17 +2381,17 @@ Q_DECL_EXPORT int main(int argc, char **argv)
         MythHTTPInstance::Addservices({{ FRONTEND_SERVICE, &MythHTTPService::Create<MythFrontendService> }});
 
         // Send all unknown requests into the web app. make bookmarks and direct access work.
-        auto spa_index = [](auto && PH1) { return MythHTTPRewrite::RewriteToSPA(std::forward<decltype(PH1)>(PH1), "mythfrontend.html"); };
+        auto spa_index = [](auto && PH1) { return MythHTTPRewrite::RewriteToSPA(std::forward<decltype(PH1)>(PH1), "apps/frontend/index.html"); };
         MythHTTPInstance::AddErrorPageHandler({ "=404", spa_index });
 
-        auto root = [](auto && PH1) { return MythHTTPRoot::RedirectRoot(std::forward<decltype(PH1)>(PH1), "mythfrontend.html"); };
+        auto root = [](auto && PH1) { return MythHTTPRoot::RedirectRoot(std::forward<decltype(PH1)>(PH1), "apps/frontend/index.html"); };
         MythHTTPScopedInstance webserver({{ "/", root}});
         ret = QCoreApplication::exec();
     }
 
     fe_sd_notify("STOPPING=1\nSTATUS=Exiting");
     if (ret==0)
-        gContext-> saveSettingsCache();
+        context.saveSettingsCache();
 
     DestroyMythUI();
     PreviewGeneratorQueue::TeardownPreviewGeneratorQueue();

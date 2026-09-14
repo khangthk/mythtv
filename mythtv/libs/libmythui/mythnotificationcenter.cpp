@@ -14,8 +14,8 @@
 #include <QTimer>
 
 // MythTV headers
-#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
+#include "libmythbase/mythlogging.h"
 
 #include "mythmainwindow.h"
 #include "mythnotificationcenter.h"
@@ -1536,3 +1536,5 @@ void ShowNotification(MythNotification::Type type,
     MythNotificationCenter::GetInstance()->Queue(*n);
     delete n;
 }
+
+#include "moc_mythnotificationcenter_private.cpp"

@@ -562,7 +562,7 @@ static int get_non_intra_block (mpeg2_decoder_t * const decoder,
 	    j = scan[i];
 	    bit_buf <<= tab->len;
 	    bits += tab->len + 1;
-	    int val = ((2 * tab->level + 1) * quant_matrix[j]) >> 5;
+	    int val = (((2 * tab->level) + 1) * quant_matrix[j]) >> 5;
 
 	    /* if (bitstream_get (1)) val = -val; */
 	    val = (val ^ SBITS (bit_buf, 1)) - SBITS (bit_buf, 1);
@@ -709,7 +709,7 @@ static void get_mpeg1_intra_block (mpeg2_decoder_t * const decoder)
 	    int val = SBITS (bit_buf, 8);
 	    if (! (val & 0x7f)) {
 		DUMPBITS (bit_buf, bits, 8);
-		val = UBITS (bit_buf, 8) + 2 * val;
+		val = UBITS (bit_buf, 8) + (2 * val);
 	    }
 	    val = (val * quant_matrix[j]) / 16;
 
@@ -792,7 +792,7 @@ static int get_mpeg1_non_intra_block (mpeg2_decoder_t * const decoder)
 	    j = scan[i];
 	    bit_buf <<= tab->len;
 	    bits += tab->len + 1;
-	    int val = ((2 * tab->level + 1) * quant_matrix[j]) >> 5;
+	    int val = (((2 * tab->level) + 1) * quant_matrix[j]) >> 5;
 
 	    /* oddification */
 	    val = (val - 1) | 1;
@@ -832,9 +832,9 @@ static int get_mpeg1_non_intra_block (mpeg2_decoder_t * const decoder)
 	    int val = SBITS (bit_buf, 8);
 	    if (! (val & 0x7f)) {
 		DUMPBITS (bit_buf, bits, 8);
-		val = UBITS (bit_buf, 8) + 2 * val;
+		val = UBITS (bit_buf, 8) + (2 * val);
 	    }
-	    val = 2 * (val + SBITS (val, 1)) + 1;
+	    val = (2 * (val + SBITS (val, 1))) + 1;
 	    val = (val * quant_matrix[j]) / 32;
 
 	    /* oddification */
@@ -1333,13 +1333,13 @@ static void motion_fr_dmv_##FORMAT (mpeg2_decoder_t * const decoder,	      \
     int dmv_y = get_dmv (decoder);					      \
 									      \
     int m = decoder->top_field_first ? 1 : 3;				      \
-    int other_x = ((motion_x * m + (motion_x > 0)) >> 1) + dmv_x;	      \
-    int other_y = ((motion_y * m + (motion_y > 0)) >> 1) + dmv_y - 1;	      \
+    int other_x = (((motion_x * m) + (motion_x > 0)) >> 1) + dmv_x;	      \
+    int other_y = (((motion_y * m) + (motion_y > 0)) >> 1) + dmv_y - 1;	      \
     MOTION_FIELD (mpeg2_mc.put, motion->ref[0], other_x, other_y, 0, | 1, 0); \
 									      \
     m = decoder->top_field_first ? 3 : 1;				      \
-    other_x = ((motion_x * m + (motion_x > 0)) >> 1) + dmv_x;		      \
-    other_y = ((motion_y * m + (motion_y > 0)) >> 1) + dmv_y + 1;	      \
+    other_x = (((motion_x * m) + (motion_x > 0)) >> 1) + dmv_x;		      \
+    other_y = (((motion_y * m) + (motion_y > 0)) >> 1) + dmv_y + 1;	      \
     MOTION_FIELD (mpeg2_mc.put, motion->ref[0], other_x, other_y, 1, & ~1, 0);\
 									      \
     MOTION_DMV (mpeg2_mc.avg, motion->ref[0], motion_x, motion_y);	      \
@@ -1558,7 +1558,7 @@ do {									\
 void mpeg2_init_fbuf (mpeg2_decoder_t * decoder, uint8_t * current_fbuf[3],
 		      uint8_t * forward_fbuf[3], uint8_t * backward_fbuf[3])
 {
-    int stride = decoder->stride_frame;
+    ptrdiff_t stride = decoder->stride_frame;
     int bottom_field = (decoder->picture_structure == BOTTOM_FIELD);
     int offset = bottom_field ? stride : 0;
     int height = decoder->height;
@@ -1603,9 +1603,9 @@ void mpeg2_init_fbuf (mpeg2_decoder_t * decoder, uint8_t * current_fbuf[3],
     decoder->slice_stride = 16 * stride;
     decoder->slice_uv_stride =
 	decoder->slice_stride >> (2 - decoder->chroma_format);
-    decoder->limit_x = 2 * decoder->width - 32;
-    decoder->limit_y_16 = 2 * height - 32;
-    decoder->limit_y_8 = 2 * height - 16;
+    decoder->limit_x = (2 * decoder->width) - 32;
+    decoder->limit_y_16 = (2 * height) - 32;
+    decoder->limit_y_8 = (2 * height) - 16;
     decoder->limit_y = height - 16;
 
     if (decoder->mpeg1) {

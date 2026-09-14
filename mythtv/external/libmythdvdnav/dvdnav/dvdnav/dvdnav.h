@@ -26,20 +26,16 @@
 #ifndef LIBDVDNAV_DVDNAV_H
 #define LIBDVDNAV_DVDNAV_H
 
-#define DVDNAV_VERSION "6.0.0"
-#define DVDNAV_VERSION_GIT "dcb9109e45ccd304ec82a7c7bf46cca63620adf9"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#include "version.h"
 #include <dvdnav/dvd_types.h>
 #include <dvdread/dvd_reader.h>
 #include <dvdread/nav_types.h>
 #include <dvdread/ifo_types.h> /* For vm_cmd_t */
 #include <dvdnav/dvdnav_events.h>
-
-#include "libmythbase/compat.h"
 
 /*********************************************************************
  * dvdnav data types                                                 *
@@ -391,7 +387,7 @@ int64_t dvdnav_get_current_time(dvdnav_t *self);
  * Otherwise tries to guess the nearest VOBU by calculating an offset.
  */
 dvdnav_status_t dvdnav_absolute_time_search(dvdnav_t *self,
-                                   uint64_t time, uint search_to_nearest_cell);
+                                   uint64_t time, uint8_t search_to_nearest_cell);
 
 int dvdnav_relative_time_search(dvdnav_t *self,
                    int relative_time);
@@ -474,7 +470,7 @@ dsi_t* dvdnav_get_current_nav_dsi(dvdnav_t *self);
  * Get the area associated with a certain button.
  */
 dvdnav_status_t dvdnav_get_highlight_area(pci_t *nav_pci , int32_t button, int32_t mode,
-					  dvdnav_highlight_area_t *highlight);
+                                          dvdnav_highlight_area_t *highlight);
 
 /*
  * Get the area associated with a certain button in the given

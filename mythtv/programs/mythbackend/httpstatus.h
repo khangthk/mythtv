@@ -15,7 +15,7 @@
 #include <QMutex>
 #include <QMap>
 
-#include "libmythbase/programinfo.h"
+#include "libmythtv/programinfo.h"
 #include "libmythupnp/httpserver.h"
 
 enum HttpStatusMethod : std::uint8_t
@@ -45,7 +45,6 @@ class HttpStatus : public HttpServerExtension
 
         Scheduler                   *m_pSched;
         QMap<int, EncoderLink *>    *m_pEncoders;
-        AutoExpire                  *m_pExpirer;
         MainServer                  *m_pMainServer{nullptr};
         bool                         m_bIsMaster;
         int                          m_nPreRollSeconds;
@@ -82,7 +81,7 @@ class HttpStatus : public HttpServerExtension
 
     public:
                  HttpStatus( QMap<int, EncoderLink *> *tvList, Scheduler *sched,
-                             AutoExpire *expirer, bool bIsMaster );
+                             bool bIsMaster );
         ~HttpStatus() override = default;
 
         void     SetMainServer(MainServer *mainServer)

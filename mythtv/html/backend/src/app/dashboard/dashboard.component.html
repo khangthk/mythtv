@@ -1,13 +1,19 @@
-<div *ngIf="translateDone">
-  <h1></h1>
-  <div class="flex flex-row">
-    <button pButton pRipple icon="pi pi-angle-double-left" class="p-button-text p-button-primary"
-      (click)="menu.navBackward()" pTooltip="{{ 'dashboard.scrolltabsleft' | translate }}"></button>
-    <div class="col-11">
-      <p-tabMenu #menu [model]="fullMenu" [activeItem]="activeItem" [scrollable]="false"></p-tabMenu>
+@if (translateDone) {
+<div>
+    <h1></h1>
+    <div class="flex flex-row">
+        <div class="shrink overflow-auto">
+            <p-tabs [scrollable]="true" [selectOnFocus]="true">
+                <p-tablist>
+                    @for (tab of fullMenu; track tab.routerLink; let ix = $index) {
+                    <p-tab [routerLink]="tab.routerLink">
+                        <span [ngClass]="tabClass[ix]">{{tab.label}}</span>
+                    </p-tab>
+                    }
+                </p-tablist>
+            </p-tabs>
+        </div>
     </div>
-    <button pButton pRipple icon="pi pi-angle-double-right" class="p-button-text p-button-primary"
-      (click)="menu.navForward()" pTooltip="{{ 'dashboard.scrolltabsright' | translate }}"></button>
-  </div>
-  <router-outlet></router-outlet>
+    <router-outlet></router-outlet>
 </div>
+}

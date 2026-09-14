@@ -1,6 +1,8 @@
 #ifndef MUSICMETADATA_H_
 #define MUSICMETADATA_H_
 
+#include "libmythbase/mythconfig.h"
+
 // C/C++
 #include <array>
 #include <cstdint>
@@ -13,10 +15,10 @@
 #include <QMap>
 #include <QMetaType>
 #include <QStringList>
+#include <QTimeZone>
 
 // MythTV
 #include "libmythbase/mthread.h"
-#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythtypes.h"
 #include "libmythmetadata/mythmetaexp.h"
 
@@ -72,7 +74,6 @@ static constexpr uint32_t ID_TO_REPO(uint32_t x) { return x >> METADATA_REPO_SHI
 
 static constexpr const char* METADATA_INVALID_FILENAME { "**NOT FOUND**" };
 
-static constexpr const char* STREAMUPDATEURL { "https://services.mythtv.org/music/data/?data=streams" };
 static constexpr size_t STREAMURLCOUNT { 5 };
 
 using UrlList = std::array<QString,STREAMURLCOUNT>;
@@ -202,8 +203,14 @@ class META_PUBLIC MusicMetadata
     void setTrackCount(int ltrackcount) { m_trackCount = ltrackcount; }
 
     std::chrono::milliseconds Length() const { return m_length; }
-    template <typename T, std::enable_if_t<std::chrono::__is_duration<T>::value, bool> = true>
-    void setLength(T llength) { m_length = llength; }
+    template <typename T>
+    void setLength(T llength)
+#if HAVE_IS_DURATION_V
+    requires (std::chrono::__is_duration_v<T>)
+#else
+    requires (std::chrono::__is_duration<T>::value)
+#endif
+    { m_length = llength; }
 
     int DiscNumber() const {return m_discNum;}
     void setDiscNumber(int discnum) { m_discNum = discnum; }
@@ -405,6 +412,8 @@ class META_PUBLIC MetadataLoadingThread : public MThread
 
     explicit MetadataLoadingThread(AllMusic *parent_ptr)
         : MThread("MetadataLoading"), m_parent(parent_ptr) {}
+
+  protected:
     void run() override; // MThread
 
   private:
@@ -503,14 +512,10 @@ class AlbumArtScannerThread: public MThread
     explicit AlbumArtScannerThread(QStringList strList) :
             MThread("AlbumArtScanner"), m_strList(std::move(strList)) {}
 
-    void run() override // MThread
-    {
-        RunProlog();
-        gCoreContext->SendReceiveStringList(m_strList);
-        RunEpilog();
-    }
-
     QStringList getResult(void) { return m_strList; }
+
+  protected:
+    void run() override; // MThread
 
   private:
     QStringList m_strList;

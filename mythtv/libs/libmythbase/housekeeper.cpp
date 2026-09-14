@@ -52,12 +52,15 @@
 #include <chrono>
 #include <utility>
 
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QMutexLocker>
 
 #include "mythevent.h"
 #include "mythdbcon.h"
 #include "housekeeper.h"
 #include "mythcorecontext.h"
+#include "mythlogging.h"
+#include "mythrandom.h"
 
 /** \class HouseKeeperTask
  *  \ingroup housekeeper
@@ -407,9 +410,7 @@ bool PeriodicHouseKeeperTask::DoCheckRun(const QDateTime& now)
     //      of these tests has returned positive, so each individual test has
     //      a necessarily low probability
     //
-    // Pseudo-random is good enough. Don't need a true random.
-    // NOLINTNEXTLINE(cert-msc30-c,cert-msc50-cpp)
-    bool res = (rand() > (int)(prob2 * static_cast<double>(RAND_MAX)));
+    bool res = (MythRandom() > (uint32_t)(prob2 * std::numeric_limits<uint32_t>::max()));
     m_currentProb = prob;
 //  if (res)
 //      LOG(VB_GENERAL, LOG_DEBUG, QString("%1 will run: this=%2; total=%3")
@@ -658,6 +659,22 @@ void HouseKeeper::RegisterTask(HouseKeeperTask *task)
     }
 }
 
+void HouseKeeper::UnregisterTask(const QString& tag)
+{
+    QMutexLocker mapLock(&m_mapLock);
+    auto it = m_taskMap.find(tag);
+    if (it == m_taskMap.end())
+    {
+        LOG(VB_GENERAL, LOG_ERR,
+                QString("HouseKeeperTask '%1' doesn't exist.").arg(tag));
+        return;
+    }
+
+    delete *it;
+    LOG(VB_GENERAL, LOG_INFO,
+        QString("HouseKeeperTask '%1' destroyed.").arg(tag));
+}
+
 HouseKeeperTask* HouseKeeper::GetQueuedTask(void)
 {
     QMutexLocker queueLock(&m_queueLock);
@@ -690,7 +707,9 @@ void HouseKeeper::Start(void)
     query.bindValue(":HOST", gCoreContext->GetHostName());
 
     if (!query.exec())
+    {
         MythDB::DBError("HouseKeeper::Run", query);
+    }
     else
     {
         while (query.next())
@@ -737,11 +756,27 @@ void HouseKeeper::Run(void)
     QDateTime now = MythDate::current();
 
     QMutexLocker mapLock(&m_mapLock);
+    // Remove any tasks that have finished
+    for (auto it = m_taskMap.begin(); it != m_taskMap.end(); )
+    {
+        if ((*it)->IsFinished())
+        {
+            LOG(VB_GENERAL, LOG_INFO,
+                QString("Removing finished  HouseKeeperTask '%1'.")
+                    .arg(it.key()));
+            it = m_taskMap.erase(it);
+        }
+        else
+        {
+            it++;
+        }
+    }
+
+    // check if any tasks are ready to run, and add to queue
     for (auto it = m_taskMap.begin(); it != m_taskMap.end(); ++it)
     {
         if ((*it)->CheckRun(now))
         {
-            // check if any tasks are ready to run, and add to queue
             LOG(VB_GENERAL, LOG_INFO,
                 QString("Queueing HouseKeeperTask '%1'.").arg(it.key()));
             QMutexLocker queueLock(&m_queueLock);
@@ -765,7 +800,9 @@ void HouseKeeper::Run(void)
         while (it != m_threadList.end())
         {
             if ((*it)->isRunning())
+            {
                 ++it;
+            }
             else
             {
                 delete *it;
@@ -870,3 +907,11 @@ void HouseKeeper::customEvent(QEvent *e)
         }
     }
 }
+
+bool DBConnPurgeTask::DoRun()
+{
+    GetMythDB()->GetDBManager()->PurgeIdleConnections(false);
+    return true;
+}
+
+#include "moc_housekeeper.cpp"

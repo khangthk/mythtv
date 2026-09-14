@@ -3,9 +3,12 @@
 // race on startup?
 // http date format and locale
 
+#include <algorithm>
 #include <chrono>
 #include <vector>
 
+#include <QChar>     // Fix Qt6 GCC SFINAE warning
+#include <QBitArray> // Fix Qt6 GCC SFINAE warning
 #include <QTcpSocket>
 #include <QNetworkInterface>
 #include <QCoreApplication>
@@ -209,6 +212,8 @@ QByteArray DigestMd5Response(const QString& response, const QString& option,
     return hash.result().toHex();
 }
 
+using RequestQuery = QPair<QByteArray, QByteArray>;
+
 class APHTTPRequest
 {
   public:
@@ -233,8 +238,8 @@ class APHTTPRequest
 
     QByteArray GetQueryValue(const QByteArray& key)
     {
-        auto samekey = [key](const auto& query) { return query.first == key; };;
-        auto query = std::find_if(m_queries.cbegin(), m_queries.cend(), samekey);
+        auto query = std::ranges::find(std::as_const(m_queries), key,
+                                       &RequestQuery::first);
         return (query != m_queries.cend()) ? query->second : "";
     }
 
@@ -342,7 +347,7 @@ class APHTTPRequest
     QByteArray m_data;
     QByteArray m_method;
     QByteArray m_uri;
-    QList<QPair<QByteArray, QByteArray> > m_queries;
+    QList<RequestQuery> m_queries;
     QMap<QByteArray,QByteArray> m_headers;
     QByteArray m_body;
     int        m_size            {0};
@@ -557,10 +562,8 @@ void MythAirplayServer::deleteConnection(QTcpSocket *socket)
     m_sockets.removeOne(socket);
 
     QByteArray remove;
-    QMutableHashIterator<QByteArray,AirplayConnection> it(m_connections);
-    while (it.hasNext())
+    for (auto it = m_connections.begin(); it != m_connections.end(); ++it)
     {
-        it.next();
         if (it.value().m_reverseSocket == socket)
             it.value().m_reverseSocket = nullptr;
         if (it.value().m_controlSocket == socket)
@@ -733,8 +736,8 @@ void MythAirplayServer::HandleResponse(APHTTPRequest *req,
         GetNotificationCenter()->Queue(n);
     }
 
-    double position    = 0.0F;
-    double duration    = 0.0F;
+    double position    = 0.0;
+    double duration    = 0.0;
     float  playerspeed = 0.0F;
     bool   playing     = false;
     QString pathname;
@@ -910,7 +913,7 @@ void MythAirplayServer::HandleResponse(APHTTPRequest *req,
     else if (req->GetURI() == "/play")
     {
         QByteArray file;
-        double start_pos = 0.0F;
+        double start_pos = 0.0;
         if (req->GetHeaders().contains("Content-Type") &&
             req->GetHeaders()["Content-Type"] == "application/x-apple-binary-plist")
         {
@@ -1136,8 +1139,8 @@ void MythAirplayServer::StopSession(const QByteArray &session)
         return;
     }
     cnx.m_stopped = true;
-    double position    = 0.0F;
-    double duration    = 0.0F;
+    double position    = 0.0;
+    double duration    = 0.0;
     float  playerspeed = 0.0F;
     bool   playing     = false;
     QString pathname;
@@ -1353,3 +1356,5 @@ void MythAirplayServer::HideAllPhotos(void)
         ++it;
     }
 }
+
+#include "moc_mythairplayserver.cpp"

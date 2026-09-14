@@ -3,11 +3,6 @@ include ( ../../version.pro )
 include ( ../programs-libs.pro )
 
 QT += network xml sql widgets
-using_qtscript: QT += script
-mingw | win32-msvc* {
-   # script debugger currently only enabled for WIN32 builds
-   QT += scripttools
-}
 
 TEMPLATE = app
 CONFIG += thread
@@ -27,32 +22,16 @@ HEADERS += autoexpire.h encoderlink.h filetransfer.h httpstatus.h mainserver.h
 HEADERS += playbacksock.h scheduler.h backendhousekeeper.h
 HEADERS += upnpcdstv.h upnpcdsmusic.h upnpcdsvideo.h mediaserver.h
 HEADERS += internetContent.h mythbackend_main_helpers.h backendcontext.h
-HEADERS += httpconfig.h mythsettings.h mythbackend_commandlineparser.h
+HEADERS += mythsettings.h mythbackend_commandlineparser.h
 HEADERS += recordingextender.h
-
-HEADERS += serviceHosts/mythServiceHost.h    serviceHosts/guideServiceHost.h
-HEADERS += serviceHosts/contentServiceHost.h serviceHosts/dvrServiceHost.h
-HEADERS += serviceHosts/channelServiceHost.h serviceHosts/videoServiceHost.h
-HEADERS += serviceHosts/captureServiceHost.h serviceHosts/imageServiceHost.h
-HEADERS += serviceHosts/musicServiceHost.h
-
-HEADERS += services/myth.h services/guide.h services/content.h services/dvr.h
-HEADERS += services/serviceUtil.h services/channel.h services/video.h
-HEADERS += services/capture.h services/image.h services/music.h
-
 
 SOURCES += autoexpire.cpp encoderlink.cpp filetransfer.cpp httpstatus.cpp
 SOURCES += mythbackend.cpp mainserver.cpp playbacksock.cpp scheduler.cpp
 SOURCES += backendhousekeeper.cpp
 SOURCES += upnpcdstv.cpp upnpcdsmusic.cpp upnpcdsvideo.cpp mediaserver.cpp
 SOURCES += internetContent.cpp mythbackend_main_helpers.cpp backendcontext.cpp
-SOURCES += httpconfig.cpp mythsettings.cpp mythbackend_commandlineparser.cpp
+SOURCES += mythsettings.cpp mythbackend_commandlineparser.cpp
 SOURCES += recordingextender.cpp
-
-SOURCES += services/myth.cpp services/guide.cpp services/content.cpp
-SOURCES += services/dvr.cpp services/channel.cpp services/video.cpp
-SOURCES += services/serviceUtil.cpp services/capture.cpp
-SOURCES += services/image.cpp services/music.cpp
 
 HEADERS += servicesv2/v2myth.h servicesv2/v2connectionInfo.h servicesv2/v2wolInfo.h
 HEADERS += servicesv2/v2databaseInfo.h servicesv2/v2versionInfo.h
@@ -63,7 +42,7 @@ HEADERS += servicesv2/v2frontend.h servicesv2/v2frontendList.h servicesv2/v2sett
 HEADERS += servicesv2/v2backendInfo.h servicesv2/v2buildInfo.h servicesv2/v2envInfo.h
 HEADERS += servicesv2/v2logInfo.h
 
-HEADERS += servicesv2/v2video.h
+HEADERS += servicesv2/v2video.h servicesv2/v2playGroup.h
 HEADERS += servicesv2/v2videoMetadataInfo.h servicesv2/v2videoMetadataInfoList.h
 HEADERS += servicesv2/v2artworkInfo.h servicesv2/v2artworkInfoList.h
 HEADERS += servicesv2/v2genre.h servicesv2/v2genreList.h
@@ -96,14 +75,14 @@ HEADERS += servicesv2/v2channelInfoList.h servicesv2/v2lineup.h
 HEADERS += servicesv2/v2channelRestore.h
 HEADERS += servicesv2/v2videoSource.h servicesv2/v2videoSourceList.h
 HEADERS += servicesv2/v2videoMultiplex.h servicesv2/v2videoMultiplexList.h
-HEADERS += servicesv2/v2status.h
+HEADERS += servicesv2/v2status.h servicesv2/v2recStats.h
 HEADERS += servicesv2/preformat.h servicesv2/v2backendStatus.h
 HEADERS += servicesv2/v2capture.h
 HEADERS += servicesv2/v2captureCard.h servicesv2/v2captureCardList.h
 HEADERS += servicesv2/v2recordingProfile.h
 HEADERS += servicesv2/v2music.h
 HEADERS += servicesv2/v2musicMetadataInfo.h servicesv2/v2musicMetadataInfoList.h
-HEADERS += servicesv2/v2config.h
+HEADERS += servicesv2/v2config.h servicesv2/v2powerPriority.h
 
 SOURCES += servicesv2/v2myth.cpp
 SOURCES += servicesv2/v2video.cpp
@@ -116,26 +95,3 @@ SOURCES += servicesv2/v2capture.cpp
 SOURCES += servicesv2/v2music.cpp
 SOURCES += servicesv2/v2serviceUtil.cpp
 SOURCES += servicesv2/v2config.cpp
-
-using_oss:DEFINES += USING_OSS
-
-DEFINES +=    USING_IPTV
-
-using_dvb        : DEFINES +=    USING_DVB
-using_v4l2       : DEFINES +=    USING_V4L2
-using_hdhomerun  : DEFINES +=    USING_HDHOMERUN
-using_satip      : DEFINES +=    USING_SATIP
-using_vbox       : DEFINES +=    USING_VBOX
-using_firewire   : DEFINES +=    USING_FIREWIRE
-using_ceton      : DEFINES +=    USING_CETON
-using_v4l2       : DEFINES +=    USING_V4L2
-using_asi        : DEFINES +=    USING_ASI
-
-using_valgrind:DEFINES += USING_VALGRIND
-
-using_libdns_sd:DEFINES += USING_LIBDNS_SD
-
-xml_conf.path = $${PREFIX}/share/mythtv/backend-config/
-xml_conf.files = config_backend_general.xml config_backend_database.xml
-
-INSTALLS += xml_conf

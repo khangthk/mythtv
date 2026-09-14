@@ -1,6 +1,7 @@
 // -*- Mode: c++ -*-
 
 // Std C headers
+#include <algorithm>
 #include <cmath>
 #include <unistd.h>
 #include <utility>
@@ -11,8 +12,9 @@
 #include <QTextStream>
 
 // MythTV headers
-#include "libmyth/mythcontext.h"
+#include "libmythbase/mythdirs.h"
 #include "libmythbase/mythdownloadmanager.h"
+#include "libmythbase/mythdb.h"
 #include "libmythbase/mythlogging.h"
 
 #include "cardutil.h"
@@ -25,13 +27,12 @@
 static bool parse_chan_info(const QString   &rawdata,
                             IPTVChannelInfo &info,
                             QString         &channum,
-                            int             &nextChanNum,
                             uint            &lineNum);
 
 static bool parse_extinf(const QString &line,
                          QString       &channum,
                          QString       &name,
-                         int           &nextChanNum);
+                         QString       &logo);
 
 IPTVChannelFetcher::IPTVChannelFetcher(
     uint cardid, QString inputname, uint sourceid,
@@ -90,6 +91,53 @@ void IPTVChannelFetcher::Scan(void)
     m_thread->start();
 }
 
+// Download the IPTV channel logo and write to configured location.
+static bool download_logo(const QString& logoUrl, const QString& filename)
+{
+    bool ret = false;
+
+    if (!logoUrl.isEmpty())
+    {
+        QByteArray data;
+        if (GetMythDownloadManager()->download(logoUrl, &data))
+        {
+            QString iconDir = GetConfDir() + "/channels/";
+            QString filepath = iconDir + filename;
+            QFile file(filepath);
+            if (file.open(QIODevice::WriteOnly))
+            {
+                if (file.write(data) > 0)
+                {
+                    ret = true;
+                    LOG(VB_CHANNEL, LOG_DEBUG, LOC +
+                        QString("DownloadLogo to file %1").arg(filepath));
+                }
+                else
+                {
+                    LOG(VB_CHANNEL, LOG_ERR, LOC +
+                        QString("DownloadLogo failed to write to file %1").arg(filepath));
+                }
+                file.close();
+            }
+            else
+            {
+                LOG(VB_CHANNEL, LOG_ERR, LOC +
+                    QString("DownloadLogo failed to open file %1").arg(filepath));
+            }
+        }
+        else
+        {
+            LOG(VB_CHANNEL, LOG_ERR, LOC +
+                QString("DownloadLogo failed to download %1").arg(logoUrl));
+        }
+    }
+    else
+    {
+        LOG(VB_CHANNEL, LOG_DEBUG, LOC + "DownloadLogo empty logoUrl");
+    }
+    return ret;
+}
+
 void IPTVChannelFetcher::run(void)
 {
     m_lock.lock();
@@ -101,7 +149,7 @@ void IPTVChannelFetcher::run(void)
 
     if (m_stopNow || url.isEmpty())
     {
-        LOG(VB_CHANNEL, LOG_INFO, LOC + "Playlist URL was empty");
+        LOG(VB_CHANNEL, LOG_INFO, LOC + "Playlist URL is empty");
         QMutexLocker locker(&m_lock);
         m_threadRunning = false;
         m_stopNow = true;
@@ -113,8 +161,8 @@ void IPTVChannelFetcher::run(void)
     // Step 2/4 : Download
     if (m_scanMonitor)
     {
-        m_scanMonitor->ScanPercentComplete(5);
         m_scanMonitor->ScanAppendTextToLog(tr("Downloading Playlist"));
+        m_scanMonitor->ScanPercentComplete(5);
     }
 
     QString playlist = DownloadPlaylist(url);
@@ -134,11 +182,13 @@ void IPTVChannelFetcher::run(void)
         return;
     }
 
+    LOG(VB_CHANNEL, LOG_DEBUG, LOC + QString("Playlist file size: %1").arg(playlist.length()));
+
     // Step 3/4 : Process
     if (m_scanMonitor)
     {
-        m_scanMonitor->ScanPercentComplete(35);
         m_scanMonitor->ScanAppendTextToLog(tr("Processing Playlist"));
+        m_scanMonitor->ScanPercentComplete(35);
     }
 
     m_channels.clear();
@@ -154,12 +204,42 @@ void IPTVChannelFetcher::run(void)
 
     if (!m_isMpts)
     {
-        fbox_chan_map_t::const_iterator it = m_channels.cbegin();
-        for (uint i = 1; it != m_channels.cend(); ++it, ++i)
+        // Sort channels in ascending channel number order
+        std::vector<fbox_chan_map_t::const_iterator> acno (m_channels.size());
         {
+            fbox_chan_map_t::const_iterator it = m_channels.cbegin();
+            for (uint i = 0; it != m_channels.cend(); ++it, ++i)
+            {
+                acno[i] = it;
+            }
+            std::ranges::sort(acno,
+                [] (fbox_chan_map_t::const_iterator s1, fbox_chan_map_t::const_iterator s2) -> bool
+                {
+                    return s1.key().toInt() < s2.key().toInt();
+                }
+            );
+        }
+
+        // Insert channels in ascending channel number order
+        for (uint i = 0; i < acno.size(); ++i)
+        {
+            fbox_chan_map_t::const_iterator it = acno[i];
             const QString& channum = it.key();
             QString name    = (*it).m_name;
             QString xmltvid = (*it).m_xmltvid.isEmpty() ? "" : (*it).m_xmltvid;
+            QString logoUrl = (*it).m_logo;
+            QString logo;
+
+            // Download channel icon (logo) when there is an logo URL in the EXTINF
+            if (!logoUrl.isEmpty())
+            {
+                QString filename = QString("IPTV_%1_%2_logo").arg(m_sourceId).arg(channum);
+                if (download_logo(logoUrl, filename))
+                {
+                    logo = filename;
+                }
+            }
+
             uint programnumber = (*it).m_programNumber;
             //: %1 is the channel number, %2 is the channel name
             QString msg = tr("Channel #%1 : %2").arg(channum, name);
@@ -178,7 +258,7 @@ void IPTVChannelFetcher::run(void)
                 ChannelUtil::CreateChannel(0, m_sourceId, chanid, name, name,
                                            channum, programnumber, 0, 0,
                                            false, kChannelVisible, QString(),
-                                           QString(), "Default", xmltvid);
+                                           logo, "Default", xmltvid);
                 ChannelUtil::CreateIPTVTuningData(chanid, (*it).m_tuning);
             }
             else
@@ -191,7 +271,7 @@ void IPTVChannelFetcher::run(void)
                 ChannelUtil::UpdateChannel(0, m_sourceId, chanid, name, name,
                                            channum, programnumber, 0, 0,
                                            false, kChannelVisible, QString(),
-                                           QString(), "Default", xmltvid);
+                                           logo, "Default", xmltvid);
                 ChannelUtil::UpdateIPTVTuningData(chanid, (*it).m_tuning);
             }
 
@@ -241,7 +321,7 @@ QString IPTVChannelFetcher::DownloadPlaylist(const QString &url)
 {
     if (url.startsWith("file", Qt::CaseInsensitive))
     {
-        QString ret = "";
+        QString ret;
         QUrl qurl(url);
         QFile file(qurl.toLocalFile());
         if (!file.open(QIODevice::ReadOnly))
@@ -251,9 +331,11 @@ QString IPTVChannelFetcher::DownloadPlaylist(const QString &url)
             return ret;
         }
 
-        QTextStream stream(&file);
-        while (!stream.atEnd())
-            ret += stream.readLine() + "\n";
+        while (!file.atEnd())
+        {
+            QByteArray data = file.readLine();
+            ret += QString(data);
+        }
 
         file.close();
         return ret;
@@ -261,20 +343,19 @@ QString IPTVChannelFetcher::DownloadPlaylist(const QString &url)
 
     // Use MythDownloadManager for http URLs
     QByteArray data;
-    QString tmp;
+    QString ret;
 
-    if (!GetMythDownloadManager()->download(url, &data))
+    if (GetMythDownloadManager()->download(url, &data))
     {
-        LOG(VB_GENERAL, LOG_INFO, LOC +
-            QString("DownloadPlaylist failed to "
-                    "download from %1").arg(url));
+        ret = QString(data);
     }
     else
     {
-        tmp = QString(data);
+        LOG(VB_GENERAL, LOG_ERR, LOC +
+            QString("DownloadPlaylist failed to "
+                    "download from %1").arg(url));
     }
-
-    return tmp.isNull() ? tmp : QString::fromUtf8(tmp.toLatin1().constData());
+    return ret;
 }
 
 static uint estimate_number_of_channels(const QString &rawdata)
@@ -318,7 +399,7 @@ fbox_chan_map_t IPTVChannelFetcher::ParsePlaylist(
         return chanmap;
     }
 
-    // estimate number of channels
+    // Estimate number of channels
     if (fetcher)
     {
         uint num_channels = estimate_number_of_channels(rawdata);
@@ -329,11 +410,12 @@ fbox_chan_map_t IPTVChannelFetcher::ParsePlaylist(
                 .arg(num_channels));
     }
 
-    // get the next available channel number for the source (only used if we can't find one in the playlist)
+    // Get the next available channel number for the source (only used if we can't find one in the playlist)
     if (fetcher)
     {
         MSqlQuery query(MSqlQuery::InitCon());
-        QString sql = "select MAX(CONVERT(channum, UNSIGNED INTEGER)) from channel where sourceid = :SOURCEID;";
+        QString sql = "SELECT MAX(CONVERT(channum, UNSIGNED INTEGER)) FROM channel "
+                      "WHERE sourceid = :SOURCEID  AND  deleted IS NULL";
 
         query.prepare(sql);
         query.bindValue(":SOURCEID", fetcher->m_sourceId);
@@ -347,12 +429,14 @@ fbox_chan_map_t IPTVChannelFetcher::ParsePlaylist(
             if (query.first())
             {
                 nextChanNum = query.value(0).toInt() + 1;
-                LOG(VB_GENERAL, LOG_INFO, LOC + QString("Next available channel number from DB is: %1").arg(nextChanNum));
+                LOG(VB_CHANNEL, LOG_INFO, LOC +
+                    QString("Next available channel number from DB is: %1").arg(nextChanNum));
             }
             else
             {
                 nextChanNum = 1;
-                LOG(VB_GENERAL, LOG_INFO, LOC + QString("No channels found for this source, using default channel number: %1").arg(nextChanNum));
+                LOG(VB_CHANNEL, LOG_INFO, LOC +
+                    QString("No channels found for this source, using default channel number: %1").arg(nextChanNum));
             }
         }
     }
@@ -364,15 +448,72 @@ fbox_chan_map_t IPTVChannelFetcher::ParsePlaylist(
         IPTVChannelInfo info;
         QString channum;
 
-        if (!parse_chan_info(rawdata, info, channum, nextChanNum, lineNum))
+        if (!parse_chan_info(rawdata, info, channum, lineNum))
             break;
+
+        // Check if parsed channel number is valid
+        if (!channum.isEmpty())
+        {
+            bool ok = false;
+            int channel_number = channum.toInt(&ok);
+            if (ok && channel_number > 0)
+            {
+                // Positive integer channel number found
+            }
+            else
+            {
+                // Ignore invalid or negative channel numbers
+                channum.clear();
+            }
+        }
+
+        // No channel number found, try to find channel in database and use that channel number
+        if (fetcher)
+        {
+            if (channum.isEmpty())
+            {
+                uint sourceId = fetcher->m_sourceId;
+                QString channum_db = ChannelUtil::GetChannelNumber(sourceId, info.m_name);
+                if (!channum_db.isEmpty())
+                {
+                    LOG(VB_RECORD, LOG_INFO, LOC +
+                        QString("Found channel in database, channel number: %1 for channel: %2")
+                            .arg(channum_db, info.m_name));
+
+                    channum = channum_db;
+                }
+            }
+        }
+
+        // Update highest channel number found so far
+        if (!channum.isEmpty())
+        {
+            bool ok = false;
+            int channel_number = channum.toInt(&ok);
+            if (ok && channel_number > 0)
+            {
+                if (channel_number >= nextChanNum)
+                {
+                    nextChanNum = channel_number + 1;
+                }
+            }
+        }
+
+        // No channel number found, use the default next one
+        if (channum.isEmpty())
+        {
+            LOG(VB_CHANNEL, LOG_INFO, QString("No channel number found, using next available: %1 for channel: %2")
+                .arg(nextChanNum).arg(info.m_name));
+            channum = QString::number(nextChanNum);
+            nextChanNum++;
+        }
 
         QString msg = tr("Encountered malformed channel");
         if (!channum.isEmpty())
         {
             chanmap[channum] = info;
 
-            msg = QString("Parsing Channel #%1 : %2 : %3")
+            msg = QString("Parsing Channel #%1: '%2' %3")
                 .arg(channum, info.m_name,
                      info.m_tuning.GetDataURL().toString());
             LOG(VB_CHANNEL, LOG_INFO, LOC + msg);
@@ -394,7 +535,6 @@ fbox_chan_map_t IPTVChannelFetcher::ParsePlaylist(
 static bool parse_chan_info(const QString   &rawdata,
                             IPTVChannelInfo &info,
                             QString         &channum,
-                            int             &nextChanNum,
                             uint            &lineNum)
 {
     // #EXTINF:0,2 - France 2                <-- duration,channum - channame
@@ -411,6 +551,7 @@ static bool parse_chan_info(const QString   &rawdata,
     // rtsp://maiptv.iptv.fr/iptvtv/201 <-- url
 
     QString name;
+    QString logo;
     QMap<QString,QString> values;
 
     while (true)
@@ -419,12 +560,14 @@ static bool parse_chan_info(const QString   &rawdata,
         if (line.isEmpty())
             return false;
 
+        LOG(VB_CHANNEL, LOG_INFO, LOC + line);
+
         ++lineNum;
         if (line.startsWith("#"))
         {
             if (line.startsWith("#EXTINF:"))
             {
-                parse_extinf(line.mid(line.indexOf(':')+1), channum, name, nextChanNum);
+                parse_extinf(line.mid(line.indexOf(':')+1), channum, name, logo);
             }
             else if (line.startsWith("#EXTMYTHTV:"))
             {
@@ -450,18 +593,20 @@ static bool parse_chan_info(const QString   &rawdata,
         if (name.isEmpty())
             return false;
 
-        LOG(VB_GENERAL, LOG_INFO, LOC +
+        LOG(VB_CHANNEL, LOG_DEBUG, LOC +
             QString("parse_chan_info name='%2'").arg(name));
-        LOG(VB_GENERAL, LOG_INFO, LOC +
+        LOG(VB_CHANNEL, LOG_DEBUG, LOC +
             QString("parse_chan_info channum='%2'").arg(channum));
+        LOG(VB_CHANNEL, LOG_DEBUG, LOC +
+            QString("parse_chan_info logo='%2'").arg(logo));
         for (auto it = values.cbegin(); it != values.cend(); ++it)
         {
-            LOG(VB_GENERAL, LOG_INFO, LOC +
+            LOG(VB_CHANNEL, LOG_DEBUG, LOC +
                 QString("parse_chan_info [%1]='%2'")
                 .arg(it.key(), *it));
         }
         info = IPTVChannelInfo(
-            name, values["xmltvid"],
+            name, values["xmltvid"], logo,
             line, values["bitrate"].toUInt(),
             values["fectype"],
             values["fecurl0"], values["fecbitrate0"].toUInt(),
@@ -471,114 +616,152 @@ static bool parse_chan_info(const QString   &rawdata,
     }
 }
 
+// Search for channel name in last part of the EXTINF line
+static QString parse_extinf_name_trailing(const QString& line)
+{
+    QString result;
+    static const QRegularExpression re_name { R"(.*,(.*)$)" };
+    auto match = re_name.match(line);
+    if (match.hasMatch())
+    {
+        result = match.captured(1).simplified();
+    }
+    return result;
+}
+
+// Search for field value, e.g. field="value", in EXTINF line
+static QString parse_extinf_field(QString line, const QString& field)
+{
+    QString result;
+    auto pos = line.indexOf(field, 0, Qt::CaseInsensitive);
+    if (pos > 0)
+    {
+        line.remove(0, pos);
+        static const QRegularExpression re { R"(\"([^\"]*)\"(.*)$)" };
+        auto match = re.match(line);
+        if (match.hasMatch())
+        {
+            result = match.captured(1).simplified();
+        }
+    }
+
+    LOG(VB_CHANNEL, LOG_INFO, LOC + QString("line:%1  field:%2  result:%3")
+        .arg(line, field, result));
+
+    return result;
+}
+
+// Search for channel number, channel name and channel logo in EXTINF line
 static bool parse_extinf(const QString &line,
                          QString       &channum,
                          QString       &name,
-                         int           &nextChanNum)
+                         QString       &logo)
 {
-    // Parse extension portion, Freebox or SAT>IP format
-    static const QRegularExpression chanNumName1
-        { R"(^-?\d+,(\d+)(?:\.\s|\s-\s)(.*)$)" };
-    auto match = chanNumName1.match(line);
-    if (match.hasMatch())
-    {
-        channum = match.captured(1);
-        name = match.captured(2);
-        return true;
-    }
 
-    // Parse extension portion, A1 TV format
-    static const QRegularExpression chanNumName2
-        { "^-?\\d+\\s+[^,]*tvg-num=\"(\\d+)\"[^,]*,(.*)$" };
-    match = chanNumName2.match(line);
-    if (match.hasMatch())
-    {
-        channum = match.captured(1);
-        name = match.captured(2);
-        return true;
-    }
+    // Parse EXTINF line with TVG fields, Zatto style
+    // EG. #EXTINF:0001 tvg-id="ITV1London.uk" tvg-chno="90001" group-title="General Interest" tvg-logo="https://images.zattic.com/logos/ee3c9d2ac083eb2154b5/black/210x120.png", ITV 1 HD
 
-    // Parse extension portion, Moviestar TV number then name
-    static const QRegularExpression chanNumName3
-        { R"(^-?\d+,\[(\d+)\]\s+(.*)$)" };
-    match = chanNumName3.match(line);
-    if (match.hasMatch())
-    {
-        channum = match.captured(1);
-        name = match.captured(2);
-        return true;
-    }
-
-    // Parse extension portion, Moviestar TV name then number
-    static const QRegularExpression chanNumName4
-        { R"(^-?\d+,(.*)\s+\[(\d+)\]$)" };
-    match = chanNumName4.match(line);
-    if (match.hasMatch())
-    {
-        channum = match.captured(2);
-        name = match.captured(1);
-        return true;
-    }
-
-    // Parse extension portion, russion iptv plugin style
-    static const QRegularExpression chanNumName5
-        { R"(^(-?\d+)\s+[^,]*,\s*(.*)$)" };
-    match = chanNumName5.match(line);
-    if (match.hasMatch())
-    {
-        channum = match.captured(1).simplified();
-        name = match.captured(2).simplified();
-        bool ok = false;
-        int channel_number = channum.toInt (&ok);
-        if (ok && (channel_number > 0))
-        {
-            return true;
-        }
-    }
-
-    // Parse extension, HDHomeRun style
+    // Parse EXTINF line, HDHomeRun style
     // EG. #EXTINF:-1 channel-id="22" channel-number="22" tvg-name="Omroep Brabant",22 Omroep Brabant
     //     #EXTINF:-1 channel-id="2.1" channel-number="2.1" tvg-name="CBS2-HD",2.1 CBS2-HD
-    static const QRegularExpression chanNumName6
-        { R"(^-?\d+\s+channel-id=\"([^\"]+)\"\s+channel-number=\"([^\"]+)\"\s+tvg-name=\"([^\"]+)\".*$)" };
-    match = chanNumName6.match(line);
-    if (match.hasMatch())
+
+    // Parse EXTINF line, https://github.com/iptv-org/iptv/blob/master/channels/ style
+    // EG. #EXTINF:-1 tvg-id="" tvg-name="" tvg-logo="https://i.imgur.com/VejnhiB.png" group-title="News",BBC News
     {
-        channum = match.captured(2).simplified();
-        name = match.captured(3).simplified();
-        if (!channum.isEmpty() && !name.isEmpty())
+        channum = parse_extinf_field(line, "tvg-chno");
+        if (channum.isEmpty())
+        {
+            channum = parse_extinf_field(line, "channel-number");
+        }
+        logo = parse_extinf_field(line, "tvg-logo");
+        name = parse_extinf_field(line, "tvg-name");
+        if (name.isEmpty())
+        {
+            name = parse_extinf_name_trailing(line);
+        }
+
+        // If we only have the name then it might be another format
+        if (!name.isEmpty() && !channum.isEmpty())
         {
             return true;
         }
     }
 
-    // Parse extension portion, https://github.com/iptv-org/iptv/blob/master/channels/ style
-    // EG. #EXTINF:-1 tvg-id="" tvg-name="" tvg-logo="https://i.imgur.com/VejnhiB.png" group-title="News",BBC News
-    static const QRegularExpression chanNumName7
-        { "(^-?\\d+)\\s+[^,]*[^,]*,(.*)$" };
-    match = chanNumName7.match(line);
-    if (match.hasMatch())
+    // Freebox or SAT>IP format
     {
-        channum = match.captured(1).simplified();
-        name = match.captured(2).simplified();
-
-        bool ok = false;
-        int channel_number = channum.toInt(&ok);
-        if (ok && channel_number > 0)
+        static const QRegularExpression re
+            { R"(^-?\d+,(\d+)(?:\.\s|\s-\s)(.*)$)" };
+        auto match = re.match(line);
+        if (match.hasMatch())
         {
-            if (channel_number >= nextChanNum)
-                nextChanNum = channel_number + 1;
-            return true;
+            channum = match.captured(1);
+            name = match.captured(2);
+            if (!channum.isEmpty() && !name.isEmpty())
+            {
+                return true;
+            }
         }
+    }
 
-        // no valid channel number found use the default next one
-        LOG(VB_GENERAL, LOG_ERR, QString("No channel number found, using next available: %1 for channel: %2").arg(nextChanNum).arg(name));
-        channum = QString::number(nextChanNum);
-        nextChanNum++;
+    // Moviestar TV number then name
+    {
+        static const QRegularExpression re
+            { R"(^-?\d+,\[(\d+)\]\s+(.*)$)" };
+        auto match = re.match(line);
+        if (match.hasMatch())
+        {
+            channum = match.captured(1);
+            name = match.captured(2);
+            if (!channum.isEmpty() && !name.isEmpty())
+            {
+                return true;
+            }
+        }
+    }
+
+    // Moviestar TV name then number
+    {
+        static const QRegularExpression re
+            { R"(^-?\d+,(.*)\s+\[(\d+)\]$)" };
+        auto match = re.match(line);
+        if (match.hasMatch())
+        {
+            channum = match.captured(2);
+            name = match.captured(1);
+            if (!channum.isEmpty() && !name.isEmpty())
+            {
+                return true;
+            }
+        }
+    }
+
+    // Parse russion iptv plugin style
+    {
+        static const QRegularExpression re
+            { R"(^(-?\d+)\s+[^,]*,\s*(.*)$)" };
+        auto match = re.match(line);
+        if (match.hasMatch())
+        {
+            channum = match.captured(1).simplified();
+            name = match.captured(2).simplified();
+            bool ok = false;
+            int channel_number = channum.toInt (&ok);
+            if (ok && (channel_number > 0) && !name.isEmpty())
+            {
+                return true;
+            }
+        }
+    }
+
+    // Almost a catchall: just get the name from the end of the line
+    // EG. #EXTINF:-1,Channel Title
+    name = parse_extinf_name_trailing(line);
+    if (!name.isEmpty())
+    {
         return true;
     }
 
-    // not one of the formats we support
+    // Not one of the formats we support
     QString msg = LOC + QString("Invalid header in channel list line \n\t\t\tEXTINF:%1").arg(line);
     LOG(VB_GENERAL, LOG_ERR, msg);
     return false;

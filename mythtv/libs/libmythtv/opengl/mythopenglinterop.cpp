@@ -1,30 +1,31 @@
 // MythTV
-#include "libmythbase/mythcorecontext.h"
+#include "libmythbase/mythconfig.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythui/opengl/mythrenderopengl.h"
 
 #include "mythplayerui.h"
 #include "mythvideocolourspace.h"
 #include "opengl/mythopenglinterop.h"
 
-#ifdef USING_VAAPI
+#if CONFIG_VAAPI
 #include "mythvaapiinterop.h"
 #endif
-#ifdef USING_VTB
+#if CONFIG_VIDEOTOOLBOX
 #include "mythvtbinterop.h"
 #endif
-#ifdef USING_MEDIACODEC
+#if CONFIG_MEDIACODEC
 #include "decoders/mythmediacodeccontext.h"
 #endif
-#ifdef USING_VDPAU
+#if CONFIG_VDPAU
 #include "mythvdpauinterop.h"
 #endif
-#ifdef USING_NVDEC
+#if CONFIG_NVDEC
 #include "mythnvdecinterop.h"
 #endif
-#ifdef USING_MMAL
+#if CONFIG_MMAL
 #include "mythmmalinterop.h"
 #endif
-#ifdef USING_EGL
+#if CONFIG_EGL
 #include "mythdrmprimeinterop.h"
 #endif
 
@@ -36,31 +37,31 @@ void MythOpenGLInterop::GetTypes(MythRender* Render, InteropMap& Types)
     if (!openglrender)
         return;
 
-#ifdef USING_MEDIACODEC
+#if CONFIG_MEDIACODEC
     Types[FMT_MEDIACODEC] = { GL_MEDIACODEC };
 #endif
 
-#ifdef USING_VDPAU
+#if CONFIG_VDPAU
     MythVDPAUInterop::GetVDPAUTypes(openglrender, Types);
 #endif
 
-#ifdef USING_VAAPI
+#if CONFIG_VAAPI
     MythVAAPIInterop::GetVAAPITypes(openglrender, Types);
 #endif
 
-#ifdef USING_EGL
+#if CONFIG_EGL
     MythDRMPRIMEInterop::GetDRMTypes(openglrender, Types);
 #endif
 
-#ifdef USING_MMAL
+#if CONFIG_MMAL
     MythMMALInterop::GetMMALTypes(openglrender, Types);
 #endif
 
-#ifdef USING_VTB
+#if CONFIG_VIDEOTOOLBOX
     MythVTBInterop::GetVTBTypes(openglrender, Types);
 #endif
 
-#ifdef USING_NVDEC
+#if CONFIG_NVDEC
     MythNVDECInterop::GetNVDECTypes(openglrender, Types);
 #endif
 }
@@ -158,3 +159,5 @@ void MythOpenGLInterop::DeleteTextures()
         m_openglTextures.clear();
     }
 }
+
+#include "moc_mythopenglinterop.cpp"

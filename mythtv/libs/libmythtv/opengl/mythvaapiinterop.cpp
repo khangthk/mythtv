@@ -1,5 +1,16 @@
-﻿// MythTV
-#ifdef USING_DRM_VIDEO
+﻿#include "mythvaapiinterop.h"
+
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtEnvironmentVariables>
+#endif
+
+// MythTV
+#include "libmythbase/mythconfig.h"
+#include "libmythbase/mythlogging.h"
+#include "libmythtv/mythavframe.h"
+
+#if CONFIG_DRM_VIDEO
 #include "libmythui/platforms/mythdisplaydrm.h"
 #endif
 
@@ -7,9 +18,12 @@
 #include "mythplayerui.h"
 #include "mythvideocolourspace.h"
 #include "fourcc.h"
-#include "mythvaapiinterop.h"
+#if CONFIG_VAAPI_DRM
 #include "mythvaapidrminterop.h"
+#endif
+#if CONFIG_VAAPI_GLX
 #include "mythvaapiglxinterop.h"
+#endif
 
 extern "C" {
 #include "libavfilter/buffersrc.h"
@@ -41,29 +55,33 @@ void MythVAAPIInterop::GetVAAPITypes(MythRenderOpenGL* Context, MythInteropGPU::
         return;
 
     OpenGLLocker locker(Context);
-    bool egl = Context->IsEGL();
-    bool opengles = Context->isOpenGLES();
-    bool wayland = qgetenv("XDG_SESSION_TYPE").contains("wayland");
+    [[maybe_unused]] bool egl = Context->IsEGL();
+    [[maybe_unused]] bool opengles = Context->isOpenGLES();
+    [[maybe_unused]] bool wayland = qgetenv("XDG_SESSION_TYPE").contains("wayland");
 
     // best first
     MythInteropGPU::InteropTypes vaapitypes;
 
-#ifdef USING_DRM_VIDEO
+#if CONFIG_DRM_VIDEO
     if (MythDisplayDRM::DirectRenderingAvailable())
         vaapitypes.emplace_back(DRM_DRMPRIME);
 #endif
 
-#ifdef USING_EGL
+#if CONFIG_VAAPI_DRM && CONFIG_EGL
     // zero copy
     if (egl && MythVAAPIInteropDRM::IsSupported(Context))
         vaapitypes.emplace_back(GL_VAAPIEGLDRM);
 #endif
+#if CONFIG_VAAPI_GLX
+#   if CONFIG_VAAPI_X11
     // 1x copy
     if (!egl && !wayland && MythVAAPIInteropGLXPixmap::IsSupported(Context))
         vaapitypes.emplace_back(GL_VAAPIGLXPIX);
+#   endif
     // 2x copy
     if (!egl && !opengles && !wayland)
         vaapitypes.emplace_back(GL_VAAPIGLXCOPY);
+#endif
 
     if (!vaapitypes.empty())
         Types[FMT_VAAPI] = vaapitypes;
@@ -77,16 +95,20 @@ MythVAAPIInterop* MythVAAPIInterop::CreateVAAPI(MythPlayerUI *Player, MythRender
     const auto & types = Player->GetInteropTypes();
     if (const auto & vaapi = types.find(FMT_VAAPI); vaapi != types.cend())
     {
-        for (auto type : vaapi->second)
+        for ([[maybe_unused]] auto type : vaapi->second)
         {
-#ifdef USING_EGL
+#if CONFIG_VAAPI_DRM && CONFIG_EGL
             if ((type == GL_VAAPIEGLDRM) || (type == DRM_DRMPRIME))
                 return new MythVAAPIInteropDRM(Player, Context, type);
 #endif
+#if CONFIG_VAAPI_GLX
+#   if CONFIG_VAAPI_X11
             if (type == GL_VAAPIGLXPIX)
                 return new MythVAAPIInteropGLXPixmap(Player, Context);
+#   endif
             if (type == GL_VAAPIGLXCOPY)
                 return new MythVAAPIInteropGLXCopy(Player, Context);
+#endif
         }
     }
     return nullptr;
@@ -206,12 +228,11 @@ bool MythVAAPIInterop::SetupDeinterlacer(MythDeintType Deinterlacer, bool Double
     }
 
     int ret = 0;
-    QString args;
     QString deinterlacer = "bob";
     if (DEINT_MEDIUM == Deinterlacer)
         deinterlacer = "motion_adaptive";
     else if (DEINT_HIGH == Deinterlacer)
-        deinterlacer = "motion_compensated";
+        deinterlacer = "default";
 
     // N.B. set auto to 0 otherwise we confuse playback if VAAPI does not deinterlace
     QString filters = QString("deinterlace_vaapi=mode=%1:rate=%2:auto=0")
@@ -220,37 +241,62 @@ bool MythVAAPIInterop::SetupDeinterlacer(MythDeintType Deinterlacer, bool Double
     const AVFilter *buffersink = avfilter_get_by_name("buffersink");
     AVFilterInOut *outputs = avfilter_inout_alloc();
     AVFilterInOut *inputs  = avfilter_inout_alloc();
-    AVBufferSrcParameters* params = nullptr;
+
+    // Automatically clean up memory allocation at function exit
+    auto cleanup_fn = [&](int */*x*/) {
+        if (ret < 0) {
+            avfilter_free(Source);
+            Source = nullptr;
+            avfilter_graph_free(&Graph);
+            Graph = nullptr;
+        }
+        avfilter_inout_free(&inputs);
+        avfilter_inout_free(&outputs);
+    };
+    std::unique_ptr<int,decltype(cleanup_fn)> cleanup { &ret, cleanup_fn };
 
     Graph = avfilter_graph_alloc();
     if (!outputs || !inputs || !Graph)
     {
         ret = AVERROR(ENOMEM);
-        goto end;
+        return false;
     }
 
     /* buffer video source: the decoded frames from the decoder will be inserted here. */
-    args = QString("video_size=%1x%2:pix_fmt=%3:time_base=1/1")
-                .arg(Width).arg(Height).arg(AV_PIX_FMT_VAAPI);
-
-    ret = avfilter_graph_create_filter(&Source, buffersrc, "in",
-                                       args.toLocal8Bit().constData(), nullptr, Graph);
-    if (ret < 0)
+    Source = avfilter_graph_alloc_filter(Graph, buffersrc, "in");
+    if (Source == nullptr)
     {
-        LOG(VB_GENERAL, LOG_ERR, LOC + "avfilter_graph_create_filter failed for buffer source");
-        goto end;
+        ret = AVERROR(ENOMEM);
+        LOG(VB_GENERAL, LOG_ERR, "avfilter_graph_alloc_filter() failed to allocate memory.");
+        return false;
     }
 
-    params = av_buffersrc_parameters_alloc();
+    AVBufferSrcParameters* params = av_buffersrc_parameters_alloc();
+    if (params == nullptr)
+    {
+        ret = AVERROR(ENOMEM);
+        LOG(VB_GENERAL, LOG_ERR, "av_buffersrc_parameters_alloc() failed to allocate memory.");
+        return false;
+    }
+    params->format        = AV_PIX_FMT_VAAPI;
+    params->time_base     = {.num=1, .den=1};
+    params->width         = Width;
+    params->height        = Height;
     params->hw_frames_ctx = FramesContext;
     ret = av_buffersrc_parameters_set(Source, params);
-
+    av_freep(reinterpret_cast<void*>(&params));
     if (ret < 0)
     {
         LOG(VB_GENERAL, LOG_ERR, LOC + "av_buffersrc_parameters_set failed");
-        goto end;
+        return false;
     }
-    av_freep(reinterpret_cast<void*>(&params));
+
+    ret = avfilter_init_str(Source, nullptr);
+    if (ret < 0)
+    {
+        LOG(VB_GENERAL, LOG_ERR, LOC + "avfilter_init_str() failed for buffer source");
+        return false;
+    }
 
     /* buffer video sink: to terminate the filter chain. */
     ret = avfilter_graph_create_filter(&Sink, buffersink, "out",
@@ -258,7 +304,7 @@ bool MythVAAPIInterop::SetupDeinterlacer(MythDeintType Deinterlacer, bool Double
     if (ret < 0)
     {
         LOG(VB_GENERAL, LOG_ERR, LOC + "avfilter_graph_create_filter failed for buffer sink");
-        goto end;
+        return false;
     }
 
     /*
@@ -288,13 +334,13 @@ bool MythVAAPIInterop::SetupDeinterlacer(MythDeintType Deinterlacer, bool Double
     inputs->pad_idx    = 0;
     inputs->next       = nullptr;
 
-    ret = avfilter_graph_parse_ptr(Graph, filters.toLocal8Bit(),
+    ret = avfilter_graph_parse_ptr(Graph, filters.toLocal8Bit().constData(),
                                    &inputs, &outputs, nullptr);
     if (ret < 0)
     {
         LOG(VB_GENERAL, LOG_ERR, LOC + QString("avfilter_graph_parse_ptr failed for %1")
             .arg(filters));
-        goto end;
+        return false;
     }
 
     ret = avfilter_graph_config(Graph, nullptr);
@@ -302,21 +348,13 @@ bool MythVAAPIInterop::SetupDeinterlacer(MythDeintType Deinterlacer, bool Double
     {
         LOG(VB_GENERAL, LOG_ERR, LOC +
             QString("VAAPI deinterlacer config failed - '%1' unsupported?").arg(deinterlacer));
-        goto end;
+        return false;
     }
 
     LOG(VB_GENERAL, LOG_INFO, LOC + QString("Created deinterlacer '%1'")
         .arg(MythVideoFrame::DeinterlacerName(Deinterlacer | DEINT_DRIVER, DoubleRate, FMT_VAAPI)));
 
-end:
-    if (ret < 0)
-    {
-        avfilter_graph_free(&Graph);
-        Graph = nullptr;
-    }
-    avfilter_inout_free(&inputs);
-    avfilter_inout_free(&outputs);
-    return ret >= 0;
+    return true;
 }
 
 VASurfaceID MythVAAPIInterop::Deinterlace(MythVideoFrame *Frame, VASurfaceID Current, FrameScanType Scan)
@@ -474,9 +512,12 @@ VASurfaceID MythVAAPIInterop::Deinterlace(MythVideoFrame *Frame, VASurfaceID Cur
 
                 // add another frame
                 MythAVFrame sourceframe;
-                sourceframe->top_field_first =
-                    static_cast<int>(Frame->m_interlacedReverse ? !Frame->m_topFieldFirst : Frame->m_topFieldFirst);
-                sourceframe->interlaced_frame = 1;
+                sourceframe->flags &= ~AV_FRAME_FLAG_TOP_FIELD_FIRST;
+                if (Frame->m_interlacedReverse ^ Frame->m_topFieldFirst)
+                {
+                    sourceframe->flags |= AV_FRAME_FLAG_TOP_FIELD_FIRST;
+                }
+                sourceframe->flags |= AV_FRAME_FLAG_INTERLACED;
                 sourceframe->data[3] = Frame->m_buffer;
                 auto* buffer = reinterpret_cast<AVBufferRef*>(Frame->m_priv[0]);
                 sourceframe->buf[0] = buffer ? av_buffer_ref(buffer) : nullptr;

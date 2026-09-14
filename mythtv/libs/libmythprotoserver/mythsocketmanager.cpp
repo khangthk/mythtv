@@ -1,4 +1,5 @@
 // Qt
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QMutex>
 #include <QReadWriteLock>
 #include <QReadLocker>
@@ -12,8 +13,6 @@
 
 // MythTV
 #include "libmythbase/mthread.h"
-#include "libmythbase/mythconfig.h"
-#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythversion.h"
 #include "libmythbase/referencecounter.h"
@@ -141,7 +140,7 @@ SocketHandler *MythSocketManager::GetConnectionBySocket(MythSocket *sock)
     if (!m_socketMap.contains(sock))
         return nullptr;
 
-    SocketHandler *handler = m_socketMap[sock];
+    SocketHandler *handler = m_socketMap.value(sock);
     handler->IncrRef();
     return handler;
 }
@@ -375,3 +374,5 @@ void MythSocketManager::HandleDone(MythSocket *sock)
     sock->DisconnectFromHost();
 }
 
+#include "moc_mythsocketmanager.cpp"
+#include "moc_socketrequesthandler.cpp" // header only

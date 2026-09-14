@@ -2,30 +2,28 @@
 #include <algorithm>
 
 #include "libmythbase/iso639.h"
-#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythlogging.h"
-#include "libmythbase/programinfo.h"
 
 #include "Bluray/mythbdbuffer.h"
 #include "DVD/mythdvdbuffer.h"
 #include "decoderbase.h"
 #include "mythcodeccontext.h"
 #include "mythplayer.h"
+#include "programinfo.h"
 
 #define LOC QString("Dec: ")
 
 DecoderBase::DecoderBase(MythPlayer *parent, const ProgramInfo &pginfo)
     : m_parent(parent), m_playbackInfo(new ProgramInfo(pginfo)),
       m_audio(m_parent->GetAudio()),
-      m_totalDuration(AVRationalInit(0)),
 
       // language preference
       m_languagePreference(iso639_get_language_key_list())
 {
     ResetTracks();
-    m_tracks[kTrackTypeAudio].emplace_back(0, 0, 0, 0, 0);
-    m_tracks[kTrackTypeCC608].emplace_back(0, 0, 0, 1, 0);
-    m_tracks[kTrackTypeCC608].emplace_back(0, 0, 2, 3, 0);
+    m_tracks[kTrackTypeAudio].emplace_back(0, 0, 0, 0, kAudioTypeNormal);
+    m_tracks[kTrackTypeCC608].emplace_back(0, 1);
+    m_tracks[kTrackTypeCC608].emplace_back(0, 3);
 }
 
 DecoderBase::~DecoderBase()
@@ -61,7 +59,7 @@ void DecoderBase::Reset(bool reset_video_data, bool seek_reset, bool reset_file)
         m_frameCounter += 100;
         m_fpsSkip = 0;
         m_framesRead = 0;
-        m_totalDuration = AVRationalInit(0);
+        m_totalDuration = MythAVRational(0);
         m_dontSyncPositionMap = false;
     }
 
@@ -181,7 +179,9 @@ bool DecoderBase::PosMapFromDb(void)
 
     for (auto it = posMap.cbegin(); it != posMap.cend(); ++it)
     {
-        PosMapEntry e = {it.key(), it.key() * m_keyframeDist, *it};
+        PosMapEntry e = {.index=it.key(),
+                         .adjFrame=it.key() * m_keyframeDist,
+                         .pos=*it};
         m_positionMap.push_back(e);
     }
 
@@ -250,7 +250,9 @@ bool DecoderBase::PosMapFromEnc(void)
         if (it.key() <= last_index)
             continue;
 
-        PosMapEntry e = {it.key(), it.key() * m_keyframeDist, *it};
+        PosMapEntry e = {.index=it.key(),
+                         .adjFrame=it.key() * m_keyframeDist,
+                         .pos=*it};
         m_positionMap.push_back(e);
     }
 
@@ -545,8 +547,9 @@ uint64_t DecoderBase::SavePositionMapDelta(long long first, long long last)
         QString("Saving position map [%1,%2] w/%3 keyframes, "
                 "took (%4,%5,%6) ms")
             .arg(first).arg(last).arg(saved)
-            .arg(ttm.elapsed())
-            .arg(ctm.elapsed()-stm.elapsed()).arg(stm.elapsed()));
+            .arg(ttm.elapsed().count())
+            .arg(ctm.elapsed().count()-stm.elapsed().count())
+            .arg(stm.elapsed().count()));
 #endif
 
     return saved;
@@ -735,10 +738,6 @@ bool DecoderBase::DoFastForward(long long desiredFrame, bool discardFrames)
         return DoRewind(desiredFrame, discardFrames);
     desiredFrame = std::max(desiredFrame, m_framesPlayed);
 
-    // Save rawframe state, for later restoration...
-    bool oldrawstate = m_getRawFrames;
-    m_getRawFrames = false;
-
     ConditionallyUpdatePosMap(desiredFrame);
 
     // Fetch last keyframe in position map
@@ -778,8 +777,6 @@ bool DecoderBase::DoFastForward(long long desiredFrame, bool discardFrames)
 
         if (m_atEof)
         {
-            // Re-enable rawframe state if it was enabled before FF
-            m_getRawFrames = oldrawstate;
             return false;
         }
     }
@@ -788,8 +785,6 @@ bool DecoderBase::DoFastForward(long long desiredFrame, bool discardFrames)
         QMutexLocker locker(&m_positionMapLock);
         if (m_positionMap.empty())
         {
-            // Re-enable rawframe state if it was enabled before FF
-            m_getRawFrames = oldrawstate;
             return false;
         }
     }
@@ -806,9 +801,6 @@ bool DecoderBase::DoFastForward(long long desiredFrame, bool discardFrames)
 
     if (discardFrames || m_transcoding)
         m_parent->SetFramesPlayed(m_framesPlayed+1);
-
-    // Re-enable rawframe state if it was enabled before FF
-    m_getRawFrames = oldrawstate;
 
     return true;
 }
@@ -883,7 +875,7 @@ void DecoderBase::FileChanged(void)
     ResetPosMap();
     m_framesPlayed = 0;
     m_framesRead = 0;
-    m_totalDuration = AVRationalInit(0);
+    m_totalDuration = MythAVRational(0);
 
     m_waitingForChange = false;
     m_justAfterChange = true;
@@ -1023,24 +1015,6 @@ int DecoderBase::NextTrack(uint Type)
     if (size)
         next_track = (std::max(0, m_currentTrack[Type]) + 1) % size;
     return next_track;
-}
-
-bool DecoderBase::InsertTrack(uint Type, const StreamInfo &Info)
-{
-    QMutexLocker locker(&m_trackLock);
-
-    if (std::any_of(m_tracks[Type].cbegin(), m_tracks[Type].cend(),
-                    [&](const StreamInfo& Si) { return Si.m_stream_id == Info.m_stream_id; } ))
-    {
-        return false;
-    }
-
-    m_tracks[Type].push_back(Info);
-
-    if (m_parent)
-        emit m_parent->SignalTracksChanged(Type);
-
-    return true;
 }
 
 /** \fn DecoderBase::BestTrack(uint, bool)
@@ -1190,7 +1164,7 @@ int DecoderBase::AutoSelectTrack(uint Type)
             .arg(m_currentTrack[Type]+1).arg(Type).arg(iso639_key_toName(lang)).arg(lang));
 
     if (m_parent && (oldTrack != m_currentTrack[Type]))
-        emit m_parent->SignalTracksChanged(Type);
+        m_parent->tracksChanged(Type);
 
     return selTrack;
 }
@@ -1204,7 +1178,7 @@ void DecoderBase::AutoSelectTracks(void)
 void DecoderBase::ResetTracks(void)
 {
     QMutexLocker locker(&m_trackLock);
-    std::fill(m_currentTrack.begin(), m_currentTrack.end(), -1);
+    std::ranges::fill(m_currentTrack, -1);
 }
 
 QString toString(TrackType type)
@@ -1293,10 +1267,10 @@ QString toString(AudioTrackType type)
 
 void DecoderBase::SaveTotalDuration(void)
 {
-    if (!m_playbackInfo || av_q2d(m_totalDuration) == 0)
+    if (!m_playbackInfo || !m_totalDuration.isNonzero() || !m_totalDuration.isValid())
         return;
 
-    m_playbackInfo->SaveTotalDuration(millisecondsFromFloat(1000 * av_q2d(m_totalDuration)));
+    m_playbackInfo->SaveTotalDuration(std::chrono::milliseconds{m_totalDuration.toFixed(1000)});
 }
 
 void DecoderBase::SaveTotalFrames(void)

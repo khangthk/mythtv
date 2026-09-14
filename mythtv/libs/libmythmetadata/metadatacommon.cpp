@@ -1,4 +1,6 @@
+// C++ headers
 #include <algorithm>
+#include <ranges>
 #include <utility>
 
 // Qt headers
@@ -11,8 +13,8 @@
 #include "libmythbase/mythlocale.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythmiscutil.h"
-#include "libmythbase/programinfo.h"
 #include "libmythbase/rssparse.h"
+#include "libmythtv/programinfo.h"
 
 #include "metadatacommon.h"
 
@@ -314,34 +316,23 @@ MetadataLookup::MetadataLookup(
 
 QList<PersonInfo> MetadataLookup::GetPeople(PeopleType type) const
 {
+    // QMultiMap::values() returns items in reverse order
+    // See https://doc.qt.io/qt-6/qmultimap.html#values-1
+    QList<PersonInfo> orig = m_people.values(type);
     QList<PersonInfo> ret;
-    // QMultiMap::values() returns items in reverse order which we need to
-    // correct by iterating back over the list
-    // See http://qt-project.org/doc/qt-4.8/qmultimap.html#details
-    // Specifically "The items that share the same key are available from "
-    //              "most recently to least recently inserted."
-    QListIterator<PersonInfo> it(m_people.values(type));
-    it.toBack();
-    while (it.hasPrevious())
-        ret.append(it.previous());
-
+    ret.reserve(orig.size());
+    std::ranges::copy(std::ranges::reverse_view(orig), std::back_inserter(ret));
     return ret;
 }
 
 ArtworkList MetadataLookup::GetArtwork(VideoArtworkType type) const
 {
+    // QMultiMap::values() returns items in reverse order
+    // See https://doc.qt.io/qt-6/qmultimap.html#values-1
+    ArtworkList orig = m_artwork.values(type);
     ArtworkList ret;
-
-    // QMultiMap::values() returns items in reverse order which we need to
-    // correct by iterating back over the list
-    // See http://qt-project.org/doc/qt-4.8/qmultimap.html#details
-    // Specifically "The items that share the same key are available from "
-    //              "most recently to least recently inserted."
-    QListIterator<ArtworkInfo> it(m_artwork.values(type));
-    it.toBack();
-    while (it.hasPrevious())
-        ret.append(it.previous());
-
+    ret.reserve(orig.size());
+    std::ranges::copy(std::ranges::reverse_view(orig), std::back_inserter(ret));
     return ret;
 }
 
@@ -1368,7 +1359,9 @@ int editDistance( const QString& s, const QString& t )
                 s[i - 1] == t[j - 1]
 #endif
                 )
+            {
                 D( i, j ) = D( i - 1, j - 1 );
+            }
             else
             {
                 int x = D( i - 1, j );
@@ -1464,6 +1457,10 @@ QDateTime RFC822TimeToQDateTime(const QString& t)
     if (result.isNull() || !result.isValid())
         return {};
     result = result.addSecs((hoursShift * 3600 * (-1)) + (minutesShift *60 * (-1)));
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     result.setTimeSpec(Qt::UTC);
+#else
+    result.setTimeZone(QTimeZone(QTimeZone::UTC));
+#endif
     return result;
 }

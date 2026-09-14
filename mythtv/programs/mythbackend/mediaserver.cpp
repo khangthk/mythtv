@@ -11,37 +11,26 @@
 #include "libmythbase/mythconfig.h"
 
 // Qt
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QNetworkInterface>
 #include <QNetworkProxy>
-#if CONFIG_QTSCRIPT
-#include <QScriptEngine>
-#endif
 
 // MythTV
-#ifdef USING_LIBDNS_SD
+#if CONFIG_LIBDNS_SD
 #include "libmythbase/bonjourregister.h"
 #endif
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythdirs.h"
-#include "libmythupnp/htmlserver.h"
+#include "libmythbase/mythlogging.h"
 
 // MythBackend
-#include "httpconfig.h"
 #include "internetContent.h"
 #include "mediaserver.h"
 #include "upnpcdsmusic.h"
 #include "upnpcdstv.h"
 #include "upnpcdsvideo.h"
 
-#include "serviceHosts/mythServiceHost.h"
-#include "serviceHosts/guideServiceHost.h"
-#include "serviceHosts/contentServiceHost.h"
-#include "serviceHosts/dvrServiceHost.h"
-#include "serviceHosts/channelServiceHost.h"
-#include "serviceHosts/videoServiceHost.h"
-#include "serviceHosts/musicServiceHost.h"
-#include "serviceHosts/captureServiceHost.h"
-#include "serviceHosts/imageServiceHost.h"
 
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
@@ -127,56 +116,7 @@ void MediaServer::Init(bool bIsMaster, bool bDisableUPnp /* = false */)
 
     LOG(VB_UPNP, LOG_INFO, "MediaServer: Registering Http Server Extensions.");
 
-    auto *pHtmlServer =
-        new HtmlServerExtension(m_sSharePath + "html", "backend_");
-    pHttpServer->RegisterExtension( pHtmlServer );
-    pHttpServer->RegisterExtension( new HttpConfig() );
     pHttpServer->RegisterExtension( new InternetContent   ( m_sSharePath ));
-
-    pHttpServer->RegisterExtension( new MythServiceHost   ( m_sSharePath ));
-    pHttpServer->RegisterExtension( new GuideServiceHost  ( m_sSharePath ));
-    pHttpServer->RegisterExtension( new ContentServiceHost( m_sSharePath ));
-    pHttpServer->RegisterExtension( new DvrServiceHost    ( m_sSharePath ));
-    pHttpServer->RegisterExtension( new ChannelServiceHost( m_sSharePath ));
-    pHttpServer->RegisterExtension( new VideoServiceHost  ( m_sSharePath ));
-    pHttpServer->RegisterExtension( new MusicServiceHost  ( m_sSharePath ));
-    pHttpServer->RegisterExtension( new CaptureServiceHost( m_sSharePath ));
-    pHttpServer->RegisterExtension( new ImageServiceHost  ( m_sSharePath ));
-
-
-    // ------------------------------------------------------------------
-    // Register Service Types with Scripting Engine
-    //
-    // -=>NOTE: We need to know the actual type at compile time for this
-    //          to work, so it needs to be done here.  I'm still looking
-    //          into ways that we may encapsulate this in the service
-    //          classes. - dblain
-    // ------------------------------------------------------------------
-
-#if CONFIG_QTSCRIPT
-     QScriptEngine* pEngine = pHtmlServer->ScriptEngine();
-
-     pEngine->globalObject().setProperty("Myth"   ,
-         pEngine->scriptValueFromQMetaObject< ScriptableMyth    >() );
-     pEngine->globalObject().setProperty("Guide"  ,
-         pEngine->scriptValueFromQMetaObject< ScriptableGuide   >() );
-     pEngine->globalObject().setProperty("Content",
-         pEngine->scriptValueFromQMetaObject< ScriptableContent >() );
-     pEngine->globalObject().setProperty("Dvr"    ,
-         pEngine->scriptValueFromQMetaObject< ScriptableDvr     >() );
-     pEngine->globalObject().setProperty("Channel",
-         pEngine->scriptValueFromQMetaObject< ScriptableChannel >() );
-     pEngine->globalObject().setProperty("Video"  ,
-         pEngine->scriptValueFromQMetaObject< ScriptableVideo   >() );
-     pEngine->globalObject().setProperty("Music"  ,
-         pEngine->scriptValueFromQMetaObject< ScriptableVideo   >() );
-     pEngine->globalObject().setProperty("Capture"  ,
-         pEngine->scriptValueFromQMetaObject< ScriptableCapture  >() );
-     pEngine->globalObject().setProperty("Image"  ,
-         pEngine->scriptValueFromQMetaObject< ScriptableImage   >() );
-#endif
-
-    // ------------------------------------------------------------------
 
     if (bDisableUPnp)
     {
@@ -261,7 +201,7 @@ void MediaServer::Init(bool bIsMaster, bool bDisableUPnp /* = false */)
 
         Start();
 
-#ifdef USING_LIBDNS_SD
+#if CONFIG_LIBDNS_SD
         // advertise using Bonjour
         if (gCoreContext)
         {
@@ -295,7 +235,7 @@ MediaServer::~MediaServer()
     delete m_webSocketServer;
     delete m_pHttpServer;
 
-#ifdef USING_LIBDNS_SD
+#if CONFIG_LIBDNS_SD
     delete m_bonjour;
 #endif
 }

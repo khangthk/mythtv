@@ -1,3 +1,7 @@
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QString>
 #include <QStringList>
 
@@ -100,7 +104,7 @@ bool BaseRequestHandler::HandleQueryLoad(SocketHandler *sock)
 {
     QStringList strlist;
 
-#if defined(_WIN32) || defined(Q_OS_ANDROID)
+#if defined(Q_OS_WINDOWS) || defined(Q_OS_ANDROID)
     strlist << "ERROR";
     strlist << "getloadavg() not supported";
 #else
@@ -133,7 +137,9 @@ bool BaseRequestHandler::HandleQueryUptime(SocketHandler *sock)
     std::chrono::seconds uptime = 0s;
 
     if (getUptime(uptime))
+    {
         strlist << QString::number(uptime.count());
+    }
     else
     {
         strlist << "ERROR";
@@ -203,3 +209,4 @@ bool BaseRequestHandler::HandleQueryTimeZone(SocketHandler *sock)
     return true;
 }
 
+#include "moc_basehandler.cpp"

@@ -1,4 +1,5 @@
 // qt
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QDateTime>
 #include <QFileInfo>
 #include <QImageReader>
@@ -6,11 +7,10 @@
 #include <QString>
 
 // MythTV
-#include <libmyth/mythcontext.h>
-#include <libmythbase/mythcoreutil.h>
 #include <libmythbase/mythdb.h>
 #include <libmythbase/mythdbcon.h>
 #include <libmythbase/mythdirs.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythbase/mythsorthelper.h>
 #include <libmythbase/mythsystemlegacy.h>
 #include <libmythbase/netgrabbermanager.h>
@@ -133,7 +133,9 @@ bool NetSearch::keyPressEvent(QKeyEvent *event)
         handled = true;
 
         if (action == "MENU")
+        {
             ShowMenu();
+        }
         else if (action == "PAGELEFT" && m_pagenum > 1)
         {
             if (m_prevPageToken.isEmpty())
@@ -383,7 +385,9 @@ void NetSearch::SearchFinished(void)
         SetText(QString::number(searchresults), "count");
 
     if (firstitem + returned == searchresults)
+    {
         m_maxpage = m_pagenum;
+    }
     else
     {
         m_maxpage = searchresults / returned; // Whole pages
@@ -414,7 +418,9 @@ void NetSearch::SearchTimeout(Search * /*item*/)
         m_okPopup = new MythConfirmationDialog(m_popupStack, message, false);
 
         if (m_okPopup->Create())
+        {
             m_popupStack->AddScreen(m_okPopup);
+        }
         else
         {
             delete m_okPopup;
@@ -565,7 +571,7 @@ void NetSearch::customEvent(QEvent *event)
 
         QString title = data->title;
         QString file = data->url;
-        uint pos = data->data.value<uint>();
+        uint pos = data->data.toUInt();
 
         if (file.isEmpty() || !((uint)m_searchResultList->GetCount() >= pos))
             return;
@@ -586,3 +592,5 @@ void NetSearch::customEvent(QEvent *event)
         NetBase::customEvent(event);
     }
 }
+
+#include "moc_netsearch.cpp"

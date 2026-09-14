@@ -8,17 +8,17 @@
 
 // MythTV
 #include "libmythbase/mythcorecontext.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythbase/mythtypes.h"
-#include "libmythbase/programtypes.h"
-#include "libmythbase/recordingtypes.h"
 #include "libmythbase/storagegroup.h"
 #include "libmythmetadata/mythuiimageresults.h"
 #include "libmythmetadata/mythuimetadataresults.h"
-#include "libmythmetadata/videoutils.h"
 #include "libmythtv/cardutil.h"
 #include "libmythtv/metadataimagehelper.h"
 #include "libmythtv/playgroup.h"
+#include "libmythtv/programtypes.h"
 #include "libmythtv/recordingprofile.h"
+#include "libmythtv/recordingtypes.h"
 #include "libmythtv/tv_play.h"
 #include "libmythui/mythdialogbox.h"
 #include "libmythui/mythmainwindow.h"
@@ -560,7 +560,7 @@ void ScheduleEditor::customEvent(QEvent *event)
 {
     if (event->type() == DialogCompletionEvent::kEventType)
     {
-        auto *dce = (DialogCompletionEvent*)(event);
+        auto *dce = (DialogCompletionEvent*)event;
 
         QString resultid  = dce->GetId();
         QString resulttext = dce->GetResultText();
@@ -1154,7 +1154,7 @@ void StoreOptEditor::customEvent(QEvent *event)
 {
     if (event->type() == DialogCompletionEvent::kEventType)
     {
-        auto *dce = (DialogCompletionEvent*)(event);
+        auto *dce = (DialogCompletionEvent*)event;
 
         QString resultid   = dce->GetId();
         QString resulttext = dce->GetResultText();
@@ -1440,7 +1440,7 @@ void MetadataOptions::SelectLocalFanart()
     if (!CanSetArtwork())
         return;
 
-    QString url = generate_file_url("Fanart",
+    QString url = StorageGroup::generate_file_url("Fanart",
                   gCoreContext->GetMasterHostName(),
                   "");
     FindImagePopup(url,"",*this, "fanart");
@@ -1451,7 +1451,7 @@ void MetadataOptions::SelectLocalCoverart()
     if (!CanSetArtwork())
         return;
 
-    QString url = generate_file_url("Coverart",
+    QString url = StorageGroup::generate_file_url("Coverart",
                   gCoreContext->GetMasterHostName(),
                   "");
     FindImagePopup(url,"",*this, "coverart");
@@ -1462,7 +1462,7 @@ void MetadataOptions::SelectLocalBanner()
     if (!CanSetArtwork())
         return;
 
-    QString url = generate_file_url("Banners",
+    QString url = StorageGroup::generate_file_url("Banners",
                   gCoreContext->GetMasterHostName(),
                   "");
     FindImagePopup(url,"",*this, "banner");
@@ -1550,6 +1550,7 @@ QStringList MetadataOptions::GetSupportedImageExtensionFilter()
     QStringList ret;
 
     QList<QByteArray> exts = QImageReader::supportedImageFormats();
+    ret.reserve(exts.size());
     for (const auto & ext : std::as_const(exts))
     {
         ret.append(QString("*.").append(ext));
@@ -1890,7 +1891,7 @@ void MetadataOptions::customEvent(QEvent *levent)
     }
     else if (levent->type() == DialogCompletionEvent::kEventType)
     {
-        auto *dce = (DialogCompletionEvent*)(levent);
+        auto *dce = (DialogCompletionEvent*)levent;
 
         const QString resultid = dce->GetId();
         ArtworkInfo info;
@@ -2321,7 +2322,7 @@ void FilterOptMixin::Save()
         MythUIButtonListItem *button = m_filtersList->GetItemAt(idx);
         if (button != nullptr &&
             button->state() == MythUIButtonListItem::FullChecked)
-            filter_mask |= (1 << button->GetData().value<uint32_t>());
+            filter_mask |= (1 << button->GetData().toUInt());
     }
     m_rule->m_filter = filter_mask;
 }
@@ -2889,3 +2890,5 @@ void PostProcMixin::TranscodeChanged(bool enable)
     if (m_transcodeprofileList)
         m_transcodeprofileList->SetEnabled(m_rule->m_autoTranscode);
 }
+
+#include "moc_scheduleeditor.cpp"

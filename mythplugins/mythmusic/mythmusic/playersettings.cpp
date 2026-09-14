@@ -3,6 +3,7 @@
 
 // MythTV
 #include <libmythbase/mythcorecontext.h>
+#include <libmythbase/mythlogging.h>
 
 // MythMusic
 #include "musicplayer.h"
@@ -107,3 +108,4 @@ void PlayerSettings::slotSave(void)
     Close();
 }
 
+#include "moc_playersettings.cpp"

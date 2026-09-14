@@ -7,6 +7,7 @@
 #include <cstdlib>
 
 // Qt headers
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
@@ -19,17 +20,20 @@
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythdirs.h"
 #include "libmythbase/mythdownloadmanager.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythbase/mythsystemlegacy.h"
 #include "libmythbase/mythversion.h"
-#include "libmythbase/programtypes.h"
-#include "libmythbase/recordingstatus.h"
-#include "libmythbase/recordingtypes.h"
 #include "libmythbase/unziputil.h"
 #include "libmythmetadata/musicmetadata.h"
 #include "libmythtv/jobqueue.h"
+#include "libmythtv/programtypes.h"
+#include "libmythtv/recordingstatus.h"
+#include "libmythtv/recordingtypes.h"
 
 // MythBackend
+#include "backendcontext.h"
 #include "backendhousekeeper.h"
+#include "mythbackend_main_helpers.h"
 
 static constexpr int64_t kFourHours {4LL * 60 * 60};
 
@@ -97,7 +101,9 @@ void CleanupTask::CleanupOrphanedLiveTV(void)
     }
 
     if (keepChains.isEmpty())
+    {
         msg = "DELETE FROM tvchain WHERE endtime < now();";
+    }
     else
     {
         msg = QString("DELETE FROM tvchain "
@@ -204,6 +210,9 @@ void CleanupTask::CleanupChannelTables(void)
     MSqlQuery query(MSqlQuery::InitCon());
     MSqlQuery deleteQuery(MSqlQuery::InitCon());
 
+    // Delete all channels from the database that have already
+    // been deleted for at least one day and that are not referenced
+    // anymore by a recording.
     query.prepare(QString("DELETE channel "
                           "FROM channel "
                           "LEFT JOIN recorded r "
@@ -219,6 +228,8 @@ void CleanupTask::CleanupChannelTables(void)
         MythDB::DBError("CleanupTask::CleanupChannelTables "
                         "(channel table)", query);
 
+    // Delete all multiplexes from the database that are not
+    // referenced anymore by a channel.
     query.prepare(QString("DELETE dtv_multiplex "
                           "FROM dtv_multiplex "
                           "LEFT JOIN channel c "
@@ -227,6 +238,17 @@ void CleanupTask::CleanupChannelTables(void)
     if (!query.exec())
         MythDB::DBError("CleanupTask::CleanupChannelTables "
                         "(dtv_multiplex table)", query);
+
+    // Delete all IPTV channel data extension records from the database
+    // when the channel it refers to does not exist anymore.
+    query.prepare(QString("DELETE iptv_channel "
+                          "FROM iptv_channel "
+                          "LEFT JOIN channel c "
+                          "    ON c.chanid = iptv_channel.chanid "
+                          "WHERE c.chanid IS NULL"));
+    if (!query.exec())
+        MythDB::DBError("CleanupTask::CleanupChannelTables "
+                        "(iptv_channel table)", query);
 }
 
 void CleanupTask::CleanupProgramListings(void)
@@ -322,43 +344,28 @@ bool ThemeUpdateTask::DoCheckRun(const QDateTime& now)
 
 bool ThemeUpdateTask::DoRun(void)
 {
-    bool    result = false;
-    QString MythVersion = GetMythSourcePath();
+    uint major { 0 };
+    uint minor { 0 };
+    bool devel { false };
+    bool parsed = ParseMythSourceVersion(devel, major, minor);
+    bool result = false;
 
-    // Treat devel branches as master
-    if (!MythVersion.isEmpty() && !MythVersion.startsWith("fixes/"))
+    if (!parsed || devel)
     {
-        // FIXME: For now, treat git master the same as svn trunk
-        MythVersion = "trunk";
-
-        result |= LoadVersion(MythVersion, LOG_ERR);
-        LOG(VB_GENERAL, LOG_INFO,
-            QString("Loading themes for %1").arg(MythVersion));
+        LOG(VB_GENERAL, LOG_INFO, QString("Loading themes for devel"));
+        result |= LoadVersion("trunk", LOG_ERR);
     }
     else
     {
-        static const QRegularExpression kVersionDateRE { "\\.[0-9]{8,}.*" };
-        MythVersion = MYTH_BINARY_VERSION; // Example: 29.20161017-1
-        MythVersion.remove(kVersionDateRE);
-        LOG(VB_GENERAL, LOG_INFO,
-            QString("Loading themes for %1").arg(MythVersion));
-        result |= LoadVersion(MythVersion, LOG_ERR);
+        LOG(VB_GENERAL, LOG_INFO, QString("Loading themes for %1").arg(major));
+        result |= LoadVersion(QString::number(major), LOG_ERR);
 
-        // If a version of the theme for this tag exists, use it...
-        static const QRegularExpression subexp
-            { "v[0-9]+\\.([0-9]+)-*", QRegularExpression::CaseInsensitiveOption };
-        auto match = subexp.match(GetMythSourceVersion());
-        if (match.hasMatch())
+        for (int i = minor ; i > 0; i--)
         {
-            QString subversion;
-            int idx = match.capturedView(1).toInt();
-            for ( ; idx > 0; --idx)
-            {
-                subversion = MythVersion + "." + QString::number(idx);
-                LOG(VB_GENERAL, LOG_INFO,
-                    QString("Loading themes for %1").arg(subversion));
-                result |= LoadVersion(subversion, LOG_INFO);
-            }
+            QString majmin = QString("%1.%2").arg(major).arg(i);
+            LOG(VB_GENERAL, LOG_INFO,
+                QString("Loading themes for %1").arg(majmin));
+            result |= LoadVersion(majmin, LOG_INFO);
         }
     }
     return result;
@@ -627,6 +634,11 @@ bool MythFillDatabaseTask::DoCheckRun(const QDateTime& now)
         LOG(VB_GENERAL, LOG_DEBUG,
                 QString("MythFillDatabase scheduled to run at %1.")
                     .arg(nextRun.toString()));
+
+        // Delete the cached value immediately.  Necessary because the
+        // value is written/read by different applications.
+        GetMythDB()->ClearSettingsCache("MythFillSuggestedRunTime");
+
         // is it yet time
         return nextRun <= now;
     }
@@ -692,4 +704,69 @@ void MythFillDatabaseTask::Terminate(void)
     if (m_msMFD && (m_msMFD->GetStatus() == GENERIC_EXIT_RUNNING))
         // just kill it, the runner thread will handle any necessary cleanup
         m_msMFD->Term(true);
+}
+
+bool FindEncoders::DoRun(void)
+{
+    LOG(VB_GENERAL, LOG_INFO, QString("FindEncoders: run %1").arg(++m_called));
+
+    // Get the number of configured encoders
+    MSqlQuery query(MSqlQuery::InitCon());
+    if (!query.exec("SELECT COUNT(cardid) FROM capturecard "
+                    "WHERE sourceid!=0 and hostname!=\"\""))
+    {
+        MythDB::DBError("Querying Recorders", query);
+        SetFinished(true);
+        return false;
+    }
+    int cardcount {0};
+    if (query.next())
+        cardcount = query.value(0).toInt();
+    if (cardcount == 0)
+    {
+        LOG(VB_GENERAL, LOG_ERR, QString("FindEncoders: query yields no cards"));
+        SetFinished(true);
+        return false;
+    }
+
+    // Try scanning for encoders again.
+    if (cardcount != gTVList.size())
+    {
+        LOG(VB_GENERAL, LOG_INFO,
+            QString("FindEncoders: Have %1 of %2 encoders. Rescanning...")
+            .arg(gTVList.size()).arg(cardcount));
+        createTVRecorders(gCoreContext->IsMasterHost(), true);
+        LOG(VB_GENERAL, LOG_INFO, QString("FindEncoders: Rescan complete"));
+    }
+
+    // Now have all the encoders been found?
+    if (cardcount == gTVList.size())
+    {
+        LOG(VB_GENERAL, LOG_INFO,
+            QString("FindEncoders: All %1 encoders found.")
+            .arg(cardcount));
+        SetFinished(true);
+        return true;
+    }
+
+    // Backoff on retries
+    std::chrono::minutes newPeriod { 0min };
+    switch (m_called)
+    {
+      case  5: newPeriod = kINTERVAL2; break;
+      case 10: newPeriod = kINTERVAL3; break;
+      case 15: newPeriod = kINTERVAL4; break;
+      case 20: newPeriod = kINTERVAL5; break;
+      default: break;
+    }
+    if (newPeriod != 0min)
+    {
+        LOG(VB_GENERAL, LOG_INFO,
+            QString("FindEncoders: Changing retry to %1 minutes")
+            .arg(newPeriod.count()));
+        m_period = newPeriod;
+        m_retry = newPeriod;
+    }
+
+    return true;
 }

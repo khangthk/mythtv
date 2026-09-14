@@ -25,8 +25,8 @@
 #include "libmythbase/mythdbcon.h"
 
 #include "libmythupnp/eventing.h"
-#include "libmythupnp/upnp.h"
 #include "libmythupnp/upnpcdsobjects.h"
+#include "libmythupnp/upnpresultcode.h"
 
 class UPnpCDS;
 
@@ -264,8 +264,8 @@ class UPNP_PUBLIC UPnpCDSExtension
         virtual UPnpCDSExtensionResults *Browse( UPnpCDSRequest *pRequest );
         virtual UPnpCDSExtensionResults *Search( UPnpCDSRequest *pRequest );
 
-        virtual QString         GetSearchCapabilities() { return( "" ); }
-        virtual QString         GetSortCapabilities  () { return( "" ); }
+        virtual QString         GetSearchCapabilities() { return ""; }
+        virtual QString         GetSortCapabilities  () { return ""; }
         virtual CDSShortCutList GetShortCuts         () { return m_shortcuts; }
 };
 

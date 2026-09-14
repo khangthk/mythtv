@@ -1,6 +1,14 @@
+// C++ headers
+#include <algorithm>
+
 // Qt
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QMetaProperty>
+#if QT_VERSION < QT_VERSION_CHECK(6,11,0)
 #include <QSequentialIterable>
+#else
+#include <QMetaSequence>
+#endif
 
 // MythTV
 #include "mythdate.h"
@@ -40,7 +48,7 @@ void MythXMLPListSerialiser::AddValue(const QString& Name, const QVariant& Value
     if (object)
     {
         QVariant isNull = object->property("isNull");
-        if (isNull.value<bool>())
+        if (isNull.toBool())
             return;
         AddQObject(Name, object);
         return;
@@ -171,7 +179,11 @@ void MythXMLPListSerialiser::AddStringList(const QString& Name, const QVariant& 
 {
     m_writer.writeTextElement("key", Name);
     m_writer.writeStartElement("array");
+#if QT_VERSION < QT_VERSION_CHECK(6,11,0)
     auto values = Values.value<QSequentialIterable>();
+#else
+    auto values = Values.value<QMetaSequence::Iterable>();
+#endif
     for (const auto & value : values)
         m_writer.writeTextElement("string", value.toString());
     m_writer.writeEndElement();
@@ -191,16 +203,15 @@ void MythXMLPListSerialiser::AddList(const QString& Name, const QVariantList &Va
         auto typesEqual = [type](const QVariant& value)
             { return (static_cast<QMetaType::Type>(value.typeId()) == type); };
 #endif
-        array = std::all_of(Values.cbegin(), Values.cend(), typesEqual);
+        array = std::ranges::all_of(std::as_const(Values), typesEqual);
     }
 
     QString name = GetItemName(Name);
     m_writer.writeTextElement("key", name);
     m_writer.writeStartElement(array ? "array" : "dict");
 
-    QListIterator<QVariant> it(Values);
-    while (it.hasNext())
-        AddValue(name, it.next(), !array);
+    for (const auto& variant : Values)
+        AddValue(name, variant, !array);
     m_writer.writeEndElement();
 }
 
@@ -228,11 +239,11 @@ QString MythXMLPListSerialiser::GetItemName(const QString& Name)
 QString MythXMLPListSerialiser::GetContentName(const QString& Name, const QMetaObject* MetaObject)
 {
     // Try to read Name or TypeName from classinfo metadata.
-    if (int index = MetaObject ? MetaObject->indexOfClassInfo(Name.toLatin1()) : -1; index >= 0)
+    if (int index = MetaObject ? MetaObject->indexOfClassInfo(Name.toLatin1().constData()) : -1; index >= 0)
     {
         QStringList infos = QString(MetaObject->classInfo(index).value()).split(';', Qt::SkipEmptyParts);
         QString type; // fallback
-        foreach (const QString &info, infos)
+        for (const QString &info : std::as_const(infos))
         {
             if (info.startsWith(QStringLiteral("name=")))
                 if (auto name = info.mid(5).trimmed(); !name.isEmpty())

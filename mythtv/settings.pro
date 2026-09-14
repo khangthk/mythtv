@@ -1,39 +1,19 @@
 include (settings2.pro)
-
-win32-msvc* {
-
-  SRC_PATH_BARE = $$(SRC_PATH_BARE)
-
-  isEmpty( $$SRC_PATH_BARE ) {
-    SRC_PATH_BARE = $${PWD}
-  }
-
-  CONFIG -= debug_and_release
-  CONFIG -= debug_and_release_target
-  CONFIG -= flat
-
-  CONFIG *= using_backend using_frontend
-  CONFIG *= using_opengl
-  CONFIG *= using_hdhomerun
-  CONFIG *= using_satip
-
-  CONFIG_LIBMPEG2EXTERNAL = yes
-  CONFIG_QTDBUS = no
-
-  QMAKE_CXXFLAGS_WARN_ON -= -w34100
-
-} else {
-
-  include ( config.mak )
-}
+include ( config.mak )
 
 CONFIG += $$CCONFIG
-CONFIG += c++17
+CONFIG += c11 c17 c++20 strict_c strict_c++
 CONFIG += no_qt_rpath
 
 # Make sure all the Qt header files are marked as system headers
 QMAKE_DEFAULT_INCDIRS += $$[QT_INSTALL_HEADERS]
 INCLUDEPATH += $$[QT_INSTALL_HEADERS]
+
+# On Qt5 builds, bump the minimum OSX version number
+# up to one that fully supports C++20.
+lessThan(QT_MAJOR_VERSION, 6) {
+  QMAKE_MACOSX_DEPLOYMENT_TARGET = 13.3
+}
 
 defineReplace(avLibName) {
         NAME = $$1
@@ -56,16 +36,7 @@ contains(QT_MAJOR_VERSION, 4) {
 
 # Where binaries, includes and runtime assets are installed by 'make install'
 isEmpty( PREFIX ) {
-  win32-msvc* {
-    PREFIX = "."
-  } else {
     PREFIX = /usr/local
-  }
-}
-
-# Where the binaries actually locate the assets/filters/plugins at runtime
-isEmpty( RUNPREFIX ) {
-    RUNPREFIX = $$PREFIX
 }
 
 # Alternate library dir for OSes and packagers (e.g. lib64)
@@ -76,7 +47,7 @@ isEmpty( LIBDIRNAME ) {
 
 # Where libraries, plugins and filters are installed
 isEmpty( LIBDIR ) {
-    LIBDIR = $${RUNPREFIX}/$${LIBDIRNAME}
+    LIBDIR = $${PREFIX}/$${LIBDIRNAME}
 }
 
 # Die on the (common) case where OS X users inadvertently use Fink's
@@ -97,74 +68,6 @@ win32 {
     VERSION =
     CONFIG_OPENGL_LIBS =
 
-    # All versions of Microsoft Visual Studio
-
-    win32-msvc* {
-
-        win32-msvc2010 {
-            # need to force include missing math.h functions.
-
-            # needed for vcxproj
-            QMAKE_CXXFLAGS += "/FI mathex.h"
-
-            # needed for nmake
-            QMAKE_CFLAGS   += "/FI mathex.h"
-        }
-
-        DEFINES += _WIN32 WIN32 WIN32_LEAN_AND_MEAN NOMINMAX _USE_MATH_DEFINES
-        DEFINES += _CRT_SECURE_NO_WARNINGS
-
-        debug  :DEFINES += _DEBUG
-        release:DEFINES += NDEBUG
-
-        # msvc specific include path
-
-        INCLUDEPATH += ./
-        INCLUDEPATH += $$SRC_PATH_BARE/external
-
-        INCLUDEPATH += $$SRC_PATH_BARE/../platform/win32/msvc/include
-        INCLUDEPATH += $$SRC_PATH_BARE/../platform/win32/msvc/external/pthreads.2
-        INCLUDEPATH += $$SRC_PATH_BARE/../platform/win32/msvc/external/zlib
-        INCLUDEPATH += $$SRC_PATH_BARE/../platform/win32/msvc/external
-
-        win32-msvc2010:INCLUDEPATH += $$SRC_PATH_BARE/../platform/win32/msvc/include-2010
-
-        INCLUDEPATH += $$SRC_PATH_BARE/../platform/win32/msvc/external/exiv2/msvc64/include
-
-        # have visual studio place all DLL, EXE & lib files in the following directory
-
-        CONFIG( debug, debug|release) {
-
-            # debug
-
-            DESTDIR         = $$SRC_PATH_BARE/bin/debug
-            QMAKE_LIBDIR   += $$SRC_PATH_BARE/bin/debug
-            MOC_DIR         = debug/moc
-            OBJECTS_DIR     = debug/obj
-
-            QMAKE_CXXFLAGS *= /MDd /MP /wd4100 /wd4996
-
-            LIBS           += -L$$SRC_PATH_BARE/bin/debug
-            EXTRA_LIBS     += -lpthreadVC2d -L$$SRC_PATH_BARE/bin/debug
-
-        } else {
-
-            # release
-
-            DESTDIR         = $$SRC_PATH_BARE/bin/release
-            QMAKE_LIBDIR   += $$SRC_PATH_BARE/bin/release
-            MOC_DIR         = release/moc
-            OBJECTS_DIR     = release/obj
-
-            QMAKE_CXXFLAGS *= /MD /MP /wd4100 /wd4996
-
-            LIBS           += -L$$SRC_PATH_BARE/bin/release
-            EXTRA_LIBS     += -lpthreadVC2 -L$$SRC_PATH_BARE/bin/release
-
-        }
-
-    }
-
     # minGW Build Environment
 
     mingw {
@@ -172,7 +75,7 @@ win32 {
         # Qt4 creates separate compile directories by default. This disables:
         CONFIG -= debug_and_release debug_and_release_target
         CONFIG += mingw
-        DEFINES += WIN32 USING_MINGW WIN32_LEAN_AND_MEAN NOMINMAX
+        DEFINES += WIN32_LEAN_AND_MEAN NOMINMAX
         DEFINES -= UNICODE
         # win32-packager.pl builds Qt under DOS, but MythTV is built in MinGW.
         # This corrects the moc tool path from a DOS-style to a unix style:
@@ -278,10 +181,6 @@ macx {
 }
 
 profile:!win32:!macx:CONFIG += debug
-
-# figure out defines
-DEFINES += $$CONFIG_DEFINES
-DEFINES += _GNU_SOURCE
 
 !isEmpty( QMAKE_LIBDIR_QT ) {
     !macx {

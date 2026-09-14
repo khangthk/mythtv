@@ -1,12 +1,17 @@
+// C++
+#include <ranges>
+
+// Qt
 #include <QDir>
 
-#include <libmyth/mythcontext.h>
+// MythTV
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythdate.h>
 #include <libmythbase/mythdirs.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythbase/remotefile.h>
-#include <libmythbase/remoteutil.h>
+#include <libmythbase/storagegroup.h>
 #include <libmythmetadata/metadataimagedownload.h>
-#include <libmythmetadata/videoutils.h>
 #include <libmythui/mythdialogbox.h>
 #include <libmythui/mythmainwindow.h>
 #include <libmythui/mythprogressdialog.h>
@@ -56,7 +61,9 @@ void NetBase::InitProgressDialog()
         m_popupStack, "videodownloadprogressdialog");
 
     if (m_progressDialog->Create())
+    {
         m_popupStack->AddScreen(m_progressDialog, false);
+    }
     else
     {
         delete m_progressDialog;
@@ -71,9 +78,9 @@ void NetBase::CleanCacheDir()
     QDir cacheDir(cache);
     QStringList thumbs = cacheDir.entryList(QDir::Files);
 
-    for (auto i = thumbs.crbegin(); i != thumbs.crend(); ++i)
+    for (const auto & thumb : std::ranges::reverse_view(thumbs))
     {
-        QString filename = QString("%1/%2").arg(cache, *i);
+        QString filename = QString("%1/%2").arg(cache, thumb);
         LOG(VB_GENERAL, LOG_DEBUG, QString("Deleting file %1").arg(filename));
         QFileInfo fi(filename);
         QDateTime lastmod = fi.lastModified();
@@ -211,7 +218,9 @@ void NetBase::DoDeleteVideo(bool remove)
                                            item->GetMediaURL());
 
     if (filename.startsWith("myth://"))
+    {
         RemoteFile::DeleteFile(filename);
+    }
     else
     {
         QFile file(filename);
@@ -287,7 +296,7 @@ void NetBase::DoDownloadAndPlay()
     QString baseFilename = GetDownloadFilename(item->GetTitle(),
                                                item->GetMediaURL());
 
-    QString finalFilename = generate_file_url("Default",
+    QString finalFilename = StorageGroup::generate_file_url("Default",
                                               gCoreContext->GetMasterHostName(),
                                               baseFilename);
 
@@ -325,3 +334,5 @@ void NetBase::DoPlayVideo(void)
 
     DoPlayVideo(filename);
 }
+
+#include "moc_netbase.cpp"

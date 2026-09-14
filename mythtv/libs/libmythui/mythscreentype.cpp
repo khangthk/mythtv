@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "libmythbase/mthreadpool.h"
+#include "libmythbase/mythappname.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythobservable.h"
@@ -46,7 +47,6 @@ class ScreenLoadTask : public QRunnable
   public:
     explicit ScreenLoadTask(MythScreenType &parent) : m_parent(parent) {}
 
-  private:
     void run(void) override // QRunnable
     {
         m_parent.Load();
@@ -55,6 +55,7 @@ class ScreenLoadTask : public QRunnable
         m_parent.m_loadLock.release();
     }
 
+  private:
     MythScreenType &m_parent;
 };
 
@@ -135,6 +136,11 @@ bool MythScreenType::SetFocusWidget(MythUIType *widget)
     MythUIText *helpText = dynamic_cast<MythUIText *>(GetChild("helptext"));
     if (helpText)
         helpText->Reset();
+
+    // Let each 'buttonlist' know the name of the currently active buttonlist
+    QString name = widget->GetXMLName();
+    for (auto *w : std::as_const(m_focusWidgetList))
+        w->SetFocusedName(name);
 
     if (m_currentFocusWidget)
         m_currentFocusWidget->LoseFocus();
@@ -555,3 +561,5 @@ MythPainter* MythScreenType::GetPainter(void)
         return MythScreenStack::GetPainter();
     return GetMythPainter();
 }
+
+#include "moc_mythscreentype.cpp"

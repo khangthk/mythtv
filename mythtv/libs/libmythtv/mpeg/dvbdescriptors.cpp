@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <algorithm>
 #include <cerrno>
+#include <cstdint>
 
 // Qt headers
 #include <QCoreApplication>
@@ -15,7 +16,7 @@
 #include "iso6937tables.h"
 #include "freesat_huffman.h"
 #include "libmythbase/mythlogging.h"
-#include "libmythbase/programinfo.h"
+#include "libmythtv/programinfo.h"
 
 // Decode a text string according to
 //   Draft ETSI EN 300 468 V1.16.1 (2019-05)
@@ -67,7 +68,7 @@ static QString iconv_helper(int which, char *buf, size_t length)
 {
     QString codec = QString("iso-8859-%1").arg(which);
     iconv_t conv = iconv_open("utf-16", qPrintable(codec));
-    if (conv == (iconv_t) -1)
+    if (conv == (iconv_t) -1) // NOLINT(performance-no-int-to-ptr)
         return "";
 
     // Allocate room for the output, including space for the Byte
@@ -139,13 +140,13 @@ QString dvb_decode_text(const unsigned char *src, uint raw_length,
     /* UCS-2 aka ISO/IEC 10646-1 Basic Multilingual Plane */
     if (src[0] == 0x11)
     {
-        size_t length = (raw_length - 1) / 2;
-        auto *to = new QChar[length];
-        for (size_t i=0; i<length; i++)
-            to[i] = QChar((src[1 + (i*2)] << 8) + src[1 + (i*2) + 1]);
-        QString to2(to, length);
-        delete [] to;
-        return to2;
+        QString s;
+        s.reserve((raw_length - 1) / 2);
+        for (size_t i = 1; i < raw_length - 1; i += 2)
+        {
+            s += QChar{(static_cast<uint16_t>(src[i]) << 8) + src[i + 1]};
+        }
+        return s;
     }
 
     if (((0x11 < src[0]) && (src[0] < 0x15)) ||
@@ -169,7 +170,7 @@ QString dvb_decode_text(const unsigned char *src, uint raw_length,
 
     uint length = 0;
     if (!encoding_override.empty() && (src[0] >= 0x20)) {
-        std::copy(encoding_override.cbegin(), encoding_override.cend(), dst);
+        std::ranges::copy(encoding_override, dst);
         length = encoding_override.size();
     }
 

@@ -4,6 +4,10 @@
  *  Distributed as part of MythTV under GPL v2 and later.
  */
 
+// C++ headers
+#include <algorithm>
+
+// Qt
 #include <QRegularExpression>
 #include <QStringList>
 #include <QTcpSocket>
@@ -83,14 +87,13 @@ bool CetonRTSP::ProcessRequest(
         // empty socket's waiting data just in case
         m_socket->waitForReadyRead(30);
         QVector<char> trash;
-        do
+        uint avail {0};
+        while ((avail = m_socket->bytesAvailable()) > 0)
         {
-            uint avail = m_socket->bytesAvailable();
             trash.resize(std::max((uint)trash.size(), avail));
             m_socket->read(trash.data(), avail);
             m_socket->waitForReadyRead(30);
         }
-        while (m_socket->bytesAvailable() > 0);
     }
 
     QStringList requestHeaders;
@@ -101,6 +104,7 @@ bool CetonRTSP::ProcessRequest(
         uri = m_controlUrl.toString();
     else
         uri = m_requestUrl.toString();
+    requestHeaders.reserve(5 + (headers ? headers->count() : 0));
     requestHeaders.append(QString("%1 %2 RTSP/1.0").arg(method, uri));
     requestHeaders.append(QString("User-Agent: MythTV Ceton Recorder"));
     requestHeaders.append(QString("CSeq: %1").arg(++m_sequenceNumber));
@@ -201,7 +205,7 @@ bool CetonRTSP::ProcessRequest(
     {
         // Handle broken implementation, such as VLC
         // doesn't respect the case of "CSeq", so find it regardless of the spelling
-        auto it = std::find_if(m_responseHeaders.cbegin(), m_responseHeaders.cend(),
+        auto it = std::ranges::find_if(std::as_const(m_responseHeaders),
                                [](const QString& key) -> bool
                                    {return key.compare("CSeq", Qt::CaseInsensitive) == 0;});
         if (it != m_responseHeaders.cend())
@@ -255,28 +259,6 @@ bool CetonRTSP::GetOptions(QStringList &options)
 }
 
 /**
- * splitLines. prepare SDP content for easy read
- */
-QStringList CetonRTSP::splitLines(const QByteArray &lines)
-{
-    QStringList list;
-    QTextStream stream(lines);
-    QString line;
-
-    do
-    {
-        line = stream.readLine();
-        if (!line.isNull())
-        {
-            list.append(line);
-        }
-    }
-    while (!line.isNull());
-
-    return list;
-}
-
-/**
  * readParameters. Scan a line like: Session: 1234556;destination=xx;client_port
  * and return the first entry and fill the arguments in the provided Params
  */
@@ -315,11 +297,13 @@ QUrl CetonRTSP::GetBaseUrl(void)
 {
     if (m_responseHeaders.contains("Content-Base"))
     {
-        return m_responseHeaders["Content-Base"];
+        QUrl url { m_responseHeaders["Content-Base"] };
+        return url;
     }
     if (m_responseHeaders.contains("Content-Location"))
     {
-        return m_responseHeaders["Content-Location"];
+        QUrl url { m_responseHeaders["Content-Location"] };
+        return url;
     }
     return m_requestUrl;
 }
@@ -334,7 +318,9 @@ bool CetonRTSP::Describe(void)
         return false;
 
     // find control url
-    QStringList lines = splitLines(m_responseContent);
+    static const QRegularExpression eol { "[\r\n]" };
+    QString content = QString::fromUtf8(m_responseContent);
+    QStringList lines = content.split(eol, Qt::SkipEmptyParts);
     bool found = false;
     QUrl base = m_controlUrl = GetBaseUrl();
 
@@ -371,7 +357,7 @@ bool CetonRTSP::Describe(void)
             // This attribute may contain either relative and absolute URLs,
             // following the rules and conventions set out in RFC 1808 [25].
             QString url = line.mid(10).trimmed();
-            m_controlUrl = url;
+            m_controlUrl = QUrl(url);
             if (url == "*")
             {
                 m_controlUrl = base;
@@ -505,3 +491,5 @@ void CetonRTSP::timerEvent(QTimerEvent* /*event*/)
         ProcessRequest("OPTIONS", nullptr, false, false, "*");
     }
 }
+
+#include "moc_cetonrtsp.cpp"

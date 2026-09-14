@@ -30,12 +30,14 @@
 #include <csignal> // for kill() and SIGXXX
 #include <cstdlib>
 #include <cstring>
-#include <ctime>
 #include <fcntl.h>
 #include <unistd.h>
 
 // QT headers
 #include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QCoreApplication>
 
 // libmythbase headers
@@ -44,7 +46,7 @@
 #include "mythevent.h"
 #include "mythlogging.h"
 
-#ifdef Q_OS_WIN
+#ifdef Q_OS_WINDOWS
 #include "mythsystemwindows.h"
 #else
 #include "mythsystemunix.h"
@@ -57,7 +59,7 @@
 
 void MythSystemLegacy::initializePrivate(void)
 {
-#ifdef Q_OS_WIN
+#ifdef Q_OS_WINDOWS
     d = new MythSystemLegacyWindows(this);
 #else
     d = new MythSystemLegacyUnix(this);
@@ -528,6 +530,4 @@ uint myth_system(const QString &Command, const QStringList& Args, uint Flags,
     return result;
 }
 
-/*
- * vim:ts=4:sw=4:ai:et:si:sts=4
- */
+#include "moc_mythsystemlegacy.cpp"

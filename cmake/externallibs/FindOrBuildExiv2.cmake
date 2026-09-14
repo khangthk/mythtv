@@ -34,11 +34,6 @@ function(find_or_build_exiv2)
     endif()
   endif()
 
-  if(CMAKE_CROSSCOMPILING)
-    set(BUILD_XMP OFF)
-  else()
-    set(BUILD_XMP ON)
-  endif()
   if(LIBS_INSTALL_EXIV2)
     set(CMDLINE_ARGS_EXIV2 ${CMDLINE_ARGS_LIBS})
   else()
@@ -92,7 +87,9 @@ function(find_or_build_exiv2)
   else(CMAKE_CROSSCOMPILING OR ENABLE_EXIV2_DOWNLOAD)
     set(EXIV2_VERSION embedded)
     set(BUILD_INSTRUCTIONS SOURCE_DIR
-                           ${CMAKE_CURRENT_SOURCE_DIR}/mythtv/external/libexiv2)
+                           ${CMAKE_CURRENT_SOURCE_DIR}/mythtv/external/libexiv2
+                           DOWNLOAD_COMMAND
+                           ${CMAKE_COMMAND} -E echo "Using exiv2 sources in <SOURCE_DIR>")
   endif(CMAKE_CROSSCOMPILING OR ENABLE_EXIV2_DOWNLOAD)
 
   ExternalProject_Add(
@@ -101,7 +98,7 @@ function(find_or_build_exiv2)
     CMAKE_ARGS --no-warn-unused-cli
                -DCMAKE_INSTALL_SO_NO_EXE=OFF
                -DBUILD_SHARED_LIBS:BOOL=ON
-               -DEXIV2_ENABLE_XMP:BOOL=${BUILD_XMP}
+               -DEXIV2_ENABLE_XMP:BOOL=OFF
                -DEXIV2_ENABLE_BMFF:BOOL=OFF # HEIC, HEIF, AVIF, CR3, JXL/bmff
                -DEXIV2_ENABLE_BROTLI:BOOL=OFF # Google algorithm
                -DEXIV2_ENABLE_INIH=OFF
@@ -122,6 +119,9 @@ function(find_or_build_exiv2)
     DEPENDS external_libs ${after_libs})
 
   add_dependencies(embedded_libs exiv2)
+  if(LIBS_INSTALL_EXIV2)
+    set_target_properties(embedded_libs PROPERTIES REQUIRES_RW TRUE)
+  endif()
 
   message(STATUS "Will build exiv2 (${EXIV2_VERSION})")
 endfunction()

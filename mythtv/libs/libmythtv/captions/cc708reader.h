@@ -7,7 +7,6 @@
 #include <cstdint>
 #include "libmythbase/compat.h"
 #include "libmythtv/captions/cc708window.h"
-#include "libmythtv/format.h"
 
 class MythPlayer;
 
@@ -16,8 +15,8 @@ const uint k708MaxServices = 64;
 class CC708Reader
 {
   public:
-    explicit CC708Reader(MythPlayer *owner);
-    virtual ~CC708Reader();
+    explicit CC708Reader();
+    virtual ~CC708Reader() = default;
 
     void SetCurrentService(int service) { m_currentService = service; }
     CC708Service* GetCurrentService(void) { return &m_cc708services[m_currentService]; }
@@ -72,23 +71,18 @@ class CC708Reader
 
     // Text
     virtual void TextWrite(uint service_num,
-                           int16_t* unicode_string, int16_t len);
+                           std::u16string& unicode_string);
 
     // Data
-    std::array<unsigned char *,k708MaxServices> m_buf          {};
-    std::array<uint,k708MaxServices>            m_bufAlloc     {};
-    std::array<uint,k708MaxServices>            m_bufSize      {};
+    std::array<std::vector<uint8_t>,k708MaxServices> m_buf     {};
     std::array<bool,k708MaxServices>            m_delayed      {};
 
-    std::array<int16_t *,k708MaxServices>       m_tempStr      {};
-    std::array<int,k708MaxServices>             m_tempStrAlloc {};
-    std::array<int,k708MaxServices>             m_tempStrSize  {};
+    std::array<std::u16string,k708MaxServices>  m_tempStr      {};
 
     int                                         m_currentService {1};
     std::array<CC708Service,k708MaxServices>    m_cc708services;
     std::array<int,k708MaxServices>             m_cc708DelayedDeletes {};
 
-    MythPlayer    *m_parent  {nullptr};
     bool           m_enabled {false};
 };
 #endif // CC708READER_H

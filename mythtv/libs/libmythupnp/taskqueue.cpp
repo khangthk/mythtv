@@ -9,14 +9,11 @@
 // Licensed under the GPL v2 or later, see LICENSE for details
 //
 //////////////////////////////////////////////////////////////////////////////
+#include "taskqueue.h"
 
-#include <iostream>
-
-#include <QDateTime>
+#include <thread>
 
 #include "libmythbase/mythlogging.h"
-
-#include "taskqueue.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // Define Global instance 
@@ -139,7 +136,7 @@ void TaskQueue::run( )
         }
         // Make sure to throttle our processing.
 
-        usleep( 100ms );
+        std::this_thread::sleep_for(100ms);
     }
 
     RunEpilog();
@@ -183,7 +180,7 @@ void TaskQueue::AddTask( std::chrono::milliseconds msec, Task *pTask )
 /// \param pTask A pointer to the task.
 /////////////////////////////////////////////////////////////////////////////
 
-void TaskQueue::AddTaskAbsolute( TaskTime ttKey, Task *pTask )
+void TaskQueue::AddTaskAbsolute( std::chrono::microseconds ttKey, Task *pTask )
 {
     if (pTask != nullptr)
     {
@@ -214,7 +211,7 @@ void TaskQueue::AddTask( Task *pTask )
 //
 /////////////////////////////////////////////////////////////////////////////
 
-Task *TaskQueue::GetNextExpiredTask( TaskTime tt, std::chrono::milliseconds nWithinMilliSecs /*=50*/ )
+Task *TaskQueue::GetNextExpiredTask( std::chrono::microseconds tt, std::chrono::milliseconds nWithinMilliSecs /*=50*/ )
 {
     Task *pTask = nullptr;
 
@@ -225,7 +222,7 @@ Task *TaskQueue::GetNextExpiredTask( TaskTime tt, std::chrono::milliseconds nWit
     auto it = m_mapTasks.begin();
     if (it != m_mapTasks.end())
     {
-        TaskTime ttTask = (*it).first;
+        std::chrono::microseconds ttTask = (*it).first;
 
         if (ttTask < tt)
         {

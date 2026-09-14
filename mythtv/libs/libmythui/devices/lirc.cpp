@@ -39,8 +39,9 @@
 
 #define LOC      QString("LIRC: ")
 
-#if !defined(__suseconds_t)
+#ifndef __suseconds_t
 #ifdef Q_OS_MACOS
+// NOLINTNEXTLINE(bugprone-reserved-identifier)
 using __suseconds_t = __darwin_suseconds_t;
 #else
 using __suseconds_t = long int;
@@ -291,7 +292,8 @@ bool LIRC::Init(void)
         }
     }
 
-    d->m_lircState = lirc_init("/etc/lircrc", ".lircrc", "mythtv", nullptr, 0);
+    d->m_lircState = lirc_init("/etc/lircrc", ".lircrc", "mythtv", nullptr,
+                               VERBOSE_LEVEL_CHECK(VB_LIRC,LOG_DEBUG));
     if (!d->m_lircState)
     {
         close(lircd_socket);
@@ -303,8 +305,8 @@ bool LIRC::Init(void)
     if (!d->m_lircConfig)
     {
         QMutexLocker static_lock(&s_lirclibLock);
-        QByteArray cfg = m_configFile.toLocal8Bit();
-        if (lirc_readconfig(d->m_lircState, cfg.constData(), &d->m_lircConfig, nullptr))
+        if (lirc_readconfig(d->m_lircState, m_configFile.toStdString(),
+                            &d->m_lircConfig, nullptr))
         {
             LOG(vtype, LOG_ERR, LOC +
                 QString("Failed to read config file '%1'").arg(m_configFile));
@@ -347,14 +349,14 @@ void LIRC::Process(const QByteArray &data)
     QMutexLocker static_lock(&s_lirclibLock);
 
     // lirc_code2char will make code point to a static datafer..
-    char *code = nullptr;
+    std::string code;
     int ret = lirc_code2char(
-        d->m_lircState, d->m_lircConfig, data.data(), &code);
+        d->m_lircState, d->m_lircConfig, data.data(), code);
 
-    while ((0 == ret) && code)
+    while ((0 == ret) && !code.empty())
     {
-        QString lirctext(code);
-        QString qtcode = code;
+        QString lirctext = QString::fromStdString(code);
+        QString qtcode = QString::fromStdString(code);
         qtcode.replace("ctrl-",  "ctrl+",  Qt::CaseInsensitive);
         qtcode.replace("alt-",   "alt+",   Qt::CaseInsensitive);
         qtcode.replace("shift-", "shift+", Qt::CaseInsensitive);
@@ -376,6 +378,7 @@ void LIRC::Process(const QByteArray &data)
 
         std::vector<LircKeycodeEvent*> keyReleases;
 
+        keyReleases.reserve(a.count());
         for (int i = 0; i < a.count(); i++)
         {
 #if QT_VERSION < QT_VERSION_CHECK(6,0,0)
@@ -393,7 +396,7 @@ void LIRC::Process(const QByteArray &data)
 #endif
 
             QString text = "";
-            if (!mod)
+            if (!mod && keycode <= 0xFFFF)
                 text = QString(QChar(keycode));
 
             QCoreApplication::postEvent(
@@ -409,7 +412,7 @@ void LIRC::Process(const QByteArray &data)
             QCoreApplication::postEvent(m_mainWindow, keyReleases[i]);
 
         ret = lirc_code2char(
-            d->m_lircState, d->m_lircConfig, data.data(), &code);
+            d->m_lircState, d->m_lircConfig, data.data(), code);
     }
 }
 
@@ -442,10 +445,16 @@ void LIRC::run(void)
             d->m_lircState = nullptr;
 
             if (Init())
+            {
                 m_retryCount = 0;
+            }
             else
+            {
                 // wait a while before we retry..
+                locker.unlock();
                 std::this_thread::sleep_for(2s);
+                locker.relock();
+            }
 
             continue;
         }
@@ -455,7 +464,7 @@ void LIRC::run(void)
         FD_SET(d->m_lircState->lirc_lircd, &readfds);
 
         // the maximum time select() should wait
-        struct timeval timeout {1, k100Milliseconds}; // 1 second, 100 ms
+        struct timeval timeout {.tv_sec=1, .tv_usec=k100Milliseconds};
 
         int ret = select(d->m_lircState->lirc_lircd + 1, &readfds, nullptr, nullptr,
                          &timeout);
@@ -539,3 +548,5 @@ QList<QByteArray> LIRC::GetCodes(void)
     m_bufOffset = m_buf.size();
     return ret;
 }
+
+#include "moc_lirc.cpp"

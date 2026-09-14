@@ -13,6 +13,8 @@ endif()
 #
 
 set(HEADERS_TO_INSTALL
+    langsettings.h
+    mediamonitor.h
     mythcolourspace.h
     mythdialogbox.h
     mythfontproperties.h
@@ -29,6 +31,7 @@ set(HEADERS_TO_INSTALL
     mythrect.h
     mythscreenstack.h
     mythscreentype.h
+    mythterminal.h
     myththemebase.h
     myththemedmenu.h
     mythuiactions.h
@@ -62,137 +65,114 @@ set(HEADERS_TO_INSTALL
     mythuitype.h
     mythuiutils.h
     mythuivideo.h
-    mythuiwebbrowser.h
     mythvirtualkeyboard.h
+    schemawizard.h
+    standardsettings.h
+    storagegroupeditor.h
     themeinfo.h
     x11colors.h
     xmlparsebase.h)
 
+set(LIBMYTHUI_HEADERS_NOT_INSTALLED
+    devices/mythinputdevicehandler.h
+    dbsettings.h
+    mythdisplay.h
+    mythdisplaymode.h
+    mythedid.h
+    mythfontmanager.h
+    mythmainwindowprivate.h
+    mythnotificationcenter_private.h
+    mythpaintergpu.h
+    mythpainterwindow.h
+    mythpainterwindowqt.h
+    mythrender_base.h
+    mythscreensaver.h
+    mythudplistener.h
+    mythuiprocedural.h
+    mythvrr.h
+    rawsettingseditor.h
+    )
 #
 # Declare the library
 #
 add_library(
   mythui
+  ${HEADERS_TO_INSTALL}
+  ${LIBMYTHUI_HEADERS_NOT_INSTALLED}
   devices/mythinputdevicehandler.cpp
-  devices/mythinputdevicehandler.h
+  dbsettings.cpp
+  langsettings.cpp
+  mediamonitor.cpp
   mythcolourspace.cpp
-  mythcolourspace.h
   mythdialogbox.cpp
-  mythdialogbox.h
   mythdisplay.cpp
   mythdisplaymode.cpp
   mythedid.cpp
   mythfontmanager.cpp
   mythfontproperties.cpp
-  mythfontproperties.h
   mythgenerictree.cpp
-  mythgenerictree.h
   mythgesture.cpp
-  mythgesture.h
   mythhdr.cpp
-  mythhdr.h
   mythimage.cpp
-  mythimage.h
   mythmainwindow.cpp
-  mythmainwindow.h
   mythmainwindowprivate.cpp
   mythnotification.cpp
-  mythnotification.h
   mythnotificationcenter.cpp
-  mythnotificationcenter.h
-  mythnotificationcenter_private.h
   mythpainter.cpp
-  mythpainter.h
   mythpainter_qt.cpp
-  mythpainter_qt.h
   mythpaintergpu.cpp
   mythpainterwindow.cpp
   mythpainterwindowqt.cpp
   mythprogressdialog.cpp
-  mythprogressdialog.h
   mythrect.cpp
-  mythrect.h
   mythrender.cpp
   mythscreensaver.cpp
   mythscreenstack.cpp
-  mythscreenstack.h
   mythscreentype.cpp
-  mythscreentype.h
+  mythterminal.cpp
   myththemebase.cpp
-  myththemebase.h
   myththemedmenu.cpp
-  myththemedmenu.h
   mythudplistener.cpp
-  mythuiactions.h
   mythuianimation.cpp
-  mythuianimation.h
   mythuibutton.cpp
-  mythuibutton.h
   mythuibuttonlist.cpp
-  mythuibuttonlist.h
   mythuibuttontree.cpp
-  mythuibuttontree.h
   mythuicheckbox.cpp
-  mythuicheckbox.h
   mythuiclock.cpp
-  mythuiclock.h
   mythuicomposite.cpp
-  mythuicomposite.h
   mythuieditbar.cpp
-  mythuieditbar.h
-  mythuiexp.h
   mythuifilebrowser.cpp
-  mythuifilebrowser.h
   mythuigroup.cpp
-  mythuigroup.h
   mythuiguidegrid.cpp
-  mythuiguidegrid.h
   mythuihelper.cpp
-  mythuihelper.h
   mythuiimage.cpp
-  mythuiimage.h
   mythuilocation.cpp
-  mythuilocation.h
   mythuiprocedural.cpp
   mythuiprogressbar.cpp
-  mythuiprogressbar.h
   mythuiscreenbounds.cpp
-  mythuiscreenbounds.h
   mythuiscrollbar.cpp
-  mythuiscrollbar.h
   mythuishape.cpp
-  mythuishape.h
   mythuisimpletext.cpp
-  mythuisimpletext.h
   mythuispinbox.cpp
-  mythuispinbox.h
   mythuistatetracker.cpp
-  mythuistatetracker.h
   mythuistatetype.cpp
-  mythuistatetype.h
   mythuitext.cpp
-  mythuitext.h
   mythuitextedit.cpp
-  mythuitextedit.h
   mythuithemecache.cpp
-  mythuithemecache.h
   mythuithemehelper.cpp
-  mythuithemehelper.h
   mythuitype.cpp
-  mythuitype.h
   mythuiutils.cpp
-  mythuiutils.h
   mythuivideo.cpp
-  mythuivideo.h
   mythvirtualkeyboard.cpp
-  mythvirtualkeyboard.h
   mythvrr.cpp
+  rawsettingseditor.cpp
+  schemawizard.cpp
+  standardsettings.cpp
+  storagegroupeditor.cpp
   themeinfo.cpp
-  themeinfo.h
   x11colors.cpp
-  x11colors.h
   xmlparsebase.cpp
-  xmlparsebase.h)
+  )
 
 #
 # All remaining target information
@@ -221,17 +201,16 @@ if(TARGET Qt5::AndroidExtras)
   target_link_libraries(mythui PUBLIC Qt5::AndroidExtras)
 endif()
 
-if(TARGET Qt${QT_VERSION_MAJOR}::WebKit)
+if(TARGET Qt${QT_VERSION_MAJOR}::WebEngineWidgets)
+  list(APPEND HEADERS_TO_INSTALL mythuiwebbrowser.h)
   target_sources(mythui PRIVATE mythuiwebbrowser.cpp mythuiwebbrowser.h)
-  target_link_libraries(mythui PUBLIC Qt${QT_VERSION_MAJOR}::WebKit
-                                      Qt${QT_VERSION_MAJOR}::WebKitWidgets)
+  target_link_libraries(mythui PUBLIC Qt${QT_VERSION_MAJOR}::Quick
+                                      Qt${QT_VERSION_MAJOR}::WebEngineWidgets)
 endif()
 
 if(TARGET X11::X11)
   target_link_libraries(mythui PRIVATE X11::X11 X11::Xrandr X11::Xrender)
-  if(${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")
-    target_link_libraries(mythui PRIVATE X11::Xext X11::Xxf86vm)
-  endif()
+  target_link_libraries(mythui PRIVATE ${X11_EXTRA_LIBS})
   target_sources(
     mythui
     PRIVATE platforms/mythxdisplay.cpp
@@ -279,13 +258,13 @@ if(TARGET PkgConfig::DRM)
             platforms/drm/mythdrmvrr.cpp
             platforms/drm/mythdrmvrr.h)
 
-  if(TARGET Qt5::GuiPrivate) # Not completed for Qt6 yet.
+  if(TARGET Qt${QT_VERSION_MAJOR}::GuiPrivate)
     target_sources(mythui PRIVATE platforms/drm/mythdrmhdr.cpp
                                   platforms/drm/mythdrmhdr.h)
   endif()
 endif()
 
-if(TARGET Qt5::GuiPrivate) # Not completed for Qt6 yet.
+if(TARGET Qt${QT_VERSION_MAJOR}::GuiPrivate)
   target_link_libraries(mythui PRIVATE Qt${QT_VERSION_MAJOR}::GuiPrivate)
   if(TARGET PkgConfig::WAYLAND_CLIENT)
     target_link_libraries(mythui PRIVATE PkgConfig::WAYLAND_CLIENT)
@@ -310,20 +289,8 @@ if(TARGET Qt${QT_VERSION_MAJOR}::DBus)
             platforms/mythscreensaverdbus.cpp platforms/mythscreensaverdbus.h)
 endif()
 
-if(_HAVE_GL_OR_GLES)
-  if(TARGET OpenGL::GL)
-    target_link_libraries(mythui PRIVATE Qt${QT_VERSION_MAJOR}::OpenGL
-                                         OpenGL::GL)
-    if(TARGET OpenGL::EGL)
-      target_link_libraries(mythui PRIVATE OpenGL::EGL)
-    endif()
-  else()
-    target_link_libraries(mythui PUBLIC Qt${QT_VERSION_MAJOR}::OpenGL
-                                        PkgConfig::GLES2)
-    if(TARGET PkgConfig::EGL)
-      target_link_libraries(mythui PRIVATE PkgConfig::EGL)
-    endif()
-  endif()
+if(TARGET any_opengl)
+  target_link_libraries(mythui PUBLIC any_opengl)
   target_sources(
     mythui
     PRIVATE opengl/mythegl.cpp
@@ -336,7 +303,7 @@ if(_HAVE_GL_OR_GLES)
             opengl/mythpainterwindowopengl.h
             opengl/mythrenderopengl.cpp
             opengl/mythrenderopengl.h)
-endif(_HAVE_GL_OR_GLES)
+endif(TARGET any_opengl)
 
 if(TARGET Vulkan::Vulkan)
   target_link_libraries(mythui PUBLIC Vulkan::Vulkan)
@@ -371,14 +338,20 @@ if(ANDROID)
             platforms/mythscreensaverandroid.h)
 endif()
 
+if(UNIX)
+  target_sources(mythui PRIVATE mediamonitor-unix.cpp mediamonitor-unix.h)
+  if(NOT TARGET ${QT_PKG_NAME}::DBus)
+    set_source_files_properties(mediamonitor-unix.h PROPERTIES SKIP_AUTOMOC
+                                                               TRUE)
+  endif()
+endif()
+
 if(WIN32)
   target_sources(mythui PRIVATE mythpainter_d3d9.cpp mythrender_d3d9.cpp
+                                mediamonitor-windows.cpp mediamonitor-windows.h
                                 platforms/mythdisplaywindows.cpp)
   target_compile_definitions(mythui PRIVATE NODRAWTEXT)
   target_link_libraries(mythui PUBLIC user32 gdi32)
-  if(HAVE_DXVA2)
-    target_compile_definitions(mythui PRIVATE USING_DXVA2)
-  endif()
 endif()
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
@@ -399,25 +372,27 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
             devices/AppleRemote.h
             devices/AppleRemoteListener.cpp
             devices/AppleRemoteListener.h)
-  target_compile_definitions(mythui PRIVATE USING_APPLEREMOTE)
-  if(NOT ENABLE_LIRC)
+  if(NOT TARGET lirc)
     target_sources(mythui PRIVATE devices/lircevent.cpp devices/lircevent.h)
+  endif()
+  if(APPLE_DISKARBITRATION_LIBRARY)
+    target_sources(mythui PRIVATE mediamonitor-darwin.cpp mediamonitor-darwin.h)
+    target_link_libraries(mythui PRIVATE ${APPLE_DISKARBITRATION_LIBRARY})
   endif()
 endif()
 
 if(TARGET joystick)
   target_sources(mythui PRIVATE devices/jsmenu.cpp devices/jsmenu.h
                                 devices/jsmenuevent.cpp devices/jsmenuevent.h)
-  target_compile_definitions(mythui PRIVATE USE_JOYSTICK_MENU)
   target_link_libraries(mythui PUBLIC joystick)
 endif()
 
-if(ENABLE_LIRC AND NOT WIN32)
+if(TARGET lirc)
+  target_link_libraries(mythui PRIVATE lirc)
   target_sources(
     mythui
     PRIVATE devices/lirc.cpp devices/lirc.h devices/lirc_client.cpp
             devices/lirc_client.h devices/lircevent.cpp devices/lircevent.h)
-  target_compile_definitions(mythui PRIVATE USE_LIRC)
 endif()
 
 if(TARGET mythtv_mmal)

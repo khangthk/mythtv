@@ -1,7 +1,4 @@
 // -*- Mode: c++ -*-
-
-#undef HAVE_AV_CONFIG_H
-
 // C++ headers
 #include <algorithm>
 #include <cassert>
@@ -20,14 +17,12 @@
 #include <utility>
 
 // MythTV headers
-#include "libmyth/audio/audiooutput.h"
+#include "libmythtv/audio/audiooutput.h"
 #include "libmythbase/mthread.h"
-#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythmiscutil.h"
 #include "libmythbase/mythtimer.h"
-#include "libmythbase/programinfo.h"
 #include "libmythui/mythmainwindow.h"
 #include "libmythui/mythuiactions.h"
 
@@ -44,6 +39,7 @@
 #include "mythavutil.h"
 #include "mythplayer.h"
 #include "mythvideooutnull.h"
+#include "programinfo.h"
 #include "remoteencoder.h"
 #include "tv_actions.h"
 #include "tv_play.h"
@@ -81,18 +77,16 @@ const double MythPlayer::kSeekToEndOffset = 1.0;
 MythPlayer::MythPlayer(PlayerContext* Context, PlayerFlags Flags)
   : m_playerCtx(Context),
     m_playerThread(QThread::currentThread()),
+#ifdef Q_OS_ANDROID
+    m_playerThreadId(gettid()),
+#endif
     m_playerFlags(Flags),
     m_liveTV(Context->m_tvchain),
-    //AV subtitles
-    m_subReader(this),
     // CC608/708
-    m_cc608(this), m_cc708(this),
+    m_cc608(this),
     // Audio
     m_audio(this, (Flags & kAudioMuted) != 0)
 {
-#ifdef Q_OS_ANDROID
-    m_playerThreadId = gettid();
-#endif
     m_deleteMap.SetPlayerContext(m_playerCtx);
 
     m_vbiMode = VBIMode::Parse(gCoreContext->GetSetting("VbiFormat"));
@@ -103,7 +97,7 @@ MythPlayer::MythPlayer(PlayerContext* Context, PlayerFlags Flags)
     QString mypage = gCoreContext->GetSetting("VBIpageNr", "888");
     bool valid = false;
     uint tmp = mypage.toInt(&valid, 16);
-    m_ttPageNum = (valid) ? tmp : m_ttPageNum;
+    m_ttPageNum = valid ? tmp : m_ttPageNum;
     m_cc608.SetTTPageNum(m_ttPageNum);
 }
 
@@ -796,6 +790,12 @@ bool MythPlayer::PrebufferEnoughFrames(int min_buffers)
             LOG(VB_GENERAL, LOG_NOTICE, LOC + "Resetting audio buffer");
             m_audio.Reset();
         }
+
+        if (m_renderOneFrame)
+        {
+            LOG(VB_PLAYBACK, LOG_DEBUG, LOC + "Forcibly clearing render one");
+            m_renderOneFrame = false;
+        }
     }
 
     std::chrono::milliseconds msecs { 500ms };
@@ -1197,7 +1197,7 @@ void MythPlayer::DoFFRewSkip(void)
     {
         long long cur_frame    = m_decoder->GetFramesPlayed();
         bool      toBegin      = -cur_frame > m_ffrewSkip + m_ffrewAdjust;
-        long long real_skip    = (toBegin) ? -cur_frame : m_ffrewSkip + m_ffrewAdjust;
+        long long real_skip    = toBegin ? -cur_frame : m_ffrewSkip + m_ffrewAdjust;
         long long target_frame = cur_frame + real_skip;
         m_decoder->DoRewind(target_frame, true);
 
@@ -1306,6 +1306,7 @@ void MythPlayer::WrapTimecode(std::chrono::milliseconds &timecode, TCTypes tc_ty
 bool MythPlayer::PrepareAudioSample(std::chrono::milliseconds &timecode)
 {
     WrapTimecode(timecode, TC_AUDIO);
+    m_latestAudioTimecode = timecode;
     return false;
 }
 
@@ -1315,7 +1316,9 @@ uint64_t MythPlayer::GetBookmark(void)
 
     if (gCoreContext->IsDatabaseIgnored() ||
         (m_playerCtx->m_buffer && !m_playerCtx->m_buffer->IsBookmarkAllowed()))
+    {
         bookmark = 0;
+    }
     else
     {
         m_playerCtx->LockPlayingInfo(__FILE__, __LINE__);
@@ -1483,7 +1486,9 @@ long long MythPlayer::CalcMaxFFTime(long long ffframes, bool setjump) const
         float behind = secsWritten - secsPlayed;
 
         if (behind < maxtime) // if we're close, do nothing
+        {
             ret = 0;
+        }
         else if (behind - ff <= maxtime)
         {
             auto msec = millisecondsFromFloat(1000 * (secsWritten - maxtime));
@@ -1504,7 +1509,9 @@ long long MythPlayer::CalcMaxFFTime(long long ffframes, bool setjump) const
     {
         float secsMax = secsWritten - (2.F * maxtime);
         if (secsMax <= 0.F)
+        {
             ret = 0;
+        }
         else if (secsMax < secsPlayed + ff)
         {
             auto msec = millisecondsFromFloat(1000 * secsMax);
@@ -1715,13 +1722,6 @@ QString MythPlayer::GetEncodingType(void) const
     return {};
 }
 
-bool MythPlayer::GetRawAudioState(void) const
-{
-    if (m_decoder)
-        return m_decoder->GetRawAudioState();
-    return false;
-}
-
 QString MythPlayer::GetXDS(const QString &key) const
 {
     if (!m_decoder)
@@ -1758,7 +1758,7 @@ uint64_t MythPlayer::FindFrame(float offset, bool use_cutlist) const
     std::chrono::milliseconds position_ms = 0ms;
     auto offset_ms = std::chrono::milliseconds(llroundf(fabsf(offset) * 1000));
 
-    if (signbit(offset))
+    if (std::signbit(offset))
     {
         // Always get an updated totalFrame value for in progress recordings
         if (islivetvcur || IsWatchingInprogress())
@@ -2023,3 +2023,5 @@ static unsigned dbg_ident(const MythPlayer *player)
         return *it;
     return s_dbgIdent[player] = s_dbgNextIdent++;
 }
+
+#include "moc_mythplayer.cpp"

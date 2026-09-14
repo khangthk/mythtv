@@ -15,6 +15,10 @@
 #include <iostream>
 
 // Qt
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QApplication>
 #include <QCoreApplication>
 #include <QImage>
@@ -22,10 +26,13 @@
 #include <QDir>
 
 // MythTV
-#include <libmyth/mythcontext.h>
+#include <libmythbase/mythcorecontext.h>
 #include <libmythbase/mythdbcon.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythbase/remotefile.h>
+#ifndef __cpp_size_t_suffix
 #include <libmythbase/sizetliteral.h>
+#endif
 #include <libmythbase/mythdirs.h>
 #include <libmythmetadata/musicmetadata.h>
 #include <libmythui/mythmainwindow.h>
@@ -37,6 +44,11 @@
 #include "mainvisual.h"
 #include "musicplayer.h"
 #include "visualize.h"
+
+extern "C" {
+    #include <libavutil/mem.h>
+    #include <libavutil/tx.h>
+}
 
 VisFactory* VisFactory::g_pVisFactories = nullptr;
 
@@ -67,7 +79,7 @@ void VisualBase::drawWarning(QPainter *p, const QColor &back, const QSize size, 
     // Taken from removed MythUIHelper::GetMediumFont
     QFont font = QApplication::font();
 
-#ifdef _WIN32
+#ifdef Q_OS_WINDOWS
     // logicalDpiY not supported in Windows.
     int logicalDpiY = 100;
     HDC hdc = GetDC(nullptr);
@@ -227,7 +239,11 @@ void StereoScope::resize( const QSize &newsize )
     m_size = newsize;
 
     auto os = m_magnitudes.size();
+#ifdef __cpp_size_t_suffix
+    m_magnitudes.resize( m_size.width() * 2UZ );
+#else
     m_magnitudes.resize( m_size.width() * 2_UZ );
+#endif
     for ( ; os < m_magnitudes.size(); os++ )
         m_magnitudes[os] = 0.0;
 }
@@ -244,7 +260,7 @@ bool StereoScope::process( VisualNode *node )
         for ( int i = 0; i < m_size.width(); i++)
         {
             auto indexTo = (unsigned long)(index + step);
-            if (indexTo == (unsigned long)(index))
+            if (indexTo == (unsigned long)index)
                 indexTo = (unsigned long)(index + 1);
 
             double valL = 0;
@@ -412,12 +428,12 @@ bool StereoScope::draw( QPainter *p, const QColor &back )
     else if (per < 0.0)
         per = 0.0;
 
-    r = m_startColor.red() + (m_targetColor.red() -
-                m_startColor.red()) * (per * per);
-    g = m_startColor.green() + (m_targetColor.green() -
-                  m_startColor.green()) * (per * per);
-    b = m_startColor.blue() + (m_targetColor.blue() -
-                 m_startColor.blue()) * (per * per);
+    r = m_startColor.red() + ((m_targetColor.red() -
+                m_startColor.red()) * (per * per));
+    g = m_startColor.green() + ((m_targetColor.green() -
+                  m_startColor.green()) * (per * per));
+    b = m_startColor.blue() + ((m_targetColor.blue() -
+                 m_startColor.blue()) * (per * per));
 
     if (r > 255.0)
         r = 255.0;
@@ -491,9 +507,9 @@ bool MonoScope::process( VisualNode *node )
             for (auto s = (unsigned long)index; s < indexTo && s < node->m_length; s++)
             {
                 double tmp = ( static_cast<double>(node->m_left[s]) +
-                               (node->m_right ? static_cast<double>(node->m_right[s])
+                               ((node->m_right ? static_cast<double>(node->m_right[s])
                                 : static_cast<double>(node->m_left[s])) *
-                               ( static_cast<double>(m_size.height()) / 2.0 ) ) / 65536.0;
+                               ( static_cast<double>(m_size.height()) / 2.0 )) ) / 65536.0;
                 if (tmp > 0)
                 {
                     val = (tmp > val) ? tmp : val;
@@ -986,10 +1002,12 @@ Spectrogram::Spectrogram(bool hist)
         m_image->fill(Qt::black);
     }
 
-    m_dftL = static_cast<FFTSample*>(av_malloc(sizeof(FFTSample) * m_fftlen));
-    m_dftR = static_cast<FFTSample*>(av_malloc(sizeof(FFTSample) * m_fftlen));
+    m_dftL = static_cast<float*>(av_malloc(sizeof(float) * m_fftlen));
+    m_dftR = static_cast<float*>(av_malloc(sizeof(float) * m_fftlen));
+    m_rdftTmp = static_cast<float*>(av_malloc(sizeof(float) * (m_fftlen + 2)));
 
-    m_rdftContext = av_rdft_init(std::log2(m_fftlen), DFT_R2C);
+    // should probably check that this succeeds
+    av_tx_init(&m_rdftContext, &m_rdft, AV_TX_FLOAT_RDFT, 0, m_fftlen, &kTxScale, 0x0);
 
     // hack!!! Should 44100 sample rate be queried or measured?
     // Likely close enough for most audio recordings...
@@ -1041,7 +1059,8 @@ Spectrogram::~Spectrogram()
 {
     av_freep(reinterpret_cast<void*>(&m_dftL));
     av_freep(reinterpret_cast<void*>(&m_dftR));
-    av_rdft_end(m_rdftContext);
+    av_freep(reinterpret_cast<void*>(&m_rdftTmp));
+    av_tx_uninit(&m_rdftContext);
 }
 
 void Spectrogram::resize(const QSize &newsize)
@@ -1149,17 +1168,17 @@ bool Spectrogram::processUndisplayed(VisualNode *node)
         {                       // prior set ramps from mult to 1.0
             if (k > start - i && start > i)
             {
-                mult = mult + (1 - mult) *
-                    (1 - (float)(start - k) / (float)(start - i));
+                mult = mult + ((1 - mult) *
+                    (1 - ((float)(start - k) / (float)(start - i))));
             }
             m_sigL[k] = mult * m_sigL[i + k];
             m_sigR[k] = mult * m_sigR[i + k];
         }
         for (int k = 0; k < i; k++) // append current samples
         {
-            m_sigL[start + k] = node->m_left[k] / 32768.; // +/- 1 peak-to-peak
+            m_sigL[start + k] = node->m_left[k] / 32768.0F; // +/- 1 peak-to-peak
             if (node->m_right)
-                m_sigR[start + k] = node->m_right[k] / 32768.;
+                m_sigR[start + k] = node->m_right[k] / 32768.0F;
         }
         int end = m_fftlen / 40; // ramp window ends down to zero crossing
         for (int k = 0; k < m_fftlen; k++)
@@ -1174,8 +1193,13 @@ bool Spectrogram::processUndisplayed(VisualNode *node)
             m_dftR[k] = m_sigR[k] * mult;
         }
     }
-    av_rdft_calc(m_rdftContext, m_dftL); // run the real FFT!
-    av_rdft_calc(m_rdftContext, m_dftR);
+    // run the real FFT!
+    m_rdft(m_rdftContext, m_rdftTmp, m_dftL, sizeof(float));
+    m_rdftTmp[1] = m_rdftTmp[m_fftlen];
+    memcpy(m_dftL, m_rdftTmp, m_fftlen * sizeof(float));
+    m_rdft(m_rdftContext, m_rdftTmp, m_dftR, sizeof(float));
+    m_rdftTmp[1] = m_rdftTmp[m_fftlen];
+    memcpy(m_dftR, m_rdftTmp, m_fftlen * sizeof(float));
 
     QPainter painter(m_image);
     painter.setPen(Qt::black);  // clear prior content
@@ -1196,7 +1220,7 @@ bool Spectrogram::processUndisplayed(VisualNode *node)
         float right = 0;
         float tmp = 0;
         int count = 0;
-        for (auto j = prev + 1; j <= index; j++) // log scale!
+        for (ptrdiff_t j = prev + 1; j <= index; j++) // log scale!
         {    // for the freqency bins of this pixel, find peak or mean
             tmp = sq(m_dftL[2 * j]) + sq(m_dftL[(2 * j) + 1]);
             left  = m_binpeak ? std::max(tmp, left) : left + tmp;
@@ -1212,9 +1236,9 @@ bool Spectrogram::processUndisplayed(VisualNode *node)
         // linear magnitude:           sqrt(sq(real) + sq(im));
         // left = sqrt(left);
         // right = sqrt(right);
-        // power spectrum (dBm): 10 * log10(sq(real) + sq(im));
-        left = 10 * log10(left);
-        right = 10 * log10(right);
+        // power spectrum (dBm): 10 * std::log10(sq(real) + sq(im));
+        left = 10 * std::log10(left);
+        right = 10 * std::log10(right);
 
         // float bw = 1. / (16384. / 44100.);
         // float freq = bw * index;
@@ -1285,7 +1309,7 @@ bool Spectrogram::processUndisplayed(VisualNode *node)
 
 double Spectrogram::clamp(double cur, double max, double min)
 {
-    if (isnan(cur)) return 0;
+    if (std::isnan(cur)) return 0;
     return std::clamp(cur, min, max);
 }
 
@@ -1390,17 +1414,20 @@ Spectrum::Spectrum()
 
     m_fps = 40;         // getting 1152 samples / 44100 = 38.28125 fps
 
-    m_dftL = static_cast<FFTSample*>(av_malloc(sizeof(FFTSample) * m_fftlen));
-    m_dftR = static_cast<FFTSample*>(av_malloc(sizeof(FFTSample) * m_fftlen));
+    m_dftL = static_cast<float*>(av_malloc(sizeof(float) * m_fftlen));
+    m_dftR = static_cast<float*>(av_malloc(sizeof(float) * m_fftlen));
+    m_rdftTmp = static_cast<float*>(av_malloc(sizeof(float) * (m_fftlen + 2)));
 
-    m_rdftContext = av_rdft_init(std::log2(m_fftlen), DFT_R2C);
+    // should probably check that this succeeds
+    av_tx_init(&m_rdftContext, &m_rdft, AV_TX_FLOAT_RDFT, 0, m_fftlen, &kTxScale, 0x0);
 }
 
 Spectrum::~Spectrum()
 {
     av_freep(reinterpret_cast<void*>(&m_dftL));
     av_freep(reinterpret_cast<void*>(&m_dftR));
-    av_rdft_end(m_rdftContext);
+    av_freep(reinterpret_cast<void*>(&m_rdftTmp));
+    av_tx_uninit(&m_rdftContext);
 }
 
 void Spectrum::resize(const QSize &newsize)
@@ -1438,7 +1465,7 @@ void Spectrum::resize(const QSize &newsize)
         m_magnitudes[os] = 0.0;
     }
 
-    m_scaleFactor = m_size.height() / 2. / 42.;
+    m_scaleFactor = m_size.height() / 2.0F / 42.0F;
 }
 
 // this moved up to Spectrogram so both can use it
@@ -1463,17 +1490,17 @@ bool Spectrum::processUndisplayed(VisualNode *node)
         {                       // prior set ramps from mult to 1.0
             if (k > start - i && start > i)
             {
-                mult = mult + (1 - mult) *
-                    (1 - (float)(start - k) / (float)(start - i));
+                mult = mult + ((1 - mult) *
+                    (1 - ((float)(start - k) / (float)(start - i))));
             }
             m_sigL[k] = mult * m_sigL[i + k];
             m_sigR[k] = mult * m_sigR[i + k];
         }
         for (int k = 0; k < i; k++) // append current samples
         {
-            m_sigL[start + k] = node->m_left[k] / 32768.; // +/- 1 peak-to-peak
+            m_sigL[start + k] = node->m_left[k] / 32768.0F; // +/- 1 peak-to-peak
             if (node->m_right)
-                m_sigR[start + k] = node->m_right[k] / 32768.;
+                m_sigR[start + k] = node->m_right[k] / 32768.0F;
         }
         int end = m_fftlen / 40; // ramp window ends down to zero crossing
         for (int k = 0; k < m_fftlen; k++)
@@ -1488,32 +1515,36 @@ bool Spectrum::processUndisplayed(VisualNode *node)
             m_dftR[k] = m_sigR[k] * mult;
         }
     }
-    av_rdft_calc(m_rdftContext, m_dftL); // run the real FFT!
-    av_rdft_calc(m_rdftContext, m_dftR);
+    // run the real FFT!
+    m_rdft(m_rdftContext, m_rdftTmp, m_dftL, sizeof(float));
+    m_rdftTmp[1] = m_rdftTmp[m_fftlen];
+    memcpy(m_dftL, m_rdftTmp, m_fftlen * sizeof(float));
+    m_rdft(m_rdftContext, m_rdftTmp, m_dftR, sizeof(float));
+    m_rdftTmp[1] = m_rdftTmp[m_fftlen];
+    memcpy(m_dftR, m_rdftTmp, m_fftlen * sizeof(float));
 
-    long w = 0;
     QRect *rectspL = m_rectsL.data();
     QRect *rectspR = m_rectsR.data();
     float *magnitudesp = m_magnitudes.data();
 
     int index = 1;              // frequency index of this pixel
     int prev = 0;               // frequency index of previous pixel
-    float adjHeight = m_size.height() / 2.0;
+    float adjHeight = m_size.height() / 2.0F;
 
-    for (int i = 0; i < m_rectsL.size(); i++, w += m_analyzerBarWidth)
+    for (int i = 0; i < m_rectsL.size(); i++)
     {
         float magL = 0;         // modified from Spectrogram
         float magR = 0;
         float tmp = 0;
-        for (auto j = prev + 1; j <= index; j++) // log scale!
+        for (ptrdiff_t j = prev + 1; j <= index; j++) // log scale!
         {    // for the freqency bins of this pixel, find peak or mean
             tmp = sq(m_dftL[2 * j]) + sq(m_dftL[(2 * j) + 1]);
             magL  = tmp > magL  ? tmp : magL;
             tmp = sq(m_dftR[2 * j]) + sq(m_dftR[(2 * j) + 1]);
             magR = tmp > magR ? tmp : magR;
         }
-        magL = 10 * log10(magL) * m_scaleFactor;
-        magR = 10 * log10(magR) * m_scaleFactor;
+        magL = 10 * std::log10(magL) * m_scaleFactor;
+        magR = 10 * std::log10(magR) * m_scaleFactor;
 
         magL = std::min(magL, adjHeight);
         if (magL < magnitudesp[i])
@@ -1588,11 +1619,11 @@ bool Spectrum::draw(QPainter *p, const QColor &back)
         per = clamp(per, 1.0, 0.0);
 
         r = m_startColor.red() +
-            (m_targetColor.red() - m_startColor.red()) * (per * per);
+            ((m_targetColor.red() - m_startColor.red()) * (per * per));
         g = m_startColor.green() +
-            (m_targetColor.green() - m_startColor.green()) * (per * per);
+            ((m_targetColor.green() - m_startColor.green()) * (per * per));
         b = m_startColor.blue() +
-            (m_targetColor.blue() - m_startColor.blue()) * (per * per);
+            ((m_targetColor.blue() - m_startColor.blue()) * (per * per));
 
         r = clamp(r, 255.0, 0.0);
         g = clamp(g, 255.0, 0.0);
@@ -1688,7 +1719,7 @@ bool Squares::draw(QPainter *p, const QColor &back)
     for (uint i = 0; i < (uint)m_rectsL.size() * 2; i += 2)
         drawRect(p, &(rectsp[i]), i, center, w, h);
     rectsp = m_rectsR.data();
-    for (uint i = 1; i < (uint)m_rectsR.size() * 2 + 1; i += 2)
+    for (uint i = 1; i < ((uint)m_rectsR.size() * 2) + 1; i += 2)
         drawRect(p, &(rectsp[i]), i, center, w, h);
 
     return true;
@@ -1724,9 +1755,6 @@ Piano::Piano()
 
     LOG(VB_GENERAL, LOG_DEBUG, QString("Piano : Being Initialised"));
 
-    m_pianoData = (piano_key_data *) malloc(sizeof(piano_key_data) * kPianoNumKeys);
-    m_audioData = (piano_audio *) malloc(sizeof(piano_audio) * kPianoAudioSize);
-
     double sample_rate = 44100.0;  // TODO : This should be obtained from gPlayer (likely candidate...)
 
     m_fps = 20; // This is the display frequency.   We're capturing all audio chunks by defining .process_undisplayed() though.
@@ -1757,14 +1785,6 @@ Piano::Piano()
     }
 
     zero_analysis();
-}
-
-Piano::~Piano()
-{
-    if (m_pianoData)
-        free(m_pianoData);
-    if (m_audioData)
-        free(m_audioData);
 }
 
 void Piano::zero_analysis(void)
@@ -1810,7 +1830,7 @@ void Piano::resize(const QSize &newsize)
 
     // This is the starting position of the keyboard (may be beyond LHS)
     // - actually position of C below bottom A (will be added to...).  This is 4 octaves below middle C.
-    double left =  ((double)m_size.width() / 2.0) - ((4.0*7.0 + 3.5) * key_unit_size); // The extra 3.5 centers 'F' inthe middle of the screen
+    double left =  ((double)m_size.width() / 2.0) - (((4.0*7.0) + 3.5) * key_unit_size); // The extra 3.5 centers 'F' inthe middle of the screen
     double top_of_keys = ((double)m_size.height() / 2.0) - (key_unit_size * white_height_pct / 2.0); // Vertically center keys
 
     m_rects.resize(kPianoNumKeys);
@@ -1867,7 +1887,7 @@ unsigned long Piano::getDesiredSamples(void)
     // We want all the data! (within reason)
     //   typical observed values are 882 -
     //   12.5 chunks of data per second from 44100Hz signal : Sampled at 50Hz, lots of 4, see :
-    //   mythtv/libs/libmyth/audio/audiooutputbase.cpp :: AudioOutputBase::AddData
+    //   mythtv/libs/libmythtv/audio/audiooutputbase.cpp :: AudioOutputBase::AddData
     //   See : mythtv/mythplugins/mythmusic/mythmusic/avfdecoder.cpp "20ms worth"
     return (unsigned long) kPianoAudioSize;  // Maximum we can be given
 }
@@ -2164,7 +2184,9 @@ void AlbumArt::findFrontCover(void)
     // if a front cover image is available show that first
     AlbumArtImages *albumArt = gPlayer->getCurrentMetadata()->getAlbumArtImages();
     if (albumArt->getImage(IT_FRONTCOVER))
+    {
         m_currImageType = IT_FRONTCOVER;
+    }
     else
     {
         // not available so just show the first image available
@@ -2175,24 +2197,26 @@ void AlbumArt::findFrontCover(void)
     }
 }
 
+static int nextType (int type)
+{
+    type++;
+    return (type != IT_LAST) ? type : IT_UNKNOWN;
+}
+
 bool AlbumArt::cycleImage(void)
 {
     if (!gPlayer->getCurrentMetadata())
         return false;
 
     AlbumArtImages *albumArt = gPlayer->getCurrentMetadata()->getAlbumArtImages();
-    int newType = m_currImageType;
 
     // If we only have one image there is nothing to cycle
-    if (albumArt->getImageCount() > 1)
-    {
-        do
-        {
-            newType++;
-            if (newType == IT_LAST)
-                newType = IT_UNKNOWN;
-        } while (!albumArt->getImage((ImageType) newType));
-    }
+    if (albumArt->getImageCount() < 2)
+        return false;
+
+    int newType = nextType(m_currImageType);
+    while (!albumArt->getImage((ImageType) newType))
+        newType = nextType(newType);
 
     if (newType != m_currImageType)
     {

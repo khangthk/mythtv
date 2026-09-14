@@ -10,14 +10,13 @@
 #include <QString>
 
 // MythTV
-#include "libmyth/standardsettings.h"
+#include "libmythui/standardsettings.h"
 #include "libmythbase/mythdb.h"
-#include "libmythbase/mythlogging.h"
 #include "mythtvexp.h"
 
 class QWidget;
 
-class ChannelID : public GroupSetting
+class MTV_PUBLIC ChannelID : public GroupSetting
 {
   public:
     explicit ChannelID(QString  field = "chanid",
@@ -27,37 +26,7 @@ class ChannelID : public GroupSetting
         setVisible(false);
     }
 
-    void Save(void) override // StandardSetting
-    {
-        if (getValue().toInt() == 0) {
-            setValue(findHighest());
-
-            MSqlQuery query(MSqlQuery::InitCon());
-
-            QString querystr = QString("SELECT %1 FROM %2 WHERE %3='%4'")
-                             .arg(m_field, m_table, m_field, getValue());
-            query.prepare(querystr);
-
-            if (!query.exec() && !query.isActive())
-                MythDB::DBError("ChannelID::save", query);
-
-            if (query.size())
-                return;
-
-            querystr = QString("INSERT INTO %1 (%2) VALUES ('%3')")
-                             .arg(m_table, m_field, getValue());
-            query.prepare(querystr);
-
-            if (!query.exec() || !query.isActive())
-                MythDB::DBError("ChannelID::save", query);
-
-            if (query.numRowsAffected() != 1)
-            {
-                LOG(VB_GENERAL, LOG_ERR, QString("ChannelID, Error: ") +
-                        QString("Failed to insert into: %1").arg(m_table));
-            }
-        }
-    }
+    void Save() override; // StandardSetting
 
     int findHighest(int floor = 1000)
     {
@@ -98,9 +67,11 @@ class ChannelDBStorage : public SimpleDBStorage
     ChannelDBStorage(StorageUser *_user, const ChannelID &_id, const QString& _name) :
         SimpleDBStorage(_user, "channel", _name), m_id(_id) { }
 
+  protected:
     QString GetSetClause(MSqlBindings &bindings) const override; // SimpleDBStorage
     QString GetWhereClause(MSqlBindings &bindings) const override; // SimpleDBStorage
 
+  private:
     const ChannelID& m_id;
 };
 
@@ -110,9 +81,11 @@ class IPTVChannelDBStorage : public SimpleDBStorage
     IPTVChannelDBStorage(StorageUser *_user, const ChannelID &_id, const QString& _name) :
         SimpleDBStorage(_user, "iptv_channel", _name), m_id(_id) { }
 
+  protected:
     QString GetSetClause(MSqlBindings &bindings) const override; // SimpleDBStorage
     QString GetWhereClause(MSqlBindings &bindings) const override; // SimpleDBStorage
 
+  public:
     const ChannelID& m_id;
 };
 
@@ -184,6 +157,7 @@ class MTV_PUBLIC ChannelTVFormat :
 {
   public:
     explicit ChannelTVFormat(const ChannelID &id);
+    ~ChannelTVFormat() override;
 
     static QStringList GetFormats(void);
 };

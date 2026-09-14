@@ -1,6 +1,8 @@
 #ifndef MYTHHTTPSERVER_H
 #define MYTHHTTPSERVER_H
 
+#include "libmythbase/mythconfig.h"
+
 // Qt
 #include <QHostInfo>
 #include <QQueue>
@@ -8,6 +10,13 @@
 // MythTV
 #include "libmythbase/http/mythhttpthreadpool.h"
 #include "libmythbase/http/mythhttptypes.h"
+
+class MythTcpQueueEntry
+{
+  public:
+    qintptr         m_socketFD {0};
+    bool            m_ssl {false};
+};
 
 class MythHTTPServer : public MythHTTPThreadPool
 {
@@ -70,7 +79,7 @@ class MythHTTPServer : public MythHTTPThreadPool
     static bool ReservedPath(const QString& Path);
     static QStringList BuildAddressList(QHostInfo& Info);
 
-#ifdef USING_LIBDNS_SD
+#if CONFIG_LIBDNS_SD
     class BonjourRegister* m_bonjour    { nullptr };
     BonjourRegister*       m_bonjourSSL { nullptr };
 #endif
@@ -80,7 +89,8 @@ class MythHTTPServer : public MythHTTPThreadPool
     int               m_masterStatusPort { 0 };
     int               m_masterSSLPort    { 0 };
     QString           m_masterIPAddress;
-    QQueue<qintptr>   m_connectionQueue;
+    QQueue<MythTcpQueueEntry>
+                      m_connectionQueue;
     int               m_threadNum { 0 };
 };
 

@@ -1,4 +1,5 @@
 // MythTV
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythlogging.h"
 
 #include "mheg/interactivetv.h"
@@ -78,7 +79,7 @@ bool MythPlayerVideoUI::InitVideo()
     connect(m_tv,  &TV::ChangeAspectOverride,     this,  &MythPlayerVideoUI::ReinitOSD);
     connect(m_tv,  &TV::ChangeZoom,               this,  &MythPlayerVideoUI::ReinitOSD);
     connect(m_tv,  &TV::ToggleMoveBottomLine,     this,  &MythPlayerVideoUI::ReinitOSD);
-    connect(m_tv,  &TV::ToggleDetectLetterBox, toggleDetectLetterbox);
+    connect(m_tv,  &TV::ToggleDetectLetterBox,    this, toggleDetectLetterbox);
 
     // Passthrough signals
     connect(m_tv, &TV::ResizeScreenForVideo,     video, &MythVideoOutputGPU::ResizeForVideo);
@@ -208,7 +209,7 @@ void MythPlayerVideoUI::ReinitOSD()
 
         m_reinitOsd = false;
 
-#ifdef USING_MHEG
+#if CONFIG_MHEG
         if (GetInteractiveTV())
         {
             QMutexLocker locker(&m_itvLock);
@@ -238,3 +239,4 @@ void MythPlayerVideoUI::CheckAspectRatio(MythVideoFrame* Frame)
     }
 }
 
+#include "moc_mythplayervideoui.cpp"

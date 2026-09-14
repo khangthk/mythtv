@@ -40,13 +40,13 @@
 #include <QPainter>
 
 // myth
-#include <mythconfig.h>
-#include <libmyth/mythcontext.h>
+#include <libmythbase/mythconfig.h> // IMAGE_ALIGN
 #include <libmythbase/mythdate.h>
 #include <libmythbase/mythdbcon.h>
 #include <libmythbase/mythdirs.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythbase/mythmiscutil.h> // for MythFile::copy
-#include <libmythbase/programinfo.h>
+#include <libmythtv/programinfo.h>
 #include <libmythui/mythdialogbox.h>
 #include <libmythui/mythimage.h>
 #include <libmythui/mythmainwindow.h>
@@ -72,15 +72,15 @@ static constexpr int8_t PRE_SEEK_AMOUNT { 50 };
 
 static const std::array<const SeekAmount,9> kSeekAmounts
 {{
-    {"frame",       -1},
-    {"1 second",     1},
-    {"5 seconds",    5},
-    {"10 seconds",  10},
-    {"30 seconds",  30},
-    {"1 minute",    60},
-    {"5 minutes",  300},
-    {"10 minutes", 600},
-    {"Cut Point",   -2},
+    {.name="frame",      .amount=-1},
+    {.name="1 second",   .amount=1},
+    {.name="5 seconds",  .amount=5},
+    {.name="10 seconds", .amount=10},
+    {.name="30 seconds", .amount=30},
+    {.name="1 minute",   .amount=60},
+    {.name="5 minutes",  .amount=300},
+    {.name="10 minutes", .amount=600},
+    {.name="Cut Point",  .amount=-2},
 }};
 
 ThumbFinder::ThumbFinder(MythScreenStack *parent, ArchiveItem *archiveItem,
@@ -92,6 +92,7 @@ ThumbFinder::ThumbFinder(MythScreenStack *parent, ArchiveItem *archiveItem,
 {
     // copy thumbList so we can abandon changes if required
     m_thumbList.clear();
+    m_thumbList.reserve(m_archiveItem->thumbList.size());
     for (const auto *item : std::as_const(m_archiveItem->thumbList))
     {
         auto *thumb = new ThumbImage;
@@ -563,7 +564,9 @@ bool ThumbFinder::initAVCodec(const QString &inFile)
         {
             m_startTime = -1;
             if (m_inputFC->streams[i]->start_time != (int) AV_NOPTS_VALUE)
+            {
                 m_startTime = m_inputFC->streams[i]->start_time;
+            }
             else
             {
                 LOG(VB_GENERAL, LOG_ERR,
@@ -686,7 +689,9 @@ bool ThumbFinder::seekForward()
     int inc = kSeekAmounts[m_currentSeek].amount;
 
     if (inc == -1)
+    {
         inc = 1;
+    }
     else if (inc == -2)
     {
         int pos = 0;
@@ -724,7 +729,9 @@ bool ThumbFinder::seekBackward()
 
     int inc = kSeekAmounts[m_currentSeek].amount;
     if (inc == -1)
+    {
         inc = -1;
+    }
     else if (inc == -2)
     {
         // seek to previous cut point
@@ -956,3 +963,5 @@ int ThumbFinder::calcFinalDuration()
 
     return m_archiveItem->duration;
 }
+
+#include "moc_thumbfinder.cpp"

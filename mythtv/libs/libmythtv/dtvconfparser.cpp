@@ -34,7 +34,6 @@
 #include <QFile>
 
 // MythTV headers
-#include "libmyth/mythcontext.h"
 #include "libmythbase/mythdbcon.h"
 #include "libmythbase/mythlogging.h"
 #include "dtvconfparser.h"
@@ -74,7 +73,7 @@ DTVConfParser::return_t DTVConfParser::Parse(void)
 
     QFile file(m_filename);
     if (!file.open(QIODevice::ReadOnly))
-        return ERROR_OPEN;
+        return return_t::ERROR_OPEN;
 
     bool ok = true;
     QTextStream stream(&file);
@@ -95,7 +94,11 @@ DTVConfParser::return_t DTVConfParser::Parse(void)
 
         if ((str.length() >= 1) && (str.at(0) == '@'))
         {
-            channelNo = str.mid(1).toInt();
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+            channelNo = str.midRef(1).toInt();
+#else
+            channelNo = QStringView(str).mid(1).toInt();
+#endif
             line = stream.readLine();
             list = line.split(":", Qt::SkipEmptyParts);
         }
@@ -107,31 +110,31 @@ DTVConfParser::return_t DTVConfParser::Parse(void)
 
         if ((str == "T") || (str == "C") || (str == "S"))
         {
-            if (((m_type == OFDM) && (str == "T")) ||
-                ((m_type == QPSK || m_type == DVBS2) && (str == "S")) ||
-                ((m_type == QAM) && (str == "C")))
+            if (((m_type == cardtype_t::OFDM) && (str == "T")) ||
+                ((m_type == cardtype_t::QPSK || m_type == cardtype_t::DVBS2) && (str == "S")) ||
+                ((m_type == cardtype_t::QAM) && (str == "C")))
                 ok &= ParseVDR(list, channelNo);
         }
-        else if (m_type == OFDM)
+        else if (m_type == cardtype_t::OFDM)
         {
             ok &= ParseConfOFDM(list);
         }
-        else if (m_type == ATSC)
+        else if (m_type == cardtype_t::ATSC)
         {
             ok &= ParseConfATSC(list);
         }
-        else if (m_type == QPSK || m_type == DVBS2)
+        else if (m_type == cardtype_t::QPSK || m_type == cardtype_t::DVBS2)
         {
             ok &= ParseConfQPSK(list);
         }
-        else if (m_type == QAM)
+        else if (m_type == cardtype_t::QAM)
         {
             ok &= ParseConfQAM(list);
         }
     }
     file.close();
 
-    return (ok) ? OK : ERROR_PARSE;
+    return ok ? return_t::OK : return_t::ERROR_PARSE;
 }
 
 bool DTVConfParser::ParseConfOFDM(const QStringList &tokens)

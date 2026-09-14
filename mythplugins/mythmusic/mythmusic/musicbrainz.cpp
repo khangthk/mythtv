@@ -6,6 +6,7 @@
 #include <QFile>
 
 // MythTV
+#include <libmythbase/mythlogging.h>
 #include "libmythbase/mythmiscutil.h"
 
 #ifdef HAVE_MUSICBRAINZ
@@ -382,7 +383,7 @@ bool MusicBrainz::queryForDevice(const QString &deviceName)
 
 bool MusicBrainz::hasMetadata(int track) const
 {
-    return m_tracks.find(track) != m_tracks.end();
+    return m_tracks.contains(track);
 }
 
 MusicMetadata *MusicBrainz::getMetadata(int track) const

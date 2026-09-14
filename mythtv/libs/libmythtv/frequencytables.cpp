@@ -1,5 +1,6 @@
 #include <utility>
 
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QMutex>
 
 #include "libmythbase/compat.h"
@@ -96,7 +97,9 @@ TransportScanItem::TransportScanItem(uint sourceid,
     m_tuning.m_modulation = ft.m_modulation;
 
     if (std.toLower() == "atsc")
+    {
         m_tuning.m_sistandard = "atsc";
+    }
     else if (std.toLower() == "analog")
     {
         m_tuning.m_sistandard = "analog";
@@ -253,6 +256,7 @@ freq_table_list_t get_matching_freq_tables(
         get_matching_freq_tables_internal(format, modulation, country);
 
     freq_table_list_t new_list;
+    new_list.reserve(list.size());
     for (auto & ft : list)
         new_list.push_back(new FrequencyTable(*ft));
 

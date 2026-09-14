@@ -76,9 +76,9 @@ void V2FillArtworkInfoList( V2ArtworkInfoList *pArtworkInfoList,
 
 DBCredits * V2jsonCastToCredits(const QJsonObject &cast);
 
-void V2FillCutList( V2CutList* pCutList, ProgramInfo* rInfo, int marktype);
+void V2FillCutList( V2CutList* pCutList, ProgramInfo* rInfo, int marktype, bool includeFps=false);
 
-void V2FillCommBreak( V2CutList* pCutList, ProgramInfo* rInfo, int marktype);
+void V2FillCommBreak( V2CutList* pCutList, ProgramInfo* rInfo, int marktype, bool includeFps=false);
 
 void V2FillSeek(V2CutList* pCutList, RecordingInfo* rInfo, MarkTypes marktype);
 
@@ -94,7 +94,8 @@ int FillUpcomingList(QVariantList& list, QObject* parent,
                                         bool bShowAll,
                                         int  nRecordId,
                                         int  nRecStatus,
-                                        const QString  &Sort = QString());
+                                        const QString  &Sort = QString(),
+                                        const QString &  RecGroup = QString());
 
 void FillFrontendList(QVariantList &list, QObject* parent, bool OnLine);
 

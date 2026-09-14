@@ -9,8 +9,9 @@
 # the FFmpeg configure script will disable nvdec, nvec, and ffnvcodec, so
 # there's no point in setting up the headers.
 #
-if(NOT CMAKE_SYSTEM_NAME MATCHES "Linux|Windows" OR NOT CMAKE_SYSTEM_PROCESSOR
-                                                    MATCHES "x86|aarch64")
+if(NOT ENABLE_NVDEC
+   OR NOT CMAKE_SYSTEM_NAME MATCHES "Linux|Windows"
+   OR NOT CMAKE_SYSTEM_PROCESSOR MATCHES "x86|aarch64")
   list(APPEND FF_ARGS --disable-nvdec --disable-nvenc --disable-ffnvcodec)
   return()
 endif()
@@ -34,6 +35,8 @@ endif()
 ExternalProject_Add(
   nv-codec-headers
   SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/mythtv/external/nv-codec-headers
+  DOWNLOAD_COMMAND
+    ${CMAKE_COMMAND} -E echo "Using nv-codec-headers in <SOURCE_DIR>"
   CMAKE_ARGS --no-warn-unused-cli ${CMDLINE_ARGS} ${PLATFORM_ARGS}
   CMAKE_CACHE_ARGS
     -DCMAKE_FIND_ROOT_PATH:STRING=${CMAKE_FIND_ROOT_PATH}

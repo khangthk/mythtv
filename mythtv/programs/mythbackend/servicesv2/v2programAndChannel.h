@@ -11,6 +11,7 @@
 #ifndef V2PROGRAMANDCHANNEL_H_
 #define V2PROGRAMANDCHANNEL_H_
 
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QDateTime>
 #include <QString>
 
@@ -132,6 +133,7 @@ class V2Program : public QObject
     SERVICE_PROPERTY2( int         , SubProps     )
     SERVICE_PROPERTY2( QString     , SubPropNames )
     SERVICE_PROPERTY2( QDate       , Airdate      )
+    SERVICE_PROPERTY2( int         , ReleaseYear  )
     SERVICE_PROPERTY2( QString     , Description  )
     SERVICE_PROPERTY2( QString     , Inetref      )
     SERVICE_PROPERTY2( int         , Season       )

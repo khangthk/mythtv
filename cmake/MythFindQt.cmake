@@ -4,6 +4,7 @@
 # See the file LICENSE_FSF for licensing information.
 #
 include(BuildConfigString)
+include(SetIfTargetExists)
 
 set(QT_DEFAULT_MAJOR_VERSION ${QT_VERSION_MAJOR})
 
@@ -12,14 +13,29 @@ set(QT_DEFAULT_MAJOR_VERSION ${QT_VERSION_MAJOR})
 #
 message(STATUS "Checking for ${QT_PKG_NAME} libraries")
 
+set(_REQUIRED_COMPONENTS
+    Core
+    Gui
+    Network
+    OpenGL
+    Sql
+    Test
+    Widgets
+    Xml)
 if(NOT CMAKE_CROSSCOMPILING)
-  set(_OTHER_REQUIRED DBus)
+  list(APPEND _REQUIRED_COMPONENTS DBus)
   if(${QT_VERSION_MAJOR} EQUAL 5)
-    set(_OPTIONAL_COMPONENTS Script ScriptTools WebKit WebKitWidgets)
+    if(ENABLE_QTWEBENGINE)
+      set(_OPTIONAL_COMPONENTS Quick WebEngine WebEngineWidgets)
+    endif()
+  else()
+    if(ENABLE_QTWEBENGINE)
+      set(_OPTIONAL_COMPONENTS Quick WebEngineQuick WebEngineWidgets)
+    endif()
   endif()
 elseif(ANDROID)
   if(${QT_VERSION_MAJOR} EQUAL 5)
-    set(_OTHER_REQUIRED AndroidExtras)
+    list(APPEND _REQUIRED_COMPONENTS AndroidExtras)
   endif()
 endif()
 
@@ -38,17 +54,49 @@ endif(CMAKE_CROSSCOMPILING)
 #
 find_package(
   ${QT_PKG_NAME} ${QT_MIN_VERSION_STR} NO_MODULE
-  COMPONENTS Core
-             Gui
-             Network
-             OpenGL
-             Sql
-             Test
-             Widgets
-             Xml
-             ${_OTHER_REQUIRED}
+  COMPONENTS ${_REQUIRED_COMPONENTS}
   OPTIONAL_COMPONENTS ${_OPTIONAL_COMPONENTS})
+foreach(component ${_REQUIRED_COMPONENTS} ${_OPTIONAL_COMPONENTS})
+  if(${${QT_PKG_NAME}${component}_FOUND})
+    list(APPEND _components_found ${component})
+  else()
+    list(APPEND _components_missing ${component})
+  endif()
+endforeach()
+
+#
+# Now that we know the Qt version installed, perform an additional
+# check for Qt >= 6.10.  Prior to this, checking for "Gui" also
+# checked for "GuiPrivate".  Starting with 6.10 an explicit check is
+# necessary.  Once 6.10 becoms the baseline, this can be folded into
+# the earlier _OPTIONAL_COMPONENTS variable.
+#
+if(${QT_PKG_NAME}_VERSION VERSION_GREATER_EQUAL "6.10")
+  set(QT_NO_PRIVATE_MODULE_WARNING ON)
+  find_package(
+    ${QT_PKG_NAME} ${QT_MIN_VERSION_STR} NO_MODULE
+    OPTIONAL_COMPONENTS GuiPrivate)
+  if(TARGET ${QT_PKG_NAME}::GuiPrivate)
+    list(APPEND _components_found "GuiPrivate")
+  else()
+    list(APPEND _components_missing "GuiPrivate")
+  endif()
+endif()
+
+#
+# Print which Qt components were found.
+#
+list(SORT _components_found)
+list(JOIN _components_found " " _components_found_str)
+if(_components_missing)
+  list(SORT _components_missing)
+  list(JOIN _components_missing " " _components_missing_str)
+else()
+  set(_components_missing_str "(none)")
+endif()
 message(STATUS "  Found ${QT_PKG_NAME}, version ${${QT_PKG_NAME}_VERSION}")
+message(STATUS "  Found components: ${_components_found_str}")
+message(STATUS "  Missing components: ${_components_missing_str}")
 
 #
 # End: prevent finding system androiddeployqt
@@ -62,7 +110,7 @@ endif(CMAKE_CROSSCOMPILING)
 #
 if(ANDROID)
   if(QT_DIR MATCHES "^/usr")
-    message(FATAL_ERROR "Found system androiddeplayqt in ${QT_DIR}")
+    message(FATAL_ERROR "Found system androiddeployqt in ${QT_DIR}")
   endif()
 endif(ANDROID)
 
@@ -71,59 +119,33 @@ endif(ANDROID)
 #
 add_build_config(${QT_PKG_NAME}::DBus "qtdbus")
 add_build_config(${QT_PKG_NAME}::GuiPrivate "qtprivateheaders")
-add_build_config(${QT_PKG_NAME}::Script "qtscript")
-add_build_config(${QT_PKG_NAME}::Webkit "qtwebkit")
+add_build_config(${QT_PKG_NAME}::Quick "qtquick")
+add_build_config(${QT_PKG_NAME}::WebEngine "qtwebengine")
+add_build_config(${QT_PKG_NAME}::WebEngineWidgets "qtwebenginewidgets")
 
 #
 # Set properties
 #
 get_target_property(QMAKE_EXECUTABLE ${QT_PKG_NAME}::qmake IMPORTED_LOCATION)
 
-if(TARGET ${QT_PKG_NAME}::DBus)
-  target_compile_definitions(${QT_PKG_NAME}::DBus INTERFACE USING_DBUS)
-  set(CONFIG_QTDBUS ON)
-endif()
+set_if_target_exists(CONFIG_QTDBUS ${QT_PKG_NAME}::DBus)
+set_if_target_exists(CONFIG_QTPRIVATEHEADERS ${QT_PKG_NAME}::GuiPrivate)
+set_if_target_exists(CONFIG_QTWEBENGINE ${QT_PKG_NAME}::WebEngineWidgets)
 
-# Not all of the Qt6 include directories squirrel the private headers away into
-# a sub-directory.  Look for paths like /usr/include/qt6/QtGui/6.4.3 and
-# /usr/include/qt6/QtGui/6.4.3/QtGui and rewrite these up to point to the top
-# include directory for that component.
-function(clean_qt6_includes target)
-  if(NOT TARGET ${target})
-    return()
-  endif()
-
-  get_target_property(_DIRS ${target} INTERFACE_INCLUDE_DIRECTORIES)
-  foreach(_DIR IN LISTS _DIRS)
-    if(EXISTS ${_DIR})
-      continue()
-    endif()
-    if(_DIR MATCHES "(.*)\/[0-9.]+(\/.*)?")
-      set(_DIR ${CMAKE_MATCH_1})
-    endif()
-    list(APPEND _DIRS2 ${_DIR})
-  endforeach()
-
-  set_target_properties(${target} PROPERTIES INTERFACE_INCLUDE_DIRECTORIES
-                                             "${_DIRS2}")
-endfunction()
-
-clean_qt6_includes(Qt6::CorePrivate)
-clean_qt6_includes(Qt6::GuiPrivate)
-
-if(TARGET ${QT_PKG_NAME}::GuiPrivate)
-  target_compile_definitions(${QT_PKG_NAME}::GuiPrivate
-                             INTERFACE USING_QTPRIVATEHEADERS)
-endif()
-
-if(TARGET ${QT_PKG_NAME}::Script)
-  target_compile_definitions(${QT_PKG_NAME}::Script INTERFACE USING_QTSCRIPT)
-  set(CONFIG_QTSCRIPT ON)
-endif()
-
-if(TARGET ${QT_PKG_NAME}::WebKit)
-  set(CONFIG_QTWEBKIT ON)
-  set(USING_QTWEBKIT ON)
+#
+# Set compilation options
+#
+version_to_number(QT_FIXED_VERSION_HEX
+                  ${QT${QT_VERSION_MAJOR}_DEPRECATION_FIXED} TRUE)
+if(${${QT_PKG_NAME}_VERSION} VERSION_GREATER_EQUAL 6.8)
+  add_compile_definitions(QT_ENABLE_STRICT_MODE_UP_TO=${QT_FIXED_VERSION_HEX})
+  message(STATUS "  Setting: -DQT_ENABLE_STRICT_MODE_UP_TO=${QT_FIXED_VERSION_HEX}")
+elseif(${${QT_PKG_NAME}_VERSION} VERSION_GREATER_EQUAL 6.5)
+  add_compile_definitions(QT_DISABLE_DEPRECATED_UP_TO=${QT_FIXED_VERSION_HEX})
+  message(STATUS "  Setting: -DQT_DISABLE_DEPRECATED_UP_TO=${QT_FIXED_VERSION_HEX}")
+else()
+  add_compile_definitions(QT_DISABLE_DEPRECATED_BEFORE=${QT_FIXED_VERSION_HEX})
+  message(STATUS "  Setting: -DQT_DISABLE_DEPRECATED_BEFORE=${QT_FIXED_VERSION_HEX}")
 endif()
 
 #
@@ -133,7 +155,7 @@ message(STATUS "Checking for OpenGL ES")
 find_file(
   _QTGUI_CONFIG
   NAMES QtGui/qtgui-config.h ${QT_PKG_NAME_LC}/QtGui/qtgui-config.h
-  HINTS AAA ${CMAKE_INSTALL_PREFIX}/qt/include BBB)
+  HINTS AAA ${CMAKE_INSTALL_PREFIX}/qt/include ${QTGUI_CONFIG_EXTRA} BBB)
 if(_QTGUI_CONFIG)
   include(GetDefine)
   get_define(${_QTGUI_CONFIG} QT_OPENGL_ES_2

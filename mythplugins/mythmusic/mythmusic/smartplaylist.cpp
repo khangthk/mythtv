@@ -9,9 +9,9 @@
 #include <QSqlField>
 
 // MythTV
-#include <libmyth/mythcontext.h>
 #include <libmythbase/mythdate.h>
 #include <libmythbase/mythdb.h>
+#include <libmythbase/mythlogging.h>
 #include <libmythmetadata/musicmetadata.h>
 #include <libmythui/mythdialogbox.h>
 #include <libmythui/mythmainwindow.h>
@@ -33,52 +33,59 @@ struct SmartPLField
 {
     QString          m_name;
     QString          m_sqlName;
-    SmartPLFieldType m_type;
-    int              m_minValue;
-    int              m_maxValue;
-    int              m_defaultValue;
+    SmartPLFieldType m_type         { ftString };
+    int              m_minValue     { 0 };
+    int              m_maxValue     { 0 };
+    int              m_defaultValue { 0 };
 };
 
 static const std::array<const SmartPLField,13> SmartPLFields
 {{
-    { "",              "",                               ftString,   0,    0,    0 },
-    { "Artist",        "music_artists.artist_name",      ftString,   0,    0,    0 },
-    { "Album",         "music_albums.album_name",        ftString,   0,    0,    0 },
-    { "Title",         "music_songs.name",               ftString,   0,    0,    0 },
-    { "Genre",         "music_genres.genre",             ftString,   0,    0,    0 },
-    { "Year",          "music_songs.year",               ftNumeric,  1900, 2099, 2000 },
-    { "Track No.",     "music_songs.track",              ftNumeric,  0,    99,   0 },
-    { "Rating",        "music_songs.rating",             ftNumeric,  0,    10,   0 },
-    { "Play Count",    "music_songs.numplays",           ftNumeric,  0,    9999, 0 },
-    { "Compilation",   "music_albums.compilation",       ftBoolean,  0,    0,    0 },
-    { "Comp. Artist",  "music_comp_artists.artist_name", ftString,   0,    0,    0 },
-    { "Last Play",     "FROM_DAYS(TO_DAYS(music_songs.lastplay))",
-                                                         ftDate,     0,    0,    0 },
-    { "Date Imported", "FROM_DAYS(TO_DAYS(music_songs.date_entered))",
-                                                         ftDate,     0,    0,    0 },
+    { .m_name="",              .m_sqlName=""                          },
+    { .m_name="Artist",        .m_sqlName="music_artists.artist_name" },
+    { .m_name="Album",         .m_sqlName="music_albums.album_name"   },
+    { .m_name="Title",         .m_sqlName="music_songs.name"          },
+    { .m_name="Genre",         .m_sqlName="music_genres.genre"        },
+    { .m_name="Year",          .m_sqlName="music_songs.year",
+      .m_type=ftNumeric,
+      .m_minValue=1900, .m_maxValue=2099, .m_defaultValue=2000 },
+    { .m_name="Track No.",     .m_sqlName="music_songs.track",
+      .m_type=ftNumeric,       .m_maxValue=99   },
+    { .m_name="Rating",        .m_sqlName="music_songs.rating",
+      .m_type=ftNumeric,       .m_maxValue=10   },
+    { .m_name="Play Count",    .m_sqlName="music_songs.numplays",
+      .m_type=ftNumeric,       .m_maxValue=9999 },
+    { .m_name="Compilation",   .m_sqlName="music_albums.compilation",
+      .m_type=ftBoolean,       .m_maxValue=0    },
+    { .m_name="Comp. Artist",  .m_sqlName="music_comp_artists.artist_name",
+      .m_type=ftString, },
+    { .m_name="Last Play",     .m_sqlName="FROM_DAYS(TO_DAYS(music_songs.lastplay))",
+      .m_type=ftDate   },
+    { .m_name="Date Imported", .m_sqlName="FROM_DAYS(TO_DAYS(music_songs.date_entered))",
+      .m_type=ftDate   },
 }};
 
 struct SmartPLOperator
 {
     QString m_name;
-    int     m_noOfArguments;
-    bool    m_stringOnly;
-    bool    m_validForBoolean;
+    int     m_noOfArguments    { 1     };
+    bool    m_stringOnly       { false };
+    bool    m_validForBoolean  { false };
 };
 
 static const std::array<const SmartPLOperator,11> SmartPLOperators
 {{
-    { "is equal to",      1,  false, true },
-    { "is not equal to",  1,  false, true },
-    { "is greater than",  1,  false, false },
-    { "is less than",     1,  false, false },
-    { "starts with",      1,  true,  false },
-    { "ends with",        1,  true,  false },
-    { "contains",         1,  true,  false },
-    { "does not contain", 1,  true,  false },
-    { "is between",       2,  false, false },
-    { "is set",           0,  false, false },
-    { "is not set",       0,  false, false },
+    { .m_name="is equal to",      .m_validForBoolean=true },
+    { .m_name="is not equal to",  .m_validForBoolean=true },
+    { .m_name="is greater than"                           },
+    { .m_name="is less than"                              },
+    { .m_name="starts with",      .m_stringOnly=true      },
+    { .m_name="ends with",        .m_stringOnly=true      },
+    { .m_name="contains",         .m_stringOnly=true      },
+    { .m_name="does not contain", .m_stringOnly=true      },
+    { .m_name="is between",       .m_noOfArguments=2      },
+    { .m_name="is set",           .m_noOfArguments=0      },
+    { .m_name="is not set",       .m_noOfArguments=0      },
 }};
 
 static const SmartPLOperator *lookupOperator(const QString& name)
@@ -133,7 +140,11 @@ static QString evaluateDateValue(QString sDate)
             if (sDate.endsWith(" days"))
                 sDate = sDate.left(sDate.length() - 5);
 
-            int nDays = sDate.mid(8).toInt();
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+            int nDays = sDate.midRef(8).toInt();
+#else
+            int nDays = QStringView(sDate).mid(8).toInt();
+#endif
             if (bNegative)
                 nDays = -nDays;
 
@@ -335,9 +346,13 @@ QString SmartPLCriteriaRow::toString(void) const
     {
         QString result;
         if (PLOperator->m_noOfArguments == 0)
+        {
             result = m_field + " " + m_operator;
+        }
         else if (PLOperator->m_noOfArguments == 1)
+        {
             result = m_field + " " + m_operator + " " + m_value1;
+        }
         else
         {
             result = m_field + " " + m_operator + " " + m_value1;
@@ -1347,7 +1362,9 @@ void CriteriaRowEditor::enableSaveButton()
     if (Field && Operator)
     {
         if (Field->m_type == ftNumeric || Field->m_type == ftBoolean)
+        {
             enabled = true;
+        }
         else if (Field->m_type == ftDate)
         {
             if ((Operator->m_noOfArguments == 0) ||
@@ -2073,7 +2090,11 @@ void SmartPLDateDialog::setDate(QString date)
             if (date.endsWith(" days"))
                 date = date.left(date.length() - 5);
 
-            int nDays = date.mid(8).toInt();
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+            int nDays = date.midRef(8).toInt();
+#else
+            int nDays = QStringView(date).mid(8).toInt();
+#endif
             if (bNegative)
                 nDays = -nDays;
 
@@ -2088,9 +2109,15 @@ void SmartPLDateDialog::setDate(QString date)
     }
     else
     {
-        int nYear = date.mid(0, 4).toInt();
-        int nMonth = date.mid(5, 2).toInt();
-        int nDay = date.mid(8, 2).toInt();
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+        int nYear = date.midRef(0, 4).toInt();
+        int nMonth = date.midRef(5, 2).toInt();
+        int nDay = date.midRef(8, 2).toInt();
+#else
+        int nYear = QStringView(date).mid(0, 4).toInt();
+        int nMonth = QStringView(date).mid(5, 2).toInt();
+        int nDay = QStringView(date).mid(8, 2).toInt();
+#endif
 
         m_daySpin->SetValue(nDay);
         m_monthSpin->SetValue(nMonth);
@@ -2163,7 +2190,9 @@ void SmartPLDateDialog::valueChanged(void)
         QString sDate = m_yearSpin->GetValue() + "-" + month + "-" + day;
         QDate date = QDate::fromString(sDate, Qt::ISODate);
         if (date.isValid())
+        {
             m_statusText->SetText(date.toString("dddd, d MMMM yyyy"));
+        }
         else
         {
             bValidDate = false;
@@ -2192,3 +2221,4 @@ void SmartPLDateDialog::valueChanged(void)
     m_okButton->SetEnabled(bValidDate);
 }
 
+#include "moc_smartplaylist.cpp"

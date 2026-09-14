@@ -1,4 +1,8 @@
+// C++ headers
+#include <algorithm>
+
 // MythTV
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythui/mythmainwindow.h"
 
@@ -9,6 +13,14 @@
 #include "opengl/mythnvdecinterop.h"
 
 extern "C" {
+#include "libavutil/log.h"
+#define FFNV_LOG_FUNC(logctx, msg, ...) av_log(logctx, AV_LOG_ERROR, msg,  __VA_ARGS__)
+#define FFNV_DEBUG_LOG_FUNC(logctx, msg, ...) av_log(logctx, AV_LOG_DEBUG, msg,  __VA_ARGS__)
+#include <ffnvcodec/dynlink_loader.h>
+}
+
+extern "C" {
+#include "libavutil/hwcontext_cuda.h"
 #include "libavutil/opt.h"
 }
 
@@ -93,7 +105,7 @@ MythCodecID MythNVDECContext::GetSupportedCodec(AVCodecContext **Context,
     const auto & profiles = MythNVDECContext::GetProfiles();
     auto capcheck = [&](const MythNVDECCaps& Cap)
         { return Cap.Supports(cudacodec, cudaformat, depth, (*Context)->width, (*Context)->height); };
-    if (!std::any_of(profiles.cbegin(), profiles.cend(), capcheck))
+    if (!std::ranges::any_of(profiles, capcheck))
     {
         LOG(VB_PLAYBACK, LOG_DEBUG, LOC + "No matching profile support");
         LOG(VB_PLAYBACK, LOG_INFO, LOC + QString("NVDEC does NOT support %1").arg(desc));
@@ -114,7 +126,7 @@ MythCodecID MythNVDECContext::GetSupportedCodec(AVCodecContext **Context,
         if ((config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) &&
             (config->device_type == AV_HWDEVICE_TYPE_CUDA))
         {
-            const AVCodec *codec = avcodec_find_decoder_by_name(name.toLocal8Bit());
+            const AVCodec *codec = avcodec_find_decoder_by_name(name.toLocal8Bit().constData());
             if (codec)
             {
                 LOG(VB_PLAYBACK, LOG_INFO, LOC + QString("NVDEC supports decoding %1").arg(desc));
@@ -265,7 +277,7 @@ void MythNVDECContext::SetDeinterlacing(AVCodecContext *Context,
         {
             if (doubledeint)
             {
-                if (doublepref & (DEINT_DRIVER))
+                if (doublepref & DEINT_DRIVER)
                     deinterlacer = doubledeint;
                 else if (doublepref & (DEINT_CPU | DEINT_SHADER))
                     other = true;
@@ -299,9 +311,12 @@ void MythNVDECContext::SetDeinterlacing(AVCodecContext *Context,
         if (!deinterlacer && !other && singledeint)
         {
             if (singlepref & (DEINT_DRIVER | DEINT_CPU))
+            {
                 deinterlacer = singledeint;
+            }
             else if (singlepref & DEINT_SHADER)
-                { }
+            {
+            }
         }
     }
 
@@ -311,7 +326,7 @@ void MythNVDECContext::SetDeinterlacing(AVCodecContext *Context,
     QString mode = "adaptive";
     if (DEINT_BASIC == deinterlacer)
         mode = "bob";
-    int result = av_opt_set(Context->priv_data, "deint", mode.toLocal8Bit(), 0);
+    int result = av_opt_set(Context->priv_data, "deint", mode.toLocal8Bit().constData(), 0);
     if (result == 0)
     {
         if (av_opt_set_int(Context->priv_data, "drop_second_field", static_cast<int>(!DoubleRate), 0) == 0)
@@ -329,7 +344,7 @@ void MythNVDECContext::PostProcessFrame(AVCodecContext* /*Context*/, MythVideoFr
     // Remove interlacing flags and set deinterlacer if necessary
     if (Frame && m_deinterlacer)
     {
-        Frame->m_interlaced = 0;
+        Frame->m_interlaced = false;
         Frame->m_interlacedReverse = false;
         Frame->m_topFieldFirst = false;
         Frame->m_deinterlaceInuse = m_deinterlacer | DEINT_DRIVER;
@@ -417,7 +432,6 @@ bool MythNVDECContext::GetBuffer(struct AVCodecContext *Context, MythVideoFrame 
     Frame->m_directRendering = true;
 
     AvFrame->opaque = Frame;
-    AvFrame->reordered_opaque = Context->reordered_opaque;
 
     // set the pixel format - normally NV12 but P010 for 10bit etc. Set here rather than guessing later.
     if (AvFrame->hw_frames_ctx)

@@ -1,6 +1,10 @@
+// C++ headers
+#include <algorithm>
+
 // MythTV
 #include "libmythbase/mythlogging.h"
 #include "mythframe.h"
+
 #include "mythvideoprofile.h"
 
 // FFmpeg - for av_malloc/av_free
@@ -62,7 +66,7 @@ void MythVideoFrame::Init(VideoFrameType Type, uint8_t *Buffer, size_t BufferSiz
         return;
     }
 
-    if (std::any_of(m_priv.cbegin(), m_priv.cend(), [](const uint8_t* P) { return P != nullptr; }))
+    if (std::ranges::any_of(std::as_const(m_priv), [](const uint8_t* P) { return P != nullptr; }))
     {
         LOG(VB_GENERAL, LOG_ERR, LOC + "Priv buffers are set (hardware frame?). Ignoring Init");
         return;
@@ -103,7 +107,7 @@ void MythVideoFrame::Init(VideoFrameType Type, uint8_t *Buffer, size_t BufferSiz
     if (FMT_YV12 == m_type)
     {
         m_offsets[1] = alignedwidth * alignedheight;
-        m_offsets[2] = m_offsets[1] + ((alignedwidth + 1) >> 1) * ((alignedheight+1) >> 1);
+        m_offsets[2] = m_offsets[1] + (((alignedwidth + 1) >> 1) * ((alignedheight+1) >> 1));
     }
     else if (FormatIs420(m_type))
     {
@@ -113,7 +117,7 @@ void MythVideoFrame::Init(VideoFrameType Type, uint8_t *Buffer, size_t BufferSiz
     else if (FMT_YUV422P == m_type)
     {
         m_offsets[1] = alignedwidth * alignedheight;
-        m_offsets[2] = m_offsets[1] + ((alignedwidth + 1) >> 1) * alignedheight;
+        m_offsets[2] = m_offsets[1] + (((alignedwidth + 1) >> 1) * alignedheight);
     }
     else if (FormatIs422(m_type))
     {
@@ -155,7 +159,7 @@ void MythVideoFrame::ClearMetadata()
     m_timecode            = 0ms;
     m_displayTimecode     = 0ms;
     m_priv                = { nullptr };
-    m_interlaced          = 0;
+    m_interlaced          = false;
     m_topFieldFirst       = true;
     m_interlacedReverse   = false;
     m_newGOP              = false;

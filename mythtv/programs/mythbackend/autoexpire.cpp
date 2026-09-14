@@ -1,13 +1,18 @@
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
+
 // System headers
 #include <sys/stat.h>
-#ifdef __linux__
+#ifdef Q_OS_LINUX
 #  include <sys/vfs.h>
-#else // if !__linux__
+#else // if !Q_OS_LINUX
 #  include <sys/param.h>
-#  ifndef _WIN32
+#  ifndef Q_OS_WINDOWS
 #    include <sys/mount.h>
-#  endif // _WIN32
-#endif // !__linux__
+#  endif // Q_OS_WINDOWS
+#endif // !Q_OS_LINUX
 
 // POSIX headers
 #include <unistd.h>
@@ -18,6 +23,7 @@
 #include <iostream>
 
 // Qt headers
+#include <QChar> // Fix Qt6 GCC SFINAE warning
 #include <QDateTime>
 #include <QFileInfo>
 #include <QList>
@@ -29,10 +35,9 @@
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythdb.h"
 #include "libmythbase/mythlogging.h"
-#include "libmythbase/programinfo.h"
-#include "libmythbase/remoteutil.h"
 #include "libmythbase/storagegroup.h"
 #include "libmythprotoserver/requesthandler/fileserverutil.h"
+#include "libmythtv/programinfo.h"
 #include "libmythtv/remoteencoder.h"
 #include "libmythtv/tv_rec.h"
 
@@ -125,7 +130,7 @@ void AutoExpire::CalcParams()
 {
     LOG(VB_FILE, LOG_INFO, LOC + "CalcParams()");
 
-    QList<FileSystemInfo> fsInfos;
+    FileSystemInfoList fsInfos;
 
     m_instanceLock.lock();
     if (m_mainServer)
@@ -168,29 +173,28 @@ void AutoExpire::CalcParams()
     }
     m_instanceLock.unlock();
 
-    QList<FileSystemInfo>::iterator fsit;
-    for (fsit = fsInfos.begin(); fsit != fsInfos.end(); ++fsit)
+    for (const auto& fs : std::as_const(fsInfos))
     {
-        if (fsMap.contains(fsit->getFSysID()))
+        if (fsMap.contains(fs.getFSysID()))
             continue;
 
-        fsMap[fsit->getFSysID()] = 0;
+        fsMap[fs.getFSysID()] = 0;
         uint64_t thisKBperMin = 0;
 
         // append unknown recordings to all fsIDs
         for (auto unknownfs : std::as_const(fsEncoderMap[-1]))
-            fsEncoderMap[fsit->getFSysID()].push_back(unknownfs);
+            fsEncoderMap[fs.getFSysID()].push_back(unknownfs);
 
-        if (fsEncoderMap.contains(fsit->getFSysID()))
+        if (fsEncoderMap.contains(fs.getFSysID()))
         {
             LOG(VB_FILE, LOG_INFO,
                 QString("fsID #%1: Total: %2 GB   Used: %3 GB   Free: %4 GB")
-                    .arg(fsit->getFSysID())
-                .arg(fsit->getTotalSpace() / 1024.0 / 1024.0, 7, 'f', 1)
-                .arg(fsit->getUsedSpace() / 1024.0 / 1024.0, 7, 'f', 1)
-                .arg(fsit->getFreeSpace() / 1024.0 / 1024.0, 7, 'f', 1));
+                    .arg(fs.getFSysID())
+                .arg(fs.getTotalSpace() / 1024.0 / 1024.0, 7, 'f', 1)
+                .arg(fs.getUsedSpace() / 1024.0 / 1024.0, 7, 'f', 1)
+                .arg(fs.getFreeSpace() / 1024.0 / 1024.0, 7, 'f', 1));
 
-            for (auto cardid : std::as_const(fsEncoderMap[fsit->getFSysID()]))
+            for (auto cardid : std::as_const(fsEncoderMap[fs.getFSysID()]))
             {
                 auto iter = m_encoderList->constFind(cardid);
                 if (iter == m_encoderList->constEnd())
@@ -217,18 +221,18 @@ void AutoExpire::CalcParams()
                         "%2 Kb/sec, fsID %3 max is now %4 KB/min")
                         .arg(enc->GetInputID())
                         .arg(enc->GetMaxBitrate() >> 10)
-                        .arg(fsit->getFSysID())
+                        .arg(fs.getFSysID())
                         .arg(thisKBperMin));
             }
         }
-        fsMap[fsit->getFSysID()] = thisKBperMin;
+        fsMap[fs.getFSysID()] = thisKBperMin;
 
         if (thisKBperMin > maxKBperMin)
         {
             LOG(VB_FILE, LOG_INFO,
                 QString("  Max of %1 KB/min for fsID %2 is higher "
                     "than the existing Max of %3 so we'll use this Max instead")
-                    .arg(thisKBperMin).arg(fsit->getFSysID()).arg(maxKBperMin));
+                    .arg(thisKBperMin).arg(fs.getFSysID()).arg(maxKBperMin));
             maxKBperMin = thisKBperMin;
         }
     }
@@ -238,12 +242,12 @@ void AutoExpire::CalcParams()
     uint expireFreq = 15;
     if (maxKBperMin > 0)
     {
-        expireFreq = kSpaceTooBigKB / (maxKBperMin + maxKBperMin/3);
+        expireFreq = kSpaceTooBigKB / (maxKBperMin + (maxKBperMin/3));
         expireFreq = std::clamp(expireFreq, 3U, 15U);
     }
 
-    double expireMinGB = ((maxKBperMin + maxKBperMin/3)
-                          * expireFreq + extraKB) >> 20;
+    double expireMinGB = (((maxKBperMin + (maxKBperMin/3))
+                          * expireFreq) + extraKB) >> 20;
     LOG(VB_GENERAL, LOG_NOTICE, LOC +
         QString("CalcParams(): Max required Free Space: %1 GB w/freq: %2 min")
             .arg(expireMinGB, 0, 'f', 1).arg(expireFreq));
@@ -255,7 +259,7 @@ void AutoExpire::CalcParams()
     QMap<int, uint64_t>::iterator it = fsMap.begin();
     while (it != fsMap.end())
     {
-        m_desiredSpace[it.key()] = (*it + *it/3) * expireFreq + extraKB;
+        m_desiredSpace[it.key()] = ((*it + (*it/3)) * expireFreq) + extraKB;
         ++it;
     }
     m_instanceLock.unlock();
@@ -295,7 +299,7 @@ void AutoExpire::RunExpirer(void)
             {
                 UpdateEntry ue = m_updateQueue.dequeue();
                 if (ue.m_encoder > 0)
-                    m_usedEncoders[ue.m_encoder] = ue.m_fsID;
+                    m_usedEncoders[ue.m_encoder] = ue.m_fsID; // clazy:exclude=readlock-detaching
             }
             m_updateLock.unlock();
 
@@ -406,8 +410,7 @@ void AutoExpire::ExpireRecordings(void)
 {
     pginfolist_t expireList;
     pginfolist_t deleteList;
-    QList<FileSystemInfo> fsInfos;
-    QList<FileSystemInfo>::iterator fsit;
+    FileSystemInfoList fsInfos;
 
     LOG(VB_FILE, LOG_INFO, LOC + "ExpireRecordings()");
 
@@ -446,12 +449,12 @@ void AutoExpire::ExpireRecordings(void)
                 QString("%1:%2 has an in-progress truncating delete.")
                     .arg(rechost, recdir));
 
-            for (fsit = fsInfos.begin(); fsit != fsInfos.end(); ++fsit)
+            for (const auto& fs : std::as_const(fsInfos))
             {
-                if ((fsit->getHostname() == rechost) &&
-                    (fsit->getPath() == recdir))
+                if ((fs.getHostname() == rechost) &&
+                    (fs.getPath() == recdir))
                 {
-                    truncateMap[fsit->getFSysID()] = true;
+                    truncateMap[fs.getFSysID()] = true;
                     break;
                 }
             }
@@ -459,7 +462,13 @@ void AutoExpire::ExpireRecordings(void)
     }
 
     QMap <int, bool> fsMap;
-    for (fsit = fsInfos.begin(); fsit != fsInfos.end(); ++fsit)
+    for (
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+        auto* fsit = fsInfos.begin();
+#else
+        auto fsit = fsInfos.begin();
+#endif
+fsit != fsInfos.end(); ++fsit)
     {
         if (fsMap.contains(fsit->getFSysID()))
             continue;
@@ -481,8 +490,13 @@ void AutoExpire::ExpireRecordings(void)
                     .arg(fsit->getFSysID()));
             LOG(VB_FILE, LOG_INFO, QString("Directories on filesystem ID %1:")
                     .arg(fsit->getFSysID()));
-            QList<FileSystemInfo>::iterator fsit2;
-            for (fsit2 = fsInfos.begin(); fsit2 != fsInfos.end(); ++fsit2)
+            for (
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+                auto* fsit2 = fsInfos.begin();
+#else
+                auto fsit2 = fsInfos.begin();
+#endif
+                fsit2 != fsInfos.end(); ++fsit2)
             {
                 if (fsit2->getFSysID() == fsit->getFSysID())
                 {
@@ -512,19 +526,18 @@ void AutoExpire::ExpireRecordings(void)
                     .arg(m_desiredSpace[fsit->getFSysID()] / 1024));
 
             QMap<QString, int> dirList;
-            QList<FileSystemInfo>::iterator fsit2;
 
             LOG(VB_FILE, LOG_INFO,
                 QString("    Directories on filesystem ID %1:")
                     .arg(fsit->getFSysID()));
 
-            for (fsit2 = fsInfos.begin(); fsit2 != fsInfos.end(); ++fsit2)
+            for (const auto& fs2 : std::as_const(fsInfos))
             {
-                if (fsit2->getFSysID() == fsit->getFSysID())
+                if (fs2.getFSysID() == fsit->getFSysID())
                 {
                     LOG(VB_FILE, LOG_INFO, QString("        %1:%2")
-                            .arg(fsit2->getHostname(), fsit2->getPath()));
-                    dirList[fsit2->getHostname() + ":" + fsit2->getPath()] = 1;
+                            .arg(fs2.getHostname(), fs2.getPath()));
+                    dirList[fs2.getHostname() + ":" + fs2.getPath()] = 1;
                 }
             }
 
@@ -802,7 +815,7 @@ void AutoExpire::PrintExpireList(const QString& expHost)
     if (expHost != "ALL")
         msg += QString("for '%1' ").arg(expHost);
     msg += "(programs listed in order of expiration)";
-    std::cout << msg.toLocal8Bit().constData() << std::endl;
+    std::cout << msg.toLocal8Bit().constData() << '\n';
 
     for (auto *first : expireList)
     {
@@ -822,7 +835,7 @@ void AutoExpire::PrintExpireList(const QString& expHost)
                  .rightJustified(3, ' ', true));
         QByteArray out = outstr.toLocal8Bit();
 
-        std::cout << out.constData() << std::endl;
+        std::cout << out.constData() << '\n';
     }
 
     ClearExpireList(expireList);
@@ -1079,14 +1092,14 @@ void AutoExpire::UpdateDontExpireSet(void)
         "SELECT chanid, starttime, lastupdatetime, recusage, hostname "
         "FROM inuseprograms");
 
-    if (!query.exec() || !query.next())
+    if (!query.exec())
         return;
 
-    LOG(VB_FILE, LOG_INFO, LOC + "Adding Programs to 'Do Not Expire' List");
     QDateTime curTime = MythDate::current();
-
-    do
+    while (query.next())
     {
+        if (query.at() == 0)
+           LOG(VB_FILE, LOG_INFO, LOC + "Adding Programs to 'Do Not Expire' List");
         uint chanid = query.value(0).toUInt();
         QDateTime recstartts = MythDate::as_utc(query.value(1).toDateTime());
         QDateTime lastupdate = MythDate::as_utc(query.value(2).toDateTime());
@@ -1103,7 +1116,6 @@ void AutoExpire::UpdateDontExpireSet(void)
                          query.value(4).toString()));
         }
     }
-    while (query.next());
 }
 
 bool AutoExpire::IsInDontExpireSet(
@@ -1112,16 +1124,16 @@ bool AutoExpire::IsInDontExpireSet(
     QString key = QString("%1_%2")
         .arg(chanid).arg(recstartts.toString(Qt::ISODate));
 
-    return (m_dontExpireSet.find(key) != m_dontExpireSet.end());
+    return (m_dontExpireSet.contains(key));
 }
 
 bool AutoExpire::IsInExpireList(
     const pginfolist_t &expireList, uint chanid, const QDateTime &recstartts)
 {
-    return std::any_of(expireList.cbegin(), expireList.cend(),
+    return std::ranges::any_of(expireList,
                        [chanid,&recstartts](auto *info)
                            { return ((info->GetChanID()             == chanid) &&
                                      (info->GetRecordingStartTime() == recstartts)); } );
 }
 
-/* vim: set expandtab tabstop=4 shiftwidth=4: */
+#include "moc_autoexpire.cpp"

@@ -2,6 +2,7 @@
 #include <QGuiApplication>
 
 // MythTV
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/mythlogging.h"
 #include "mythimage.h"
 #include "mythmainwindow.h"
@@ -102,7 +103,7 @@ MythRenderVulkan* MythRenderVulkan::GetVulkanRender(void)
 MythRenderVulkan::MythRenderVulkan()
   : MythRender(kRenderVulkan)
 {
-#ifdef USING_GLSLANG
+#if CONFIG_LIBGLSLANG
     // take a top level 'reference' to libglslang to ensure it is persistent
     if (!MythShaderVulkan::InitGLSLang())
         LOG(VB_GENERAL, LOG_ERR, LOC + "Failed to initialise GLSLang");
@@ -112,7 +113,7 @@ MythRenderVulkan::MythRenderVulkan()
 
 MythRenderVulkan::~MythRenderVulkan()
 {
-#ifdef USING_GLSLANG
+#if CONFIG_LIBGLSLANG
     MythShaderVulkan::InitGLSLang(true);
 #endif
     LOG(VB_GENERAL, LOG_INFO, LOC + "Destroyed");
@@ -207,9 +208,14 @@ void MythRenderVulkan::DebugVulkan(void)
         auto proc = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(raw);
         if (proc)
         {
-            VkPhysicalDeviceDriverPropertiesKHR driverprops { };
-            driverprops.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES_KHR;
-            driverprops.pNext = nullptr;
+            VkPhysicalDeviceDriverPropertiesKHR driverprops {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES_KHR,
+                .pNext = nullptr,
+                .driverID = static_cast<VkDriverId>(0),
+                .driverName = {},
+                .driverInfo = {},
+                .conformanceVersion = {},
+            };
 
             VkPhysicalDeviceProperties2 devprops { };
             devprops.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
@@ -423,8 +429,8 @@ void MythRenderVulkan::CopyBufferToImage(VkBuffer Buffer, VkImage Image,
     region.imageSubresource.mipLevel = 0;
     region.imageSubresource.baseArrayLayer = 0;
     region.imageSubresource.layerCount = 1;
-    region.imageOffset = { 0, 0, 0 };
-    region.imageExtent = { Width, Height, 1 };
+    region.imageOffset = { .x=0, .y=0, .z=0 };
+    region.imageExtent = { .width=Width, .height=Height, .depth=1 };
     m_devFuncs->vkCmdCopyBufferToImage(commandbuffer, Buffer, Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
     if (!CommandBuffer)
         FinishSingleUseCommandBuffer(commandbuffer);
@@ -544,20 +550,27 @@ bool MythRenderVulkan::CreateImage(QSize             Size,
                                    VkImage          &Image,
                                    VkDeviceMemory   &ImageMemory)
 {
-    VkImageCreateInfo imageinfo { };
-    imageinfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageinfo.imageType     = VK_IMAGE_TYPE_2D;
-    imageinfo.extent.width  = static_cast<uint32_t>(Size.width());
-    imageinfo.extent.height = static_cast<uint32_t>(Size.height());
-    imageinfo.extent.depth  = 1;
-    imageinfo.mipLevels     = 1;
-    imageinfo.arrayLayers   = 1;
-    imageinfo.format        = Format;
-    imageinfo.tiling        = Tiling;
-    imageinfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    imageinfo.usage         = Usage;
-    imageinfo.samples       = VK_SAMPLE_COUNT_1_BIT;
-    imageinfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+    VkImageCreateInfo imageinfo {
+        .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .pNext         = nullptr,
+        .flags         = static_cast<VkImageCreateFlags>(0),
+        .imageType     = VK_IMAGE_TYPE_2D,
+        .format        = Format,
+        .extent        = {
+            .width  = static_cast<uint32_t>(Size.width()),
+            .height = static_cast<uint32_t>(Size.height()),
+            .depth  = 1,
+        },
+        .mipLevels     = 1,
+        .arrayLayers   = 1,
+        .samples       = VK_SAMPLE_COUNT_1_BIT,
+        .tiling        = Tiling,
+        .usage         = Usage,
+        .sharingMode   = VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = 0,
+        .pQueueFamilyIndices   = nullptr,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
 
     if (m_devFuncs->vkCreateImage(m_device, &imageinfo, nullptr, &Image) != VK_SUCCESS)
     {
@@ -662,8 +675,9 @@ VkPipeline MythRenderVulkan::CreatePipeline(MythShaderVulkan* Shader,
     viewport.maxDepth = 1.0F;
 
     VkRect2D scissor { };
-    scissor.offset = { Viewport.left(), Viewport.top() };
-    scissor.extent = { static_cast<uint32_t>(Viewport.width()), static_cast<uint32_t>(Viewport.height()) };
+    scissor.offset = { .x=Viewport.left(), .y=Viewport.top() };
+    scissor.extent = { .width=static_cast<uint32_t>(Viewport.width()),
+                       .height=static_cast<uint32_t>(Viewport.height()) };
 
     VkPipelineViewportStateCreateInfo viewportstate { };
     viewportstate.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -693,10 +707,17 @@ VkPipeline MythRenderVulkan::CreatePipeline(MythShaderVulkan* Shader,
     }
 
     // multisampling - no thanks
-    VkPipelineMultisampleStateCreateInfo multisampling { };
-    multisampling.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisampling.sampleShadingEnable  = VK_FALSE;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    VkPipelineMultisampleStateCreateInfo multisampling {
+        .sType                 = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .pNext                 = nullptr,
+        .flags                 = 0,
+        .rasterizationSamples  = VK_SAMPLE_COUNT_1_BIT,
+        .sampleShadingEnable   = VK_FALSE,
+        .minSampleShading      = 0.0F,
+        .pSampleMask           = nullptr,
+        .alphaToCoverageEnable = VK_FALSE,
+        .alphaToOneEnable      = VK_FALSE,
+    };
 
     // blending - regular alpha blend
     VkPipelineColorBlendAttachmentState colorblendattachment { };
@@ -782,3 +803,5 @@ VkPipeline MythRenderVulkan::CreatePipeline(MythShaderVulkan* Shader,
     LOG(VB_GENERAL, LOG_ERR, LOC + "Failed to create graphics pipeline");
     return MYTH_NULL_DISPATCH;
 }
+
+#include "moc_mythrendervulkan.cpp"

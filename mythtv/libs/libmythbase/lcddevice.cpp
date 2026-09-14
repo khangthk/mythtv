@@ -12,8 +12,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
-#include <fcntl.h>
-#include <unistd.h> // for usleep()
+#include <thread>
 
 // Qt headers
 #include <QApplication>
@@ -139,44 +138,37 @@ bool LCD::connectToHost(const QString &lhostname, unsigned int lport)
             return m_connected;
         }
 
-        usleep(500000);
+        std::this_thread::sleep_for(500ms);
     }
 
-    if (!m_connected)
+    for (int count = 1; count <= 10 && !m_connected; count++)
     {
-        int count = 0;
-        do
+        LOG(VB_GENERAL, LOG_INFO, QString("Connecting to lcd server: "
+                "%1:%2 (try %3 of 10)").arg(m_hostname).arg(m_port)
+                                       .arg(count));
+
+        delete m_socket;
+        m_socket = new QTcpSocket();
+
+        QObject::connect(m_socket, &QIODevice::readyRead,
+                         this, &LCD::ReadyRead);
+        QObject::connect(m_socket, &QAbstractSocket::disconnected,
+                         this, &LCD::Disconnected);
+
+        m_socket->connectToHost(m_hostname, m_port);
+        if (m_socket->waitForConnected())
         {
-            ++count;
+            m_lcdReady = false;
+            m_connected = true;
+            QTextStream os(m_socket);
+            os << "HELLO\n";
+            os.flush();
 
-            LOG(VB_GENERAL, LOG_INFO, QString("Connecting to lcd server: "
-                    "%1:%2 (try %3 of 10)").arg(m_hostname).arg(m_port)
-                                           .arg(count));
-
-            delete m_socket;
-            m_socket = new QTcpSocket();
-
-            QObject::connect(m_socket, &QIODevice::readyRead,
-                             this, &LCD::ReadyRead);
-            QObject::connect(m_socket, &QAbstractSocket::disconnected,
-                             this, &LCD::Disconnected);
-
-            m_socket->connectToHost(m_hostname, m_port);
-            if (m_socket->waitForConnected())
-            {
-                m_lcdReady = false;
-                m_connected = true;
-                QTextStream os(m_socket);
-                os << "HELLO\n";
-                os.flush();
-
-                break;
-            }
-            m_socket->close();
-
-            usleep(500000);
+            break;
         }
-        while (count < 10 && !m_connected);
+        m_socket->close();
+
+        std::this_thread::sleep_for(500ms);
     }
 
     if (!m_connected)
@@ -611,24 +603,21 @@ void LCD::switchToMenu(QList<LCDMenuItem> &menuItems, const QString &app_name,
     s += ' ' + QString(popMenu ? "TRUE" : "FALSE");
 
 
-    QListIterator<LCDMenuItem> it(menuItems);
-
-    while (it.hasNext())
+    for (const auto& curItem : std::as_const(menuItems))
     {
-        const LCDMenuItem *curItem = &(it.next());
-        s += ' ' + quotedString(curItem->ItemName());
+        s += ' ' + quotedString(curItem.ItemName());
 
-        if (curItem->isChecked() == CHECKED)
+        if (curItem.isChecked() == CHECKED)
             s += " CHECKED";
-        else if (curItem->isChecked() == UNCHECKED)
+        else if (curItem.isChecked() == UNCHECKED)
             s += " UNCHECKED";
-        else if (curItem->isChecked() == NOTCHECKABLE)
+        else if (curItem.isChecked() == NOTCHECKABLE)
             s += " NOTCHECKABLE";
 
-        s += ' ' + QString(curItem->isSelected() ? "TRUE" : "FALSE");
-        s += ' ' + QString(curItem->Scroll() ? "TRUE" : "FALSE");
+        s += ' ' + QString(curItem.isSelected() ? "TRUE" : "FALSE");
+        s += ' ' + QString(curItem.Scroll() ? "TRUE" : "FALSE");
         QString sIndent;
-        sIndent.setNum(curItem->getIndent());
+        sIndent.setNum(curItem.getIndent());
         s += ' ' + sIndent;
     }
 
@@ -647,26 +636,22 @@ void LCD::switchToGeneric(QList<LCDTextItem> &textItems)
 
     QString s = "SWITCH_TO_GENERIC";
 
-    QListIterator<LCDTextItem> it(textItems);
-
-    while (it.hasNext())
+    for (const auto& curItem : std::as_const(textItems))
     {
-        const LCDTextItem *curItem = &(it.next());
-
         QString sRow;
-        sRow.setNum(curItem->getRow());
+        sRow.setNum(curItem.getRow());
         s += ' ' + sRow;
 
-        if (curItem->getAlignment() == ALIGN_LEFT)
+        if (curItem.getAlignment() == ALIGN_LEFT)
             s += " ALIGN_LEFT";
-        else if (curItem->getAlignment() == ALIGN_RIGHT)
+        else if (curItem.getAlignment() == ALIGN_RIGHT)
             s += " ALIGN_RIGHT";
-        else if (curItem->getAlignment() == ALIGN_CENTERED)
+        else if (curItem.getAlignment() == ALIGN_CENTERED)
             s += " ALIGN_CENTERED";
 
-        s += ' ' + quotedString(curItem->getText());
-        s += ' ' + quotedString(curItem->getScreen());
-        s += ' ' + QString(curItem->getScroll() ? "TRUE" : "FALSE");
+        s += ' ' + quotedString(curItem.getText());
+        s += ' ' + quotedString(curItem.getScreen());
+        s += ' ' + QString(curItem.getScroll() ? "TRUE" : "FALSE");
     }
 
     emit sendToServer(s);
@@ -738,7 +723,7 @@ QString LCD::quotedString(const QString &string)
     sRes.replace(QString("\""), QString("\"\""));
     sRes = "\"" + sRes + "\"";
 
-    return(sRes);
+    return sRes;
 }
 
 bool LCD::startLCDServer(void)
@@ -751,3 +736,5 @@ bool LCD::startLCDServer(void)
     uint retval = myth_system(command, flags);
     return( retval == GENERIC_EXIT_RUNNING );
 }
+
+#include "moc_lcddevice.cpp"

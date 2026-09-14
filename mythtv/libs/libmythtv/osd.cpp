@@ -1,7 +1,9 @@
-// Qt
+// C++ headers
+#include <algorithm>
 #include <utility>
 
 // libmythbase
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
 
 // libmythui
@@ -87,7 +89,7 @@ void OSD::IsOSDVisible(bool& Visible)
         return;
     }
 
-    Visible = std::any_of(m_children.cbegin(), m_children.cend(),
+    Visible = std::ranges::any_of(std::as_const(m_children),
                 [](MythScreenType* child) { return child->IsVisible(); });
 }
 
@@ -99,10 +101,8 @@ void OSD::HideAll(bool KeepSubs, MythScreenType* Except, bool DropNotification)
             return; // we've removed the top window, don't process any further
     }
 
-    QMutableMapIterator<QString, MythScreenType*> it(m_children);
-    while (it.hasNext())
+    for (auto it = m_children.cbegin(); it != m_children.cend(); ++it)
     {
-        it.next();
         if (Except && Except->objectName() == OSD_DLG_NAVIGATE
             && it.value()->objectName() == OSD_WIN_STATUS)
             continue;
@@ -142,7 +142,6 @@ void OSD::LoadWindows()
         }
         else
         {
-            LOG(VB_GENERAL, LOG_ERR, LOC + QString("Failed to load window %1").arg(window));
             delete win;
         }
     }
@@ -393,11 +392,9 @@ void OSD::SetRegions(const QString &Window, frm_dir_map_t &Map, long long Total)
     long long start = -1;
     long long end   = -1;
     bool first = true;
-    QMapIterator<uint64_t, MarkTypes> it(Map);
-    while (it.hasNext())
+    for (auto it = Map.begin(); it != Map.end(); ++it)
     {
         bool error = false;
-        it.next();
         if (it.value() == MARK_CUT_START)
         {
             start = static_cast<long long>(it.key());
@@ -548,42 +545,32 @@ void OSD::Draw()
 void OSD::CheckExpiry()
 {
     QDateTime now = MythDate::current();
-    QMutableHashIterator<MythScreenType*, QDateTime> it(m_expireTimes);
-    while (it.hasNext())
+    bool quitDialog = false;
+    QStringList hideWindows {};
+
+    for (auto it = m_expireTimes.begin(); it != m_expireTimes.end(); ++it)
     {
-        it.next();
+        // Both DialogQuit and HideWindow alter m_expireTimes.  Do
+        // them after running the list is finished.
         if (it.value() < now)
         {
             if (it.key() == m_dialog)
-                DialogQuit();
-            else
-                HideWindow(m_children.key(it.key()));
-        }
-        else if (it.key() == m_dialog)
-        {
-            if (!m_pulsedDialogText.isEmpty() && now > m_nextPulseUpdate)
             {
-                QString newtext = m_pulsedDialogText;
-                auto *dialog = qobject_cast<MythDialogBox*>(m_dialog);
-                if (dialog)
-                {
-                    // The disambiguation string must be an empty string
-                    // and not a NULL to get extracted by the Qt tools.
-                    QString replace = QCoreApplication::translate("(Common)",
-                                          "%n second(s)", "",
-                                          static_cast<int>(now.secsTo(it.value())));
-                    dialog->SetText(newtext.replace("%d", replace));
-                }
-                auto *cdialog = qobject_cast<MythConfirmationDialog*>(m_dialog);
-                if (cdialog)
-                {
-                    QString replace = QString::number(now.secsTo(it.value()));
-                    cdialog->SetMessage(newtext.replace("%d", replace));
-                }
-                m_nextPulseUpdate = now.addSecs(1);
+                quitDialog = true;
+                continue;
             }
+            hideWindows << m_children.key(it.key());
+            continue;
+        }
+        if (it.key() == m_dialog)
+        {
+            DoPulse(now, it.value());
         }
     }
+    if (quitDialog)
+        DialogQuit();
+    for (const auto& window : std::as_const(hideWindows))
+        HideWindow(window);
 }
 
 void OSD::SetExpiry(const QString &Window, enum OSDTimeout Timeout,
@@ -621,6 +608,35 @@ void OSD::SetExpiryPriv(const QString &Window, enum OSDTimeout Timeout,
     {
         if (m_expireTimes.contains(win))
             m_expireTimes.remove(win);
+    }
+}
+
+void OSD::DoPulse(const QDateTime& now, const QDateTime& expire)
+{
+    if (m_pulsedDialogText.isEmpty() || (now <= m_nextPulseUpdate))
+        return;
+    m_nextPulseUpdate = now.addSecs(1);
+
+    uint64_t seconds = now.secsTo(expire);
+    QString newtext = m_pulsedDialogText;
+    auto *dialog = qobject_cast<MythDialogBox*>(m_dialog);
+    if (dialog)
+    {
+        // The disambiguation string must be an empty string
+        // and not a NULL to get extracted by the Qt tools.
+        QString replace = QCoreApplication::translate("(Common)",
+                              "%n second(s)", "",
+                              static_cast<int>(seconds));
+        dialog->SetText(newtext.replace("%d", replace));
+        return;
+    }
+
+    auto *cdialog = qobject_cast<MythConfirmationDialog*>(m_dialog);
+    if (cdialog)
+    {
+        QString replace = QString::number(seconds);
+        cdialog->SetMessage(newtext.replace("%d", replace));
+        return;
     }
 }
 
@@ -736,7 +752,7 @@ void OSD::DialogQuit()
 void OSD::ShowDialog(const MythOSDDialogData& Data)
 {
     DialogShow(Data.m_dialogName, Data.m_message, Data.m_timeout);
-    std::for_each(Data.m_buttons.cbegin(), Data.m_buttons.cend(),
+    std::ranges::for_each(Data.m_buttons,
         [this](const MythOSDDialogData::MythOSDDialogButton& B) {
             DialogAddButton(B.m_text, B.m_data, B.m_menu, B.m_current); });
     DialogBack(Data.m_back.m_text, Data.m_back.m_data, Data.m_back.m_exit);
@@ -774,7 +790,7 @@ void OSD::DialogShow(const QString &Window, const QString &Text, std::chrono::mi
         else if (Window == OSD_DLG_NAVIGATE)
             dialog = new MythNavigationOverlay(m_mainWindow, m_tv, m_player, Window, this);
         else
-            dialog = new MythDialogBox(Text, nullptr, Window.toLatin1(), false, true);
+            dialog = new MythDialogBox(Text, nullptr, Window.toLatin1().constData(), false, true);
 
         dialog->SetPainter(m_painter);
         if (dialog->Create())
@@ -838,3 +854,5 @@ void OSD::DialogGetText(InfoMap &Map)
     if (edit)
         edit->GetText(Map);
 }
+
+#include "moc_osd.cpp"

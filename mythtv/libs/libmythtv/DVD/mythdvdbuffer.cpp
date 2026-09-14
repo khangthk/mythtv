@@ -8,13 +8,14 @@
 #include <QtEndian>
 
 // MythTV
-#include "libmyth/mythcontext.h"
-#include "libmyth/mythmediamonitor.h"
 #include "libmythbase/compat.h"
 #include "libmythbase/iso639.h"
-#include "libmythbase/mythconfig.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythlogging.h"
-#include "libmythbase/sizetliteral.h"
+#ifndef __cpp_size_t_suffix
+#include <libmythbase/sizetliteral.h>
+#endif
+#include "libmythui/mediamonitor.h"
 #include "libmythui/mythmainwindow.h"
 #include "libmythui/mythuiactions.h"
 
@@ -304,7 +305,7 @@ bool MythDVDBuffer::OpenFile(const QString &Filename, std::chrono::milliseconds 
         LOG(VB_GENERAL, LOG_NOTICE,
             LOC + "The selected title is a still frame. "
             "Playback is likely to fail - please raise a bug report at "
-            "http://code.mythtv.org/trac");
+            "https://github.com/MythTV/mythtv/issues");
     }
 
     MythDVDInfo::GetNameAndSerialNum(m_dvdnav, m_discName, m_discSerialNumber, Filename, LOC);
@@ -375,7 +376,7 @@ void MythDVDBuffer::GetChapterTimes(QList<std::chrono::seconds> &Times)
     if (!m_chapterMap.contains(m_title))
         return;
     const QList<std::chrono::seconds>& chapters = m_chapterMap.value(m_title);
-    std::copy(chapters.cbegin(), chapters.cend(), std::back_inserter(Times));
+    std::ranges::copy(std::as_const(chapters), std::back_inserter(Times));
 }
 
 static constexpr mpeg::chrono::pts HALFSECOND { 45000_pts };
@@ -395,6 +396,7 @@ std::chrono::seconds MythDVDBuffer::GetChapterTimes(int Title)
     }
 
     QList<std::chrono::seconds> chapters;
+    chapters.reserve(num);
     // add the start
     chapters.append(0s);
     // don't add the last 'chapter' - which is the title end
@@ -404,7 +406,7 @@ std::chrono::seconds MythDVDBuffer::GetChapterTimes(int Title)
 
     // Assigned via calloc, must be free'd not deleted
     if (times)
-        free(times);
+        free(times); // NOLINT(cppcoreguidelines-no-malloc)
     m_chapterMap.insert(Title, chapters);
     return duration_cast<std::chrono::seconds>(mpeg::chrono::pts(duration) + HALFSECOND);
 }
@@ -1591,7 +1593,11 @@ bool MythDVDBuffer::DecodeSubtitles(AVSubtitle *Subtitle, int *GotSubtitles,
                 Subtitle->rects = static_cast<AVSubtitleRect**>(av_mallocz(sizeof(AVSubtitleRect*) * Subtitle->num_rects));
                 for (uint i = 0; i < Subtitle->num_rects; i++)
                     Subtitle->rects[i] = static_cast<AVSubtitleRect*>(av_mallocz(sizeof(AVSubtitleRect)));
+#ifdef __cpp_size_t_suffix
+                Subtitle->rects[0]->data[1] = static_cast<uint8_t*>(av_mallocz(4UZ * 4UZ));
+#else
                 Subtitle->rects[0]->data[1] = static_cast<uint8_t*>(av_mallocz(4_UZ * 4_UZ));
+#endif
                 DecodeRLE(bitmap, width * 2, width, (height + 1) / 2,
                           SpuPkt, offset1 * 2, BufSize);
                 DecodeRLE(bitmap + width, width * 2, width, height / 2,
@@ -1608,7 +1614,11 @@ bool MythDVDBuffer::DecodeSubtitles(AVSubtitle *Subtitle, int *GotSubtitles,
                 if (NumMenuButtons() > 0)
                 {
                     Subtitle->rects[1]->type = SUBTITLE_BITMAP;
+#ifdef __cpp_size_t_suffix
+                    Subtitle->rects[1]->data[1] = static_cast<uint8_t*>(av_malloc(4UZ * 4UZ));
+#else
                     Subtitle->rects[1]->data[1] = static_cast<uint8_t*>(av_malloc(4_UZ * 4_UZ));
+#endif
                     GuessPalette(reinterpret_cast<uint32_t*>(Subtitle->rects[1]->data[1]),
                                  m_buttonColor, m_buttonAlpha);
                 }
@@ -1665,7 +1675,7 @@ bool MythDVDBuffer::DVDButtonUpdate(bool ButtonMode)
     for (uint i = 0 ; i < 4 ; i++)
     {
         m_buttonAlpha[i] = 0xf & (highlight.palette >> (4 * i));
-        m_buttonColor[i] = 0xf & (highlight.palette >> (16 + 4 * i));
+        m_buttonColor[i] = 0xf & (highlight.palette >> (16 + (4 * i)));
     }
 
     // If the button overlay has already been decoded, make sure
@@ -1931,7 +1941,7 @@ bool MythDVDBuffer::GetDVDStateSnapshot(QString& State)
     if (dvdstate)
     {
         State = dvdstate;
-        free(dvdstate);
+        free(dvdstate); // From C library. NOLINT(cppcoreguidelines-no-malloc)
     }
 
     return (!State.isEmpty());
@@ -2010,6 +2020,7 @@ void MythDVDBuffer::GuessPalette(uint32_t *RGBAPalette, const PaletteArray Palet
         uint cb = (yuv >> 0) & 0xff;
         uint r  = std::clamp(uint(y + (1.4022 * (cr - 128))), 0U, 0xFFU);
         uint b  = std::clamp(uint(y + (1.7710 * (cb - 128))), 0U, 0xFFU);
+        // NOLINTNEXTLINE(modernize-use-std-numbers)
         uint g  = std::clamp(uint((1.7047 * y) - (0.1952 * b) - (0.5647 * r)), 0U, 0xFFU);
         RGBAPalette[i] = ((Alpha[i] * 17U) << 24) | (r << 16 )| (g << 8) | b;
     }
@@ -2099,7 +2110,7 @@ int MythDVDBuffer::FindSmallestBoundingRectangle(AVSubtitle *Subtitle)
     }
 
     for (int i = 0; i < Subtitle->rects[0]->nb_colors; i++)
-        if (((reinterpret_cast<uint32_t*>(Subtitle->rects[0]->data[1])[i] >> 24)) == 0)
+        if ((reinterpret_cast<uint32_t*>(Subtitle->rects[0]->data[1])[i] >> 24) == 0)
             colors[i] = 1;
 
     ptrdiff_t bottom = 0;

@@ -1,6 +1,10 @@
 
 #include "mythuimetadataresults.h"
 
+// C++
+#include <ranges>
+
+// MythTV
 #include "libmythbase/mythdate.h"
 #include "libmythbase/mythdirs.h"
 #include "libmythbase/mythlogging.h"
@@ -82,7 +86,9 @@ bool MetadataResultsDialog::Create()
             int pos = m_resultsList->GetItemPos(button);
 
             if (QFile::exists(dlfile))
+            {
                 button->SetImage(dlfile);
+            }
             else
             {
                 m_imageDownload->addThumb(m_results[i]->GetTitle(),
@@ -110,9 +116,9 @@ void MetadataResultsDialog::cleanCacheDir()
     QDir cacheDir(cache);
     QStringList thumbs = cacheDir.entryList(QDir::Files);
 
-    for (auto i = thumbs.crbegin(); i != thumbs.crend(); ++i)
+    for (const auto & thumb : std::ranges::reverse_view(std::as_const(thumbs)))
     {
-        QString filename = QString("%1/%2").arg(cache, *i);
+        QString filename = QString("%1/%2").arg(cache, thumb);
         QFileInfo fi(filename);
         QDateTime lastmod = fi.lastModified();
         if (lastmod.addDays(2) < MythDate::current())
@@ -135,7 +141,7 @@ void MetadataResultsDialog::customEvent(QEvent *event)
         ThumbnailData *data = tde->m_thumb;
 
         QString file = data->url;
-        uint pos = data->data.value<uint>();
+        uint pos = data->data.toUInt();
 
         if (file.isEmpty())
             return;
@@ -155,8 +161,10 @@ void MetadataResultsDialog::customEvent(QEvent *event)
 
 void MetadataResultsDialog::sendResult(MythUIButtonListItem* item)
 {
-    RefCountHandler<MetadataLookup> lookup = m_results.takeAtAndDecr(item->GetData().value<uint>());
+    RefCountHandler<MetadataLookup> lookup = m_results.takeAtAndDecr(item->GetData().toUInt());
     m_results.clear();
     emit haveResult(lookup);
     Close();
 }
+
+#include "moc_mythuimetadataresults.cpp"

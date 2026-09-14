@@ -12,9 +12,6 @@
 #include <QMap>
 
 // MythTV
-#ifdef _MSC_VER
-#  include "libmythbase/compat.h"               // for random
-#endif
 #include "libmythbase/mconcurrent.h"
 #include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdate.h"
@@ -23,15 +20,15 @@
 #include "libmythbase/mythevent.h"              // for MythEvent, etc
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythrandom.h"
-#include "libmythbase/programinfo.h"
-#include "libmythbase/programtypes.h"           // for AudioProps, SubtitleTypes, etc
-#include "libmythbase/recordingtypes.h"
 #include "libmythbase/stringutil.h"
 #include "libmythmetadata/mythuimetadataresults.h"
 #include "libmythtv/playgroup.h"
 #include "libmythtv/previewgeneratorqueue.h"
+#include "libmythtv/programinfo.h"
+#include "libmythtv/programtypes.h"
 #include "libmythtv/recordinginfo.h"
 #include "libmythtv/recordingrule.h"
+#include "libmythtv/recordingtypes.h"
 #include "libmythtv/tv.h"
 #include "libmythtv/tv_actions.h"               // for ACTION_LISTRECORDEDEPISODES, etc
 #include "libmythui/mythdialogbox.h"
@@ -128,26 +125,74 @@ static int comp_recordDate_rev(const ProgramInfo *a, const ProgramInfo *b)
             b->GetScheduledStartTime().date() ? 1 : -1);
 }
 
+/*
+Syndicated Season/Episode is returned by some listing grabbers, for some
+shows. If it exists, it is likely to be more accurate than the
+Season/Episode returned by the metadata grabber which often makes
+mistakes.
+ */
+static bool retrieve_SeasonEpisode(int& season, int& episode,
+                                   const ProgramInfo* prog)
+{
+    QString synd = prog->GetSyndicatedEpisode();
+    int eIndex = synd.indexOf('E');
+    if (synd.isEmpty() || !synd.startsWith('S') || (eIndex == -1))
+    {
+        season  = prog->GetSeason();
+        episode = prog->GetEpisode();
+        return false;
+    }
+
+    // S##E## as set by mythfilldatabase
+    bool okSeason  { false };
+    bool okEpisode { false };
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+    season = synd.midRef(1, eIndex - 1).toInt(&okSeason);
+    episode = synd.midRef(eIndex + 1).toInt(&okEpisode);
+#else
+    season = QStringView(synd).mid(1, eIndex - 1).toInt(&okSeason);
+    episode = QStringView(synd).mid(eIndex + 1).toInt(&okEpisode);
+#endif
+
+    return okSeason && okEpisode;
+}
+
 static int comp_season(const ProgramInfo *a, const ProgramInfo *b)
 {
-    if (a->GetSeason() == 0 || b->GetSeason() == 0)
+    int a_season  {0};
+    int a_episode {0};
+    int b_season  {0};
+    int b_episode {0};
+
+    retrieve_SeasonEpisode(a_season, a_episode, a);
+    retrieve_SeasonEpisode(b_season, b_episode, b);
+
+    if (a_season == 0 || b_season == 0)
         return comp_originalAirDate(a, b);
-    if (a->GetSeason() != b->GetSeason())
-        return (a->GetSeason() < b->GetSeason() ? 1 : -1);
-    if (a->GetEpisode() == 0 && b->GetEpisode() == 0)
+    if (a_season != b_season)
+        return (a_season < b_season ? 1 : -1);
+    if (a_episode == 0 && b_episode == 0)
         return comp_originalAirDate(a, b);
-    return (a->GetEpisode() < b->GetEpisode() ? 1 : -1);
+    return (a_episode < b_episode ? 1 : -1);
 }
 
 static int comp_season_rev(const ProgramInfo *a, const ProgramInfo *b)
 {
-    if (a->GetSeason() == 0 || b->GetSeason() == 0)
+    int a_season  {0};
+    int a_episode {0};
+    int b_season  {0};
+    int b_episode {0};
+
+    retrieve_SeasonEpisode(a_season, a_episode, a);
+    retrieve_SeasonEpisode(b_season, b_episode, b);
+
+    if (a_season == 0 || b_season == 0)
         return comp_originalAirDate_rev(a, b);
-    if (a->GetSeason() != b->GetSeason())
-        return (a->GetSeason() > b->GetSeason() ? 1 : -1);
-    if (a->GetEpisode() == 0 && b->GetEpisode() == 0)
+    if (a_season != b_season)
+        return (a_season > b_season ? 1 : -1);
+    if (a_episode == 0 && b_episode == 0)
         return comp_originalAirDate_rev(a, b);
-    return (a->GetEpisode() > b->GetEpisode() ? 1 : -1);
+    return (a_episode > b_episode ? 1 : -1);
 }
 
 static bool comp_programid_less_than(
@@ -499,6 +544,7 @@ bool PlaybackBox::Create()
         return false;
 
     m_recgroupList  = dynamic_cast<MythUIButtonList *> (GetChild("recgroups"));
+    m_groupAlphaList = dynamic_cast<MythUIButtonList *> (GetChild("groupsAlphabet"));
     m_groupList     = dynamic_cast<MythUIButtonList *> (GetChild("groups"));
     m_recordingList = dynamic_cast<MythUIButtonList *> (GetChild("recordings"));
 
@@ -522,13 +568,19 @@ bool PlaybackBox::Create()
     {
         if (gCoreContext->GetBoolSetting("RecGroupsFocusable", false))
         {
-        connect(m_recgroupList, &MythUIButtonList::itemSelected,
-            this, &PlaybackBox::updateRecGroup);
+            connect(m_recgroupList, &MythUIButtonList::itemSelected,
+                    this, &PlaybackBox::updateRecGroup);
         }
         else
         {
             m_recgroupList->SetCanTakeFocus(false);
         }
+    }
+
+    if (m_groupAlphaList)
+    {
+        connect(m_groupAlphaList, &MythUIButtonList::itemSelected,
+                this, &PlaybackBox::selectUIGroupsAlphabet);
     }
 
     connect(m_groupList, &MythUIButtonList::itemSelected,
@@ -550,6 +602,7 @@ bool PlaybackBox::Create()
     connect(m_artTimer[kArtworkCoverart], &QTimer::timeout, this, &PlaybackBox::coverartLoad);
 
     BuildFocusList();
+    SetFocusWidget(m_groupList);
     m_programInfoCache.ScheduleLoad(false);
     LoadInBackground();
 
@@ -573,9 +626,13 @@ void PlaybackBox::Init()
     m_recordingList->SetSearchFields("titlesubtitle");
 
     if (gCoreContext->GetNumSetting("QueryInitialFilter", 0) == 1)
+    {
         showGroupFilter();
+    }
     else if (!m_player)
+    {
         displayRecGroup(m_recGroup);
+    }
     else
     {
         UpdateUILists();
@@ -595,7 +652,8 @@ void PlaybackBox::SwitchList()
 {
     if (GetFocusWidget() == m_groupList)
         SetFocusWidget(m_recordingList);
-    else if (GetFocusWidget() == m_recordingList)
+    else if (GetFocusWidget() == m_recordingList ||
+             GetFocusWidget() == m_groupAlphaList)
         SetFocusWidget(m_groupList);
 }
 
@@ -1217,9 +1275,9 @@ void PlaybackBox::updateIcons(const ProgramInfo *pginfo)
         iconState->Reset();
 
     iconState = dynamic_cast<MythUIStateType *>(GetChild("videoprops"));
+    haveIcon = false;
     if (pginfo && iconState)
     {
-        haveIcon = false;
         uint props = pginfo->GetVideoProperties();
 
         iconMap.clear();
@@ -1249,11 +1307,10 @@ void PlaybackBox::updateIcons(const ProgramInfo *pginfo)
                 }
             }
         }
-
-        if (!haveIcon)
-            iconState->Reset();
     }
 
+    if (iconState && !haveIcon)
+        iconState->Reset();
     iconMap.clear();
     iconMap["damaged"] = VID_DAMAGED;
 
@@ -1404,18 +1461,21 @@ void PlaybackBox::UpdateUIRecGroupList(void)
 void PlaybackBox::UpdateUIGroupList(const QStringList &groupPreferences)
 {
     m_groupList->Reset();
+    if (m_groupAlphaList)
+        m_groupAlphaList->Reset();
 
     if (!m_titleList.isEmpty())
     {
         int best_pref = INT_MAX;
         int sel_idx = 0;
+
         QStringList::iterator it;
         for (it = m_titleList.begin(); it != m_titleList.end(); ++it)
         {
             const QString& groupname = (*it);
 
             auto *item = new MythUIButtonListItem(m_groupList, "",
-                                         QVariant::fromValue(groupname.toLower()));
+                                     QVariant::fromValue(groupname.toLower()));
 
             int pref = groupPreferences.indexOf(groupname.toLower());
             if ((pref >= 0) && (pref < best_pref))
@@ -1450,6 +1510,17 @@ void PlaybackBox::UpdateUIGroupList(const QStringList &groupPreferences)
         // to be called with m_needUpdate set.
         if (!sel_idx)
             updateRecList(m_groupList->GetItemCurrent());
+
+        if (m_groupAlphaList)
+        {
+            for (auto Iqs = m_groupAlphabet.keyValueBegin();
+                 Iqs != m_groupAlphabet.keyValueEnd(); ++Iqs)
+            {
+                auto *item = new MythUIButtonListItem(m_groupAlphaList, "",
+                                               QVariant::fromValue(Iqs->first));
+                item->SetText(Iqs->first);
+            }
+        }
     }
 }
 
@@ -1484,7 +1555,6 @@ void PlaybackBox::updateRecList(MythUIButtonListItem *sel_item)
     QString grouplabel = sel_item->GetText();
 
     updateGroupInfo(groupname, grouplabel);
-
     if (((m_currentGroup == groupname) && !m_needUpdate) ||
         m_playingSomething)
         return;
@@ -1515,7 +1585,9 @@ void PlaybackBox::updateRecList(MythUIButtonListItem *sel_item)
     if (m_noRecordingsText)
     {
         if (!progList.empty())
+        {
             m_noRecordingsText->SetVisible(false);
+        }
         else
         {
             QString txt = m_programInfoCache.empty() ?
@@ -1524,6 +1596,36 @@ void PlaybackBox::updateRecList(MythUIButtonListItem *sel_item)
             m_noRecordingsText->SetText(txt);
             m_noRecordingsText->SetVisible(true);
         }
+    }
+
+    if (m_groupAlphaList)
+    {
+        if (grouplabel.startsWith("Watch List") ||
+            grouplabel.startsWith("All Programs"))
+        {
+            m_currentLetter = "All";
+        }
+        else
+        {
+            ProgramInfo *pginfo = GetCurrentProgram();
+            if (pginfo == nullptr)
+                m_currentLetter = "All";
+            else
+                m_currentLetter = pginfo->GetSortTitle().at(0).toUpper();
+            m_groupAlphaList->MoveToNamedPosition(m_currentLetter);
+        }
+    }
+}
+
+void PlaybackBox::selectUIGroupsAlphabet(MythUIButtonListItem *item)
+{
+    if (!item  || (m_currentLetter == item->GetText()) )
+        return;
+
+    if (!item->GetText().isEmpty())
+    {
+        m_currentLetter = item->GetText();
+        m_groupList->MoveToNamedPosition(m_groupAlphabet[m_currentLetter]);
     }
 }
 
@@ -2041,8 +2143,7 @@ bool PlaybackBox::UpdateUILists(void)
     if (!m_progLists[m_watchGroupLabel].empty())
         m_titleList << m_watchGroupName;
     if ((!m_progLists["livetv"].empty()) &&
-        (std::find(sortedList.cbegin(), sortedList.cend(), tr("Live TV"))
-         == sortedList.cend()))
+        !sortedList.contains(tr("Live TV")))
         m_titleList << tr("Live TV");
     m_titleList << sortedList.values();
 
@@ -2076,6 +2177,16 @@ bool PlaybackBox::UpdateUILists(void)
             m_recGroupIdx = m_recGroups.indexOf(m_recGroup);
             m_recGroupIdx = std::max(m_recGroupIdx, 0);
         }
+    }
+
+    QChar first;
+    m_groupAlphabet.clear();
+    for (auto it = sortedList.keyValueBegin();
+         it != sortedList.keyValueEnd(); ++it)
+    {
+        first = (*it).first.at(0).toUpper();
+        if (!m_groupAlphabet.contains(first))
+            m_groupAlphabet[first] = (*it).second;
     }
 
     UpdateUIRecGroupList();
@@ -2415,7 +2526,7 @@ bool PlaybackBox::Play(
         !rec.IsPathSet())
     {
         m_helper.CheckAvailability(
-            rec, (inPlaylist) ? kCheckForPlaylistAction : kCheckForPlayAction);
+            rec, inPlaylist ? kCheckForPlaylistAction : kCheckForPlayAction);
         return false;
     }
 
@@ -2884,7 +2995,9 @@ void PlaybackBox::ShowMenu()
         return;
 
     if (GetFocusWidget() == m_groupList)
+    {
         ShowGroupPopup();
+    }
     else
     {
         ProgramInfo *pginfo = GetCurrentProgram();
@@ -3058,7 +3171,7 @@ MythMenu* PlaybackBox::createJobMenu()
 
         MythMenu *submenu = ((kJobs[i] == JOB_TRANSCODE) && !running)
             ? createTranscodingProfilesMenu() : nullptr;
-        menu->AddItem((running) ? stop_desc : start_desc,
+        menu->AddItem(running ? stop_desc : start_desc,
                       kMySlots[(i * 2) + (running ? 0 : 1)], submenu);
     }
 
@@ -3368,7 +3481,7 @@ void PlaybackBox::doJobQueueJob(int jobType, int jobFlags)
         JobQueue::ChangeJobCmds(
             jobType, pginfo->GetChanID(), pginfo->GetRecordingStartTime(),
             JOB_STOP);
-        if ((jobType & JOB_COMMFLAG) && (tmpItem))
+        if ((jobType & JOB_COMMFLAG) && tmpItem)
         {
             tmpItem->SetEditing(false);
             tmpItem->SetFlagging(false);
@@ -3457,6 +3570,7 @@ void PlaybackBox::PlaylistDelete(bool forgetHistory)
     QString forceDeleteStr("0");
 
     QStringList list;
+    list.reserve(3 * m_playList.size());
     for (int id : std::as_const(m_playList))
     {
         ProgramInfo *tmpItem = FindProgramInUILists(id);
@@ -3593,7 +3707,7 @@ void PlaybackBox::toggleWatched(void)
 
     bool on = !pginfo->IsWatched();
     pginfo->SaveWatched(on);
-    item->DisplayState((on)?"yes":"on", "watched");
+    item->DisplayState(on?"yes":"on", "watched");
     updateIcons(pginfo);
 
     // A refill affects the responsiveness of the UI and we only
@@ -3615,8 +3729,8 @@ void PlaybackBox::toggleAutoExpire()
         return;
 
     bool on = !pginfo->IsAutoExpirable();
-    pginfo->SaveAutoExpire((on) ? kNormalAutoExpire : kDisableAutoExpire, true);
-    item->DisplayState((on)?"yes":"no", "autoexpire");
+    pginfo->SaveAutoExpire(on ? kNormalAutoExpire : kDisableAutoExpire, true);
+    item->DisplayState(on?"yes":"no", "autoexpire");
     updateIcons(pginfo);
 }
 
@@ -3821,7 +3935,9 @@ bool PlaybackBox::keyPressEvent(QKeyEvent *event)
         handled = true;
 
         if (action == ACTION_1 || action == "HELP")
+        {
             showIconHelp();
+        }
         else if (action == "MENU")
         {
             ShowMenu();
@@ -4031,7 +4147,9 @@ void PlaybackBox::customEvent(QEvent *event)
         else if (message == "UPDATE_UI_LIST")
         {
             if (m_playingSomething)
+            {
                 m_needUpdate = true;
+            }
             else
             {
                 UpdateUILists();
@@ -4719,6 +4837,8 @@ void PlaybackBox::ShowPlayGroupChanger(bool use_playlist)
     QStringList displayNames("Default");
 
     QStringList list = PlayGroup::GetNames();
+    groupNames.reserve(1 + list.size());
+    displayNames.reserve(1 + list.size());
     for (const auto& name : std::as_const(list))
     {
         displayNames.push_back(name);
@@ -5542,4 +5662,4 @@ bool PlaybackBox::PbbJobQueue::IsJobQueuedOrRunning(int jobType, uint chanid,
         IsJobRunning(jobType, chanid, recstartts);
 }
 
-/* vim: set expandtab tabstop=4 shiftwidth=4: */
+#include "moc_playbackbox.cpp"

@@ -1297,7 +1297,12 @@ void TestMPEGTables::atsc_eit_test1a(void)
     QCOMPARE (eit.EventCount(),                     6U);
 
     // EIT table data
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     QDateTime expectedDT {QDate(2022,07,18), QTime(20,00,18), Qt::UTC};
+#else
+    static const QTimeZone utc { QTimeZone::UTC };
+    QDateTime expectedDT {QDate(2022,07,18), QTime(20,00,18), utc};
+#endif
     QCOMPARE (eit.EventID(0),                       3U);
     QCOMPARE (eit.StartTimeRaw(0),         1342209618U);
     QCOMPARE (eit.StartTimeGPS(0),          expectedDT);
@@ -1313,7 +1318,11 @@ void TestMPEGTables::atsc_eit_test1a(void)
     }
     QCOMPARE (eit.DescriptorsLength(0),            54U);
 
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     expectedDT = QDateTime(QDate(2022,07,18), QTime(21,00,18), Qt::UTC);
+#else
+    expectedDT = QDateTime(QDate(2022,07,18), QTime(21,00,18), utc);
+#endif
     QCOMPARE (eit.EventID(1),                       4U);
     QCOMPARE (eit.StartTimeRaw(1),         1342213218U);
     QCOMPARE (eit.StartTimeGPS(1),          expectedDT);
@@ -1329,7 +1338,11 @@ void TestMPEGTables::atsc_eit_test1a(void)
     }
     QCOMPARE (eit.DescriptorsLength(1),            33U);
 
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     expectedDT = QDateTime(QDate(2022,07,18), QTime(22,00,18), Qt::UTC);
+#else
+    expectedDT = QDateTime(QDate(2022,07,18), QTime(22,00,18), utc);
+#endif
     QCOMPARE (eit.EventID(2),                       5U);
     QCOMPARE (eit.StartTimeRaw(2),         1342216818U);
     QCOMPARE (eit.StartTimeGPS(2),          expectedDT);
@@ -1493,7 +1506,12 @@ void TestMPEGTables::atsc_stt_test(void)
         0xCD, 0xF0, 0x11, 0x00, 0x00, 0xC1, 0x00, 0x00, 0x00, 0x4F, 0xFC, 0x7B, 0x4B, 0x12, 0xFE, 0x02,
         0XD7, 0xF8, 0xF6, 0x81,
     };
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     QDateTime expectedDT { QDate(2022,07,15), QTime(18,58,19), Qt::UTC };
+#else
+    QDateTime expectedDT { QDate(2022,07,15), QTime(18,58,19),
+                           QTimeZone(QTimeZone::UTC) };
+#endif
 
     PSIPTable si_table(si_data);
     QVERIFY  (si_table.IsGood());
@@ -2086,7 +2104,12 @@ void TestMPEGTables::dvb_eit_test1(void)
     QCOMPARE (eit.LastTableID(),                   78U);
 
     // EIT table data
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     QDateTime expectedDT {QDate(2022,07,10), QTime(11,00,00), Qt::UTC};
+#else
+    QDateTime expectedDT {QDate(2022,07,10), QTime(11,00,00),
+                          QTimeZone(QTimeZone::UTC)};
+#endif
     QCOMPARE (eit.EventID(0),                     181U);
     QCOMPARE (eit.StartTimeUTC(0),          expectedDT);
     QCOMPARE (eit.StartTimeUnixUTC(0),     1657450800U);
@@ -2107,7 +2130,12 @@ void TestMPEGTables::dvb_tdt_test1(void)
     const std::vector<uint8_t> si_data {
         0x70, 0x70, 0x05, 0xE9, 0x69, 0x03, 0x46, 0x24,
     };
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     QDateTime expectedDT { QDate(2022,06,23), QTime(03,46,24), Qt::UTC };
+#else
+    QDateTime expectedDT { QDate(2022,06,23), QTime(03,46,24),
+                           QTimeZone(QTimeZone::UTC) };
+#endif
     PSIPTable si_table(si_data);
     QVERIFY  (!si_table.HasCRC());
     QVERIFY  (si_table.VerifyCRC());
@@ -2127,7 +2155,12 @@ void TestMPEGTables::dvb_tdt_test2(void)
     const std::vector<uint8_t> nz_tdt_data {
         0x70, 0x70, 0x05, 0xE9, 0x7A, 0x12, 0x23, 0x52,
     };
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     QDateTime expectedDT { QDate(2022,07,10), QTime(12,23,52), Qt::UTC };
+#else
+    QDateTime expectedDT { QDate(2022,07,10), QTime(12,23,52),
+                           QTimeZone(QTimeZone::UTC) };
+#endif
     PSIPTable si_table(nz_tdt_data);
     QVERIFY  (!si_table.HasCRC());
     QVERIFY  (si_table.VerifyCRC());
@@ -2149,7 +2182,12 @@ void TestMPEGTables::dvb_tot_test2(void)
         0x73, 0x70, 0x1A, 0xE9, 0x7A, 0x12, 0x23, 0x52, 0xF0, 0x0F, 0x58, 0x0D, 0x4E, 0x5A, 0x4C, 0x02,
         0x12, 0x00, 0xE9, 0x17, 0x14, 0x00, 0x00, 0x12, 0x00, 0xF2, 0x8F, 0xF4, 0x04,
     };
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     QDateTime expectedDT { QDate(2022,07,10), QTime(12,23,52), Qt::UTC };
+#else
+    static const QTimeZone utc { QTimeZone::UTC };
+    QDateTime expectedDT { QDate(2022,07,10), QTime(12,23,52), utc };
+#endif
     PSIPTable si_table(nz_tot_data);
     QVERIFY  (si_table.HasCRC());
     QVERIFY  (si_table.VerifyCRC());
@@ -2167,7 +2205,11 @@ void TestMPEGTables::dvb_tot_test2(void)
     QCOMPARE (tot.DescriptorsLength(),        15U);
     QCOMPARE (tot.Descriptors(),   tot.data()+10U);
 
+#if QT_VERSION < QT_VERSION_CHECK(6,5,0)
     QDateTime ToCexpectedDT { QDate(2022,04,02), QTime(14,00,00), Qt::UTC };
+#else
+    QDateTime ToCexpectedDT { QDate(2022,04,02), QTime(14,00,00), utc };
+#endif
     LocalTimeOffsetDescriptor lto(tot.Descriptors(), tot.DescriptorsLength());
     QCOMPARE (lto.Count(),                       1U);
     QCOMPARE (lto.CountryCode(0),         0x4E5A4CU);
@@ -2613,4 +2655,133 @@ void TestMPEGTables::atsc_huffman_test (void)
     QCOMPARE(uncompressed.trimmed(), e_uncompressed);
 }
 
+///
+// Test Multiple String Structure encoding.
+//
+Q_DECLARE_METATYPE(std::vector<uint8_t>);
+
+const std::vector<uint8_t> mss_00a {
+    0x01,
+    0x65, 0x6E, 0x67, 0x01,
+    /*1*/ 0x00, 0x00, 0x19,
+          0x4C, 0x6F, 0x63, 0x61, 0x6C, 0x20, 0x61, 0x6E,
+          0x64, 0x20, 0x72, 0x65, 0x67, 0x69, 0x6F, 0x6E,
+          0x61, 0x6C, 0x20, 0x6E, 0x65, 0x77, 0x73, 0x2E,
+          0x20 };
+const std::vector<uint8_t> mss_00b {
+    0x01,
+    0x65, 0x6E, 0x67, 0x02,
+    /*1*/ 0x00, 0x00, 0x10,
+          0x4C, 0x6F, 0x63, 0x61, 0x6C, 0x20, 0x61, 0x6E,
+          0x64, 0x20, 0x72, 0x65, 0x67, 0x69, 0x6F, 0x6E,
+
+    /*2*/ 0x00, 0x00, 0x09,
+          0x61, 0x6C, 0x20, 0x6E, 0x65, 0x77, 0x73, 0x2E,
+          0x20 };
+const std::vector<uint8_t> mss_01 {
+    0x01,
+    0x65, 0x6E, 0x67, 0x01,
+    /*1*/ 0x00, 0x01, 0x08,
+          0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07 };
+const std::vector<uint8_t> mss_03 {
+    0x01,
+    0x65, 0x6E, 0x67, 0x01,
+    /*1*/ 0x00, 0x03, 0x08,
+          0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97 };
+const std::vector<uint8_t> mss_32 {
+    0x01,
+    0x65, 0x6E, 0x67, 0x02,
+    /*1*/ 0x00, 0x32, 0x08,
+          0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58,
+    /*2*/ 0x00, 0x32, 0x02,
+          0x59, 0x05A };
+const std::vector<uint8_t> mss_3f {
+    0x01,
+    0x65, 0x6E, 0x67, 0x01,
+    /*1*/ 0x00, 0x3F, 0x32,
+          0x00, 0x4C, 0x00, 0x6F, 0x00, 0x63, 0x00, 0x61,
+          0x00, 0x6C, 0x00, 0x20, 0x00, 0x61, 0x00, 0x6E,
+          0x00, 0x64, 0x00, 0x20, 0x00, 0x72, 0x00, 0x65,
+          0x00, 0x67, 0x00, 0x69, 0x00, 0x6F, 0x00, 0x6E,
+          0x00, 0x61, 0x00, 0x6C, 0x00, 0x20, 0x00, 0x6E,
+          0x00, 0x65, 0x00, 0x77, 0x00, 0x73, 0x00, 0x2E,
+          0x00, 0x20 };
+const std::vector<uint8_t> mss_mm_01 {
+    0x01,
+    0x65, 0x6E, 0x67, 0x03,
+    /*1*/ 0x00, 0x00, 0x05,
+          0x4C, 0x6F, 0x72, 0x65, 0x6D,
+    /*2*/ 0x00, 0x01, 0x02,
+          0x02, 0x2A,
+    /*3*/ 0x00, 0x00, 0x05,
+          0x49, 0x70, 0x73, 0x75, 0x6d };
+const std::vector<uint8_t> mss_mm_02 {
+    0x01,
+    0x65, 0x6E, 0x67, 0x04,
+    /*1*/ 0x00, 0x00, 0x05,
+          0x4C, 0x6F, 0x72, 0x65, 0x6D,
+    /*2*/ 0x00, 0x01, 0x02,
+          0x02, 0x2A,
+    /*3*/ 0x00, 0x02, 0x02,
+          0x00, 0x01,
+    /*4*/ 0x00, 0x00, 0x05,
+          0x49, 0x70, 0x73, 0x75, 0x6d };
+const std::vector<uint8_t> mss_mm_03 {
+    0x01,
+    0x65, 0x6E, 0x67, 0x03,
+    /*1*/ 0x00, 0x00, 0x05,
+          0x4C, 0x6F, 0x72, 0x65, 0x6D,
+    /*2*/ 0x00, 0x3F, 0x02,
+          0x02, 0x2A,
+    /*3*/ 0x00, 0x00, 0x05,
+          0x49, 0x70, 0x73, 0x75, 0x6d };
+const std::vector<uint8_t> mss_emoji {
+    0x01,
+    0x65, 0x6E, 0x67, 0x03,
+    /*1*/ 0x00, 0x3F, 0x08,
+          /* grinning face, melting face */
+          0xD8, 0x3D, 0xDE, 0x00, 0xD8, 0x3E, 0xDE, 0xE0,
+    /*2*/ 0x00, 0x3F, 0x04,
+          /* globe showing Americas */
+          0xD8, 0x3C, 0xDF, 0x0E,
+    /*3*/ 0x00, 0x3F, 0x0A,
+          /* woman surfing */
+          0xD8, 0x3C, 0xDF, 0xC4, 0x20, 0x0D, 0x26, 0x40,
+          0xFE, 0x0F };
+
+void TestMPEGTables::mss_test_data(void)
+{
+    QTest::addColumn<std::vector<uint8_t>>("encoded");
+    QTest::addColumn<QString>("expected");
+
+    QTest::newRow("mode 00.1")   << mss_00a   << "Local and regional news.";
+    QTest::newRow("mode 00.2")   << mss_00b   << "Local and regional news.";
+    QTest::newRow("mode 01")     << mss_01    << "ĀāĂăĄąĆć";
+    QTest::newRow("mode 03")     << mss_03    << "ΐΑΒΓΔΕΖΗ";
+    QTest::newRow("mode 32")     << mss_32    << "㉑㉒㉓㉔㉕㉖㉗㉘㉙㉚";
+    QTest::newRow("mode 3f")     << mss_3f    << "Local and regional news.";
+    QTest::newRow("multimode 1") << mss_mm_01 << "LoremĂĪIpsum";
+    QTest::newRow("multimode 2") << mss_mm_02 << "LoremĂĪȀȁIpsum";
+    QTest::newRow("multimode 3") << mss_mm_03 << "LoremȪIpsum";
+    QTest::newRow("emojis")      << mss_emoji << "😀🫠🌎🏄‍♀️";
+};
+
+void TestMPEGTables::mss_test(void)
+{
+    QFETCH(std::vector<uint8_t>, encoded);
+    QFETCH(QString,              expected);
+
+    MultipleStringStructure mss { encoded.data() };
+    QString actual = "";
+    for (uint i = 0; i < mss.StringCount(); i++)
+        actual += mss.GetFullString(i);
+
+    QCOMPARE (mss.StringCount(),     1U);
+    QCOMPARE (mss.LanguageKey(0),    0x656E67);
+    QCOMPARE (mss.LanguageString(0), "eng");
+    QCOMPARE (actual, expected);
+}
+
 QTEST_APPLESS_MAIN(TestMPEGTables)
+
+#include "moc_test_mpegtables.cpp"

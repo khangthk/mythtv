@@ -3,6 +3,9 @@
 #include <utility>
 
 #include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtEnvironmentVariables>
+#endif
 #include <QApplication>
 #include <QDir>
 #include <QString>
@@ -13,16 +16,17 @@
 #include "libmyth/mythcontext.h"
 #include "libmythbase/compat.h"
 #include "libmythbase/exitcodes.h"
+#include "libmythbase/mythappname.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdbcon.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythmiscutil.h"
 #include "libmythbase/mythversion.h"
-#include "libmythbase/programinfo.h"
-#include "libmythbase/signalhandling.h"
 #include "libmythtv/dbcheck.h"
 #include "libmythtv/jitterometer.h"
 #include "libmythtv/mythplayerui.h"
 #include "libmythtv/mythvideoout.h"
+#include "libmythtv/programinfo.h"
 #include "libmythtv/tv_play.h"
 #include "libmythui/mythmainwindow.h"
 #include "libmythui/mythuihelper.h"
@@ -214,8 +218,8 @@ int main(int argc, char *argv[])
     else if (!cmdline.GetArgs().empty())
         filename = cmdline.GetArgs().at(0);
 
-    gContext = new MythContext(MYTH_BINARY_VERSION, true);
-    if (!gContext->Init())
+    MythContext context {MYTH_BINARY_VERSION, true};
+    if (!context.Init())
     {
         LOG(VB_GENERAL, LOG_ERR, "Failed to init MythContext, exiting.");
         return GENERIC_EXIT_NO_MYTHCONTEXT;
@@ -233,7 +237,7 @@ int main(int argc, char *argv[])
         return GENERIC_EXIT_NO_THEME;
     }
 
-#if defined(Q_OS_MACOS)
+#ifdef Q_OS_MACOS
     // Mac OS X doesn't define the AudioOutputDevice setting
 #else
     QString auddevice = gCoreContext->GetSetting("AudioOutputDevice");
@@ -247,10 +251,6 @@ int main(int argc, char *argv[])
 
     MythMainWindow *mainWindow = GetMythMainWindow();
     mainWindow->Init();
-
-#ifndef _WIN32
-    SignalHandler::Init();
-#endif
 
     if (cmdline.toBool("test"))
     {
@@ -273,7 +273,6 @@ int main(int argc, char *argv[])
         if (!UpgradeTVDatabaseSchema(false))
         {
             LOG(VB_GENERAL, LOG_ERR, "Fatal Error: Incorrect database schema.");
-            delete gContext;
             return GENERIC_EXIT_DB_OUTOFDATE;
         }
 
@@ -287,11 +286,6 @@ int main(int argc, char *argv[])
             TV::StartTV(&pginfo, kStartTVNoFlags);
         }
     }
-    DestroyMythMainWindow();
-
-    delete gContext;
-
-    SignalHandler::Done();
 
     return GENERIC_EXIT_OK;
 }

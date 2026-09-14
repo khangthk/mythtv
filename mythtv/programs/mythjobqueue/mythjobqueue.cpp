@@ -3,7 +3,6 @@
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
-#include <ctime>
 #include <fcntl.h>
 #include <fstream>
 #include <iostream>
@@ -21,15 +20,16 @@
 
 // MythTV
 #include "libmyth/mythcontext.h"
-#include "libmythbase/cleanupguard.h"
+#include "libmythbase/mythconfig.h"
 #include "libmythbase/compat.h"
 #include "libmythbase/exitcodes.h"
 #include "libmythbase/hardwareprofile.h"
 #include "libmythbase/housekeeper.h"
+#include "libmythbase/mythappname.h"
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdbcon.h"
 #include "libmythbase/mythlogging.h"
 #include "libmythbase/mythversion.h"
-#include "libmythbase/signalhandling.h"
 #include "libmythtv/jobqueue.h"
 #include "libmythtv/mythsystemevent.h"
 
@@ -41,22 +41,6 @@
 #define LOC_ERR  QString("MythJobQueue, Error: ")
 
 JobQueue *jobqueue = nullptr;
-QString   pidfile;
-QString   logfile;
-
-static void cleanup(void)
-{
-    delete gContext;
-    gContext = nullptr;
-
-    if (!pidfile.isEmpty())
-    {
-        unlink(pidfile.toLatin1().constData());
-        pidfile.clear();
-    }
-
-    SignalHandler::Done();
-}
 
 int main(int argc, char *argv[])
 {
@@ -92,14 +76,8 @@ int main(int argc, char *argv[])
     if (retval != GENERIC_EXIT_OK)
         return retval;
 
-    CleanupGuard callCleanup(cleanup);
-
-#ifndef _WIN32
-    SignalHandler::Init();
-#endif
-
-    gContext = new MythContext(MYTH_BINARY_VERSION);
-    if (!gContext->Init(false))
+    MythContext context {MYTH_BINARY_VERSION};
+    if (!context.Init(false))
     {
         LOG(VB_GENERAL, LOG_ERR, LOC + "Failed to init MythContext, exiting.");
         return GENERIC_EXIT_NO_MYTHCONTEXT;
@@ -118,7 +96,7 @@ int main(int argc, char *argv[])
     auto *sysEventHandler = new MythSystemEventHandler();
 
     auto *housekeeping = new HouseKeeper();
-#ifdef __linux__
+#ifdef Q_OS_LINUX
  #ifdef CONFIG_BINDINGS_PYTHON
     housekeeping->RegisterTask(new HardwareProfileTask());
  #endif

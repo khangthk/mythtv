@@ -6,36 +6,21 @@
 #include "libmythbase/mythlogging.h"
 
 #include "captions/cc708reader.h"
-#include "decoders/decoderbase.h"
-#include "mythplayer.h"
 
 #define LOC QString("CC708Reader: ")
 #define CHECKENABLED if (!m_enabled) return
 
-CC708Reader::CC708Reader(MythPlayer *owner)
-  : m_parent(owner)
+CC708Reader::CC708Reader()
 {
     for (uint i=0; i < k708MaxServices; i++)
     {
-        m_bufAlloc[i]  = 512;
-        m_buf[i]       = (unsigned char*) malloc(m_bufAlloc[i]);
-        m_bufSize[i]   = 0;
+        m_buf[i].resize(0);
+        m_buf[i].reserve(512);
         m_delayed[i]   = false;
 
-        m_tempStrAlloc[i]  = 512;
-        m_tempStrSize[i]   = 0;
-        m_tempStr[i]       = (int16_t*) malloc(m_tempStrAlloc[i] * sizeof(int16_t));
+        m_tempStr[i].reserve(512);
     }
     m_cc708DelayedDeletes.fill(0);
-}
-
-CC708Reader::~CC708Reader()
-{
-    for (uint i=0; i < k708MaxServices; i++)
-    {
-        free(m_buf[i]);
-        free(m_tempStr[i]);
-    }
 }
 
 void CC708Reader::ClearBuffers(void)
@@ -61,11 +46,6 @@ void CC708Reader::DefineWindow(
     int row_lock,         int column_lock,
     int pen_style,        int window_style)
 {
-    if (m_parent && m_parent->GetDecoder())
-    {
-        StreamInfo si(-1, 0, 0, service_num, 0, false, false);
-        m_parent->GetDecoder()->InsertTrack(kTrackTypeCC708, si);
-    }
 
     CHECKENABLED;
 
@@ -99,7 +79,7 @@ void CC708Reader::DeleteWindows(uint service_num, int window_map)
 {
     CHECKENABLED;
     LOG(VB_VBI, LOG_DEBUG, LOC + QString("DeleteWindows(%1, %2)")
-            .arg(service_num).arg(window_map, 8, 2, QChar(48)));
+            .arg(service_num).arg(window_map, 8, 2, QChar{'0'}));
 
     for (uint i = 0; i < 8; i++)
         if ((1 << i) & window_map)
@@ -111,7 +91,7 @@ void CC708Reader::DisplayWindows(uint service_num, int window_map)
 {
     CHECKENABLED;
     LOG(VB_VBI, LOG_DEBUG, LOC + QString("DisplayWindows(%1, %2)")
-            .arg(service_num).arg(window_map, 8, 2, QChar(48)));
+            .arg(service_num).arg(window_map, 8, 2, QChar{'0'}));
 
     for (uint i = 0; i < 8; i++)
     {
@@ -146,7 +126,7 @@ void CC708Reader::HideWindows(uint service_num, int window_map)
 {
     CHECKENABLED;
     LOG(VB_VBI, LOG_DEBUG, LOC + QString("HideWindows(%1, %2)")
-            .arg(service_num).arg(window_map, 8, 2, QChar(48)));
+            .arg(service_num).arg(window_map, 8, 2, QChar{'0'}));
 
     for (uint i = 0; i < 8; i++)
     {
@@ -162,7 +142,7 @@ void CC708Reader::ClearWindows(uint service_num, int window_map)
 {
     CHECKENABLED;
     LOG(VB_VBI, LOG_DEBUG, LOC + QString("ClearWindows(%1, %2)")
-            .arg(service_num).arg(window_map, 8, 2, QChar(48)));
+            .arg(service_num).arg(window_map, 8, 2, QChar{'0'}));
 
     for (uint i = 0; i < 8; i++)
         if ((1 << i) & window_map)
@@ -173,7 +153,7 @@ void CC708Reader::ToggleWindows(uint service_num, int window_map)
 {
     CHECKENABLED;
     LOG(VB_VBI, LOG_DEBUG, LOC + QString("ToggleWindows(%1, %2)")
-            .arg(service_num).arg(window_map, 8, 2, QChar(48)));
+            .arg(service_num).arg(window_map, 8, 2, QChar{'0'}));
 
     for (uint i = 0; i < 8; i++)
     {
@@ -282,14 +262,14 @@ void CC708Reader::Reset(uint service_num)
 }
 
 void CC708Reader::TextWrite(uint service_num,
-                            int16_t* unicode_string, int16_t len)
+                            std::u16string& unicode_string)
 {
     CHECKENABLED;
     QString debug = QString();
-    for (uint i = 0; i < (uint)len; i++)
+    for (auto ch : unicode_string)
     {
-        GetCCWin(service_num).AddChar(QChar(unicode_string[i]));
-        debug += QChar(unicode_string[i]);
+        GetCCWin(service_num).AddChar(QChar(ch));
+        debug += QChar(ch);
     }
     LOG(VB_VBI, LOG_DEBUG, LOC + QString("AddText to %1->%2 |%3|")
         .arg(service_num).arg(m_cc708services[service_num].m_currentWindow).arg(debug));

@@ -9,11 +9,14 @@
 #include <QString>
 
 // MythTV headers
-#include "libmyth/mythcontext.h"
+#include "libmythbase/mythcorecontext.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythbase/mythmiscutil.h"
-#include "libmythbase/programinfo.h"
+#ifndef __cpp_size_t_suffix
 #include "libmythbase/sizetliteral.h"
+#endif
 #include "libmythtv/mythcommflagplayer.h"
+#include "libmythtv/programtypes.h"
 
 // Commercial Flagging headers
 #include "ClassicCommDetector.h"
@@ -84,18 +87,18 @@ static QString toStringFrameFormats(int format, bool verbose)
     switch (format)
     {
         case COMM_FORMAT_NORMAL:
-            return (verbose) ? "normal" : " N ";
+            return verbose ? "normal" : " N ";
         case COMM_FORMAT_LETTERBOX:
-            return (verbose) ? "letter" : " L ";
+            return verbose ? "letter" : " L ";
         case COMM_FORMAT_PILLARBOX:
-            return (verbose) ? "pillar" : " P ";
+            return verbose ? "pillar" : " P ";
         case COMM_FORMAT_LETTERBOX | COMM_FORMAT_PILLARBOX:
-            return (verbose) ? "letter,pillar" : "L,P";
+            return verbose ? "letter,pillar" : "L,P";
         case COMM_FORMAT_MAX:
-            return (verbose) ? " max  " : " M ";
+            return verbose ? " max  " : " M ";
     }
 
-    return (verbose) ? "unknown" : " U ";
+    return verbose ? "unknown" : " U ";
 }
 
 QString FrameInfoEntry::GetHeader(void)
@@ -181,10 +184,6 @@ void ClassicCommDetector::Init()
     // source height = 1080 gives border = 20 * 1080 / 4 / 720 = 7
     m_commDetectBorder =
         gCoreContext->GetNumSetting("CommDetectBorder", 20) * m_height / 720;
-
-#ifdef SHOW_DEBUG_WIN
-    comm_debug_init(m_width, m_height);
-#endif
 
     m_currentAspect = COMM_ASPECT_WIDE;
 
@@ -338,7 +337,7 @@ bool ClassicCommDetector::go()
     }
 
     // Don't bother flagging short ~realtime recordings
-    if ((wereRecording) && (!m_stillRecording) && (secsSince < requiredHeadStart))
+    if (wereRecording && (!m_stillRecording) && (secsSince < requiredHeadStart))
         return false;
 
     m_aggressiveDetection =
@@ -500,7 +499,7 @@ bool ClassicCommDetector::go()
              ((currentFrameNumber % 100) == 0)))
         {
             float flagFPS { 0.0 };
-            float elapsed = flagTime.elapsed() / 1000.0;
+            float elapsed = flagTime.elapsed() / 1000.0F;
 
             if (elapsed != 0.0F)
                 flagFPS = currentFrameNumber / elapsed;
@@ -545,7 +544,7 @@ bool ClassicCommDetector::go()
             if (percentage % 10 == 0 && prevpercent != percentage)
             {
                 prevpercent = percentage;
-                LOG(VB_GENERAL, LOG_INFO, QString("%1%% Completed @ %2 fps.")
+                LOG(VB_GENERAL, LOG_INFO, QString("%1% Completed @ %2 fps.")
                     .arg(percentage) .arg(flagFPS));
             }
         }
@@ -671,7 +670,7 @@ void ClassicCommDetector::GetCommercialBreakList(frm_dir_map_t &marks)
         marks = m_logoCommBreakMap;
     }
 
-    int cnt = ((blank) ? 1 : 0) + ((scene) ? 1 : 0) + ((logo) ? 1 : 0);
+    int cnt = (blank ? 1 : 0) + (scene ? 1 : 0) + (logo ? 1 : 0);
     if (cnt == 2)
     {
         if (blank && scene)
@@ -977,11 +976,6 @@ void ClassicCommDetector::ProcessFrame(MythVideoFrame *frame,
             .arg(m_frameInfo[m_curFrameNumber].flagMask, 4, 16, QChar('0')));
     }
 
-#ifdef SHOW_DEBUG_WIN
-    comm_debug_show(frame->buf);
-    getchar();
-#endif
-
     m_framesProcessed++;
     delete[] rowMax;
     delete[] colMax;
@@ -1114,7 +1108,7 @@ frm_dir_map_t ClassicCommDetector::Combine2Maps(const frm_dir_map_t &a,
 
                 allTrue = true;
 
-                while ((f <= m_framesProcessed) && (f < it_b.key()) && (allTrue))
+                while ((f <= m_framesProcessed) && (f < it_b.key()) && allTrue)
                     allTrue = FrameIsInBreakMap(f++, b);
             }
 
@@ -1864,9 +1858,15 @@ void ClassicCommDetector::BuildBlankFrameCommList(void)
     if (m_blankFrameMap.count() == 0)
         return;
 
+#ifdef __cpp_size_t_suffix
+    auto *bframes = new long long[2UZ * m_blankFrameMap.count()];
+    auto *c_start = new long long[1UZ * m_blankFrameMap.count()];
+    auto *c_end   = new long long[1UZ * m_blankFrameMap.count()];
+#else
     auto *bframes = new long long[2_UZ * m_blankFrameMap.count()];
     auto *c_start = new long long[1_UZ * m_blankFrameMap.count()];
     auto *c_end   = new long long[1_UZ * m_blankFrameMap.count()];
+#endif
     int frames = 0;
     int commercials = 0;
 
@@ -1941,7 +1941,7 @@ void ClassicCommDetector::BuildBlankFrameCommList(void)
     // of show unless followed by another
     if ((commercials > 1) &&
         (c_end[0] < (33 * m_fps)) &&
-        (c_start[1] > (c_end[0] + 40 * m_fps)))
+        (c_start[1] > (c_end[0] + (40 * m_fps))))
         i = 1;
 
     // eliminate any blank frames at end of commercials
@@ -1952,7 +1952,7 @@ void ClassicCommDetector::BuildBlankFrameCommList(void)
         long long adjustment = 0;
 
         if ((r < (30 * m_fps)) &&
-            (first_comm))
+            first_comm)
             r = 1;
 
         m_blankCommMap[r] = MARK_COMM_START;
@@ -2482,7 +2482,7 @@ void ClassicCommDetector::PrintFullMap(
     if (verbose)
     {
         QByteArray tmp = FrameInfoEntry::GetHeader().toLatin1();
-        out << tmp.constData() << " mark" << std::endl;
+        out << tmp.constData() << " mark\n";
     }
 
     for (long long i = 1; i < m_curFrameNumber; i++)
@@ -2498,7 +2498,7 @@ void ClassicCommDetector::PrintFullMap(
             frm_dir_map_t::const_iterator mit = comm_breaks->find(i);
             if (mit != comm_breaks->end())
             {
-                QString tmp = (verbose) ?
+                QString tmp = verbose ?
                     toString((MarkTypes)*mit) : QString::number(*mit);
                 atmp = tmp.toLatin1();
 
@@ -2511,4 +2511,4 @@ void ClassicCommDetector::PrintFullMap(
     out << std::flush;
 }
 
-/* vim: set expandtab tabstop=4 shiftwidth=4: */
+#include "moc_ClassicCommDetector.cpp"

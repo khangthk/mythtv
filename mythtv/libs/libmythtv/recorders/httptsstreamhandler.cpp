@@ -72,7 +72,7 @@ void HTTPTSStreamHandler::Return(HTTPTSStreamHandler * & ref, int inputid)
     QMap<QString,HTTPTSStreamHandler*>::iterator it = s_httphandlers.find(devname);
     if ((it != s_httphandlers.end()) && (*it == ref))
     {
-        LOG(VB_RECORD, LOG_INFO, QString("HTTPTSSH[%1]: Closing handler for %1")
+        LOG(VB_RECORD, LOG_INFO, QString("HTTPTSSH[%1]: Closing handler for %2")
             .arg(inputid).arg(devname));
         ref->Stop();
         delete *it;
@@ -179,7 +179,11 @@ bool HTTPReader::DownloadStream(const QUrl& url)
     QMutexLocker  replylock(&m_replylock);
     if (m_reply->error() != QNetworkReply::NoError)
     {
-        LOG(VB_RECORD, LOG_ERR, LOC + "DownloadStream exited with " + m_reply->errorString());
+        LOG(VB_RECORD, LOG_ERR, LOC + "DownloadStream exited with error " +
+            QString("%1 '%2'").arg(m_reply->error()).arg(m_reply->errorString()));
+
+        // Download is not OK when there is a network error
+        m_ok = false;
     }
 
     delete m_reply;
@@ -243,3 +247,5 @@ void HTTPReader::Cancel(void)
         m_reply->abort();
     }
 }
+
+#include "moc_httptsstreamhandler.cpp"

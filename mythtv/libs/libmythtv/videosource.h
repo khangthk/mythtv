@@ -4,9 +4,14 @@
 #include <utility>
 #include <vector>
 
+#include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
+
 // MythTV headers
-#include "libmyth/mythcontext.h"
-#include "libmyth/standardsettings.h"
+#include "libmythbase/mythconfig.h"
+#include "libmythui/standardsettings.h"
 #include "libmythbase/mthread.h"
 
 #include "mythtvexp.h"
@@ -94,6 +99,7 @@ class FreqTableSelector :
     Q_OBJECT
 public:
     explicit FreqTableSelector(const VideoSource& parent);
+    ~FreqTableSelector() override;
 protected:
     QString m_freq;
 };
@@ -219,6 +225,11 @@ class VideoSource : public GroupSetting {
         {
             setLabel(QObject::tr("Video source name"));
         }
+
+        ~Name() override
+        {
+            delete GetStorage();
+        }
     };
 
 private:
@@ -255,6 +266,11 @@ class CaptureCardComboBoxSetting : public MythUIComboBoxSetting
                               rw)
     {
     }
+
+    ~CaptureCardComboBoxSetting() override
+    {
+        delete GetStorage();
+    }
 };
 
 class TunerCardAudioInput : public CaptureCardComboBoxSetting
@@ -284,6 +300,11 @@ class EmptyAudioDevice : public MythUITextEditSetting
         setVisible(false);
     }
 
+    ~EmptyAudioDevice() override
+    {
+        delete GetStorage();
+    }
+
     void Save(void) override // StandardSetting
     {
         GetStorage()->SetSaveRequired();
@@ -309,6 +330,11 @@ class EmptyVBIDevice : public MythUITextEditSetting
         setVisible(false);
     };
 
+    ~EmptyVBIDevice() override
+    {
+        delete GetStorage();
+    }
+
     void Save(void) override // StandardSetting
     {
         GetStorage()->SetSaveRequired();
@@ -330,7 +356,7 @@ public:
     static void fillSelections(MythUIComboBoxSetting* setting);
 };
 
-#ifdef USING_HDHOMERUN
+#if CONFIG_HDHOMERUN
 
 class UseHDHomeRunDevice;
 class HDHomeRunDevice
@@ -372,15 +398,16 @@ class HDHomeRunDeviceID : public MythUITextEditSetting
   public:
     HDHomeRunDeviceID(const CaptureCard &parent,
                       HDHomeRunConfigurationGroup &_group);
+    ~HDHomeRunDeviceID() override;
     void Load(void) override; // StandardSetting
     void Save(void) override; // StandardSetting
 
   private:
     HDHomeRunConfigurationGroup &m_group;
 };
-#endif  // USING_HDHOMERUN
+#endif  // CONFIG_HDHOMERUN
 
-#ifdef USING_SATIP
+#if CONFIG_SATIP
 
 class SatIPDevice
 {
@@ -457,6 +484,7 @@ class SatIPDeviceID : public MythUITextEditSetting
 
   public:
     explicit SatIPDeviceID(const CaptureCard &parent);
+    ~SatIPDeviceID() override;
 
     void Load(void) override; // StandardSetting
 
@@ -475,7 +503,7 @@ class SatIPDeviceAttribute : public GroupSetting
     SatIPDeviceAttribute(const QString& label,
                          const QString& helpText);
 };
-#endif // USING_SATIP
+#endif // CONFIG_SATIP
 
 class VBoxDevice
 {
@@ -566,7 +594,6 @@ class HDPVRConfigurationGroup: public GroupSetting
     CaptureCard         &m_parent;
     GroupSetting        *m_cardInfo   {nullptr};
     TunerCardAudioInput *m_audioInput {nullptr};
-    VBIDevice           *m_vbiDevice  {nullptr};
 };
 
 class ASIDevice;
@@ -637,7 +664,7 @@ class DemoConfigurationGroup: public GroupSetting
     GroupSetting *m_size {nullptr};
 };
 
-#if !defined( USING_MINGW ) && !defined( _MSC_VER )
+#ifndef Q_OS_WINDOWS
 class ExternalConfigurationGroup: public GroupSetting
 {
    Q_OBJECT
@@ -760,12 +787,8 @@ private:
     class Hostname : public StandardSetting
     {
       public:
-        explicit Hostname(const CaptureCard &parent) :
-            StandardSetting(new CaptureCardDBStorage(this, parent, "hostname"))
-        {
-            setVisible(false);
-            setValue(gCoreContext->GetHostName());
-        }
+        explicit Hostname(const CaptureCard &parent);
+        ~Hostname() override;
         void edit(MythScreenType */*screen*/) override {} // StandardSetting
         void resultEdit(DialogCompletionEvent */*dce*/) override {} // StandardSetting
     };
@@ -886,6 +909,11 @@ class StartingChannel : public MythUIComboBoxSetting
         setHelpText(QObject::tr("This channel is shown when 'Watch TV' is selected on the main menu. "
                                 "It is updated on every Live TV channel change. "
                                 "When the value is not valid a suitable default will be chosen."));
+    }
+
+    ~StartingChannel() override
+    {
+        delete GetStorage();
     }
     static void fillSelections(void) {;}
   public slots:
@@ -1019,6 +1047,7 @@ class VBoxDeviceID : public MythUITextEditSetting
 
   public:
     explicit VBoxDeviceID(const CaptureCard &parent);
+    ~VBoxDeviceID() override;
 
     void Load(void) override; // StandardSetting
 
@@ -1033,7 +1062,7 @@ class VBoxDeviceID : public MythUITextEditSetting
     QString m_overrideDeviceId;
 };
 
-#ifdef USING_CETON
+#if CONFIG_CETON
 class CetonSetting : public TransTextEditSetting
 {
     Q_OBJECT
@@ -1056,6 +1085,7 @@ class CetonDeviceID : public MythUITextEditSetting
 
   public:
     explicit CetonDeviceID(const CaptureCard &parent);
+    ~CetonDeviceID() override;
 
     void Load(void) override; // StandardSetting
     void UpdateValues();
@@ -1075,6 +1105,6 @@ class CetonDeviceID : public MythUITextEditSetting
     QString m_tuner;
     const CaptureCard &m_parent;
 };
-#endif // USING_CETON
+#endif // CONFIG_CETON
 
 #endif

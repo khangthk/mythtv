@@ -1,12 +1,14 @@
 #include <algorithm>
 
 #include "captions/cc608reader.h"
+
+#include "libmythbase/mythlogging.h"
+
 #include "mythplayer.h"
-#include "recorders/vbitext/vbi.h"
 
 CC608Reader::CC608Reader(MythPlayer *parent)
   : m_parent(parent),
-    m_maxTextSize(8 * (sizeof(teletextsubtitle) + VT_WIDTH))
+    m_maxTextSize(8 * (sizeof(teletextsubtitle) + 40))
 {
     for (int i = 0; i < MAXTBUFFER; i++)
         m_inputBuffers[i].buffer = new unsigned char[m_maxTextSize + 1];
@@ -194,7 +196,7 @@ int CC608Reader::Update(unsigned char *inpos)
         int scroll_yoff = 0;
         int scroll_ymax = 15;
 
-        do
+        while (inpos < end)
         {
             if (linecont)
             {
@@ -263,7 +265,7 @@ int CC608Reader::Update(unsigned char *inpos)
             subtitle.row++;
             inpos = cur + 1;
             linecont = 0;
-        } while (inpos < end);
+        }
 
         // adjust row position
         if (subtitle.resumetext & CC_TXT_MASK)
@@ -366,7 +368,7 @@ void CC608Reader::Update608Text(
         QString("streamIdx:%1 ").arg(streamIdx));
 #endif
     std::vector<CC608Text*>::iterator i;
-    int visible = 0;
+    size_t visible = 0;
 
     m_state[streamIdx].m_output.m_lock.lock();
     if (!m_state[streamIdx].m_output.m_buffers.empty() && (scroll || replace))
@@ -492,7 +494,7 @@ int CC608Reader::NumInputBuffers(bool need_to_lock)
     return ret;
 }
 
-void CC608Reader::AddTextData(unsigned char *buffer, int len,
+void CC608Reader::AddTextData(unsigned char *buffer, size_t len,
                               std::chrono::milliseconds timecode, char type)
 {
     if (m_parent)

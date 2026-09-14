@@ -3,7 +3,7 @@
 
 // MythTV headers
 #include <libmythbase/mythpluginexport.h>
-#include <libmyth/standardsettings.h>
+#include <libmythui/standardsettings.h>
 
 QString GetGameTypeName(const QString &GameType);
 QString GetGameTypeExtensions(const QString &GameType);
@@ -42,9 +42,9 @@ class MPLUGIN_PUBLIC GamePlayersList : public GroupSetting
     Q_OBJECT
 public:
     GamePlayersList();
+    void Load() override; // StandardSetting
 
 private:
-    void Load() override; // StandardSetting
     void NewPlayerDialog() const;
     void CreateNewPlayer(const QString& name);
 };

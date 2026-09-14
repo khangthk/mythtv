@@ -26,7 +26,7 @@
 
   You will need to install the following programs:
 
-  - cmake
+  - cmake (verson 3.20 or later)
   - patch
   - ninja-build (ninja on freebsd and osx)
 
@@ -126,6 +126,7 @@
   ```
   $ cmake --preset qt5 -DCMAKE_INSTALL_PREFIX=<install_location>
   $ cmake --build build-qt5
+  $ cmake --install build-qt5
   ```
 
   The first line will create a new directory named "build-qt5", and
@@ -162,6 +163,7 @@
   ```
   $ cmake --preset qt6 -DCMAKE_INSTALL_PREFIX=<install_location>
   $ cmake --build build-qt6
+  $ cmake --install build-qt6
   ```
 
   If you want more control over the build process, look at the first
@@ -172,6 +174,7 @@
   ```
   $ cmake -S . -B build-qt5 -G Ninja -DCMAKE_INSTALL_PREFIX=<install_location>
   $ cmake --build build-qt5
+  $ cmake --install build-qt5
   ```
 
   This will use the current directory as the source (-S) directory,
@@ -201,6 +204,7 @@
      | Release        | -O3 -DNDEBUG     |
      | RelWithDebInfo | -O2 -g -DNDEBUG  |
      | MinSizeRel     | -Os -DNDEBUG     |
+     | Fedora         | <All Fedora build system options> |
 
   If no `CMAKE_BUILD_TYPE` value is supplied, the value of `Debug`
   will be used.
@@ -254,18 +258,15 @@
   build as nothing is installed.
 
   The external libraries that are downloaded and compiled will be
-  installed the directory <builddir>/tmp-libsinstall-<arch>-qt5 and
-  the mythtv components will be installed into the directory
-  <builddir>/tmp-install-<arch>-qt5.  (There should be no need to
-  modify these directory locations, but they could be change by
-  setting values into the LIBS_INSTALL_PREFIX and CMAKE_INSTALL_PREFIX
-  directories.)  Because these directories are located underneath the
-  build directory, they will both be deleted when the build directory
-  is deleted. If you want the libraries to survive deleting the build
-  directory, you may place the LIBS_INSTALL_DIRECTORY anywhere you
-  want.  The easiest solution is to use one of the presets ending with
-  "-libs" that will place the library directory next to the build
-  directory instead of underneath the build directory.
+  installed the directory libsinstall-<preset> and the mythtv
+  components will be installed into the directory build-<preset>.
+  (There should be no need to modify these directory locations, but
+  they could be change by setting values into the LIBS_INSTALL_PREFIX
+  and CMAKE_INSTALL_PREFIX directories.)  When you delete the build
+  directory, the compiled external libraries will survive in the
+  libsinstall-<preset> directory.  If you need to perform a complete
+  rebuild, you will need to delete both the build-<preset> and
+  libsinstall-<preset> directories.
 
   To set the [android
   architecture](https://cmake.org/cmake/help/latest/variable/CMAKE_ANDROID_ARCH_ABI.html)
@@ -367,8 +368,8 @@
   commands:
 
   ```
-  $ cmake --build build -t clang-tidy
-  $ cmake --build build -t cppcheck
+  $ cmake --build build -t run-clang-tidy
+  $ cmake --build build -t run-cppcheck
   ```
 
   Its also possible to run these two tools as part of the normal build
@@ -384,6 +385,28 @@
   modified locally.  All entries in this file that use the option()
   command are booleans, and should be set to "ON" or "OFF".  The rest
   of the entries are strings.
+
+  To build applications which will be easier to debug using Valgrind,
+  turn on the ENABLE_VALGRIND option.
+
+```
+$ cmake --preset <qt5|qt6> -DENABLE_VALGRIND=ON -DCMAKE_INSTALL_PREFIX=<install_location>
+$ cmake --build build-<qt5|qt6>
+```
+
+  To build applications with Address Sanitizer, turn on the ENABLE_ASAN option.
+
+```
+$ cmake --preset <qt5|qt6> -DENABLE_ASAN=ON -DCMAKE_INSTALL_PREFIX=<install_location>
+$ cmake --build build-<qt5|qt6>
+```
+
+  To build applications with Thread Sanitizer, turn on the ENABLE_TSAN option.
+
+```
+$ cmake --preset <qt5|qt6> -DENABLE_TSAN=ON -DCMAKE_INSTALL_PREFIX=<install_location>
+$ cmake --build build-<qt5|qt6>
+```
 
   The build also loads two per-user options files (by default named
   `.config/MythTV/BuildOverridesPre.cmake` and

@@ -6,10 +6,11 @@
 #include <QWidget>
 
 // MythTV
+#include "libmythbase/mythconfig.h"
 #include "mythuiexp.h"
 #include "mythrender_base.h"
 
-#ifdef USING_WAYLANDEXTRAS
+#if CONFIG_WAYLANDEXTRAS
 class MythWaylandDevice;
 #endif
 
@@ -46,14 +47,14 @@ class MythPainterWindow : public QWidget
 
     MythRender* GetRenderDevice();
     bool        RenderIsShared ();
-    void        resizeEvent    (QResizeEvent* /*ResizeEvent*/) override;
-#if defined(DEBUG_PAINTERWIN_EVENTS)
+#ifdef DEBUG_PAINTERWIN_EVENTS
     bool        event(QEvent* Event) override;
 #endif
 
   protected:
     explicit MythPainterWindow(MythMainWindow* MainWin);
    ~MythPainterWindow() override;
+    void        resizeEvent    (QResizeEvent* /*ResizeEvent*/) override;
 
     MythRender* m_render { nullptr };
 
@@ -61,7 +62,7 @@ class MythPainterWindow : public QWidget
     Q_DISABLE_COPY(MythPainterWindow)
 
 
-#ifdef USING_WAYLANDEXTRAS
+#if CONFIG_WAYLANDEXTRAS
     MythWaylandDevice* m_waylandDev { nullptr };
 #endif
 };

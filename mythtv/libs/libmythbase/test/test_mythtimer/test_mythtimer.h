@@ -17,10 +17,14 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
+#ifndef LIBMYTHBASE_TEST_MYTHTIMER_H
+#define LIBMYTHBASE_TEST_MYTHTIMER_H
 
 #include <chrono> // for milliseconds
 #include <thread> // for sleep_for
 
+#include <QChar>     // Fix Qt6 GCC SFINAE warning
+#include <QBitArray> // Fix Qt6 GCC SFINAE warning
 #include <QTest>
 
 #include "mythtimer.h"
@@ -120,3 +124,5 @@ class TestMythTimer: public QObject
         QVERIFY(t.elapsed() > 500ms);
     }
 };
+
+#endif // LIBMYTHBASE_TEST_MYTHTIMER_H

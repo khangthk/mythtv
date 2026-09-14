@@ -3,7 +3,7 @@
 
 #include <array>
 
-#include "libmyth/standardsettings.h"
+#include "libmythui/standardsettings.h"
 #include "libmythbase/mythdbcon.h"
 #include "mythtvexp.h"
 
@@ -60,6 +60,11 @@ class MTV_PUBLIC RecordingProfile : public GroupSetting
             setReadOnly(true);
             setLabel(QObject::tr("Profile name"));
             setName("name");
+        }
+
+        ~Name() override
+        {
+            delete GetStorage();
         }
 
       // -=>TODO: Qt4 can't have nested classes with slots/signals

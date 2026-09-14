@@ -1,6 +1,9 @@
 #ifndef AUDIOPLAYER_H
 #define AUDIOPLAYER_H
 
+#include "libmythtv/audio/volumebase.h"
+#include "libmythtv/audio/visualization.h"
+
 #include "mythplayerstate.h"
 
 #include <QCoreApplication>
@@ -14,11 +17,6 @@ class  AudioOutput;
 struct AVCodecContext;
 struct AVPacket;
 
-namespace MythTV
-{
-    class Visual;
-}
-
 class MTV_PUBLIC AudioPlayer : public QObject
 {
     Q_OBJECT
@@ -30,8 +28,8 @@ class MTV_PUBLIC AudioPlayer : public QObject
     AudioPlayer(MythPlayer *parent, bool muted);
    ~AudioPlayer() override;
 
-    void addVisual(MythTV::Visual *vis);
-    void removeVisual(MythTV::Visual *vis);
+    void addVisual(Visualization *vis);
+    void removeVisual(Visualization *vis);
 
     void  Reset(void);
     void  DeleteOutput(void);
@@ -109,7 +107,7 @@ class MTV_PUBLIC AudioPlayer : public QObject
   private:
     MythPlayer  *m_parent            {nullptr};
     AudioOutput *m_audioOutput       {nullptr};
-    MythAudioPlayerState m_state     { };
+    MythAudioPlayerState m_state;
     float        m_stretchFactor     {1.0F};
     QRecursiveMutex m_lock;
     bool         m_mutedOnCreation   {false};
@@ -118,7 +116,7 @@ class MTV_PUBLIC AudioPlayer : public QObject
     bool         m_noAudioIn         {false};
     bool         m_noAudioOut        {true};
     bool         m_controlsVolume    {true};
-    std::vector<MythTV::Visual*> m_visuals;
+    std::vector<Visualization*> m_visuals;
 };
 
 #endif // AUDIOPLAYER_H

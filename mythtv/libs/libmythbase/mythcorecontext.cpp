@@ -1,5 +1,10 @@
+#include "mythcorecontext.h"
+
 // Qt
 #include <QtGlobal>
+#if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+#include <QtSystemDetection>
+#endif
 #include <QCoreApplication>
 #include <QUrl>
 #include <QDir>
@@ -23,9 +28,9 @@
 #include <cmath>
 #include <cstdarg>
 #include <queue>
-#include <unistd.h>       // for usleep()
+#include <thread>
 
-#ifdef _WIN32
+#ifdef Q_OS_WINDOWS
 #include <winsock2.h>
 #else
 #include <clocale>
@@ -34,8 +39,8 @@
 
 // MythTV
 #include "compat.h"
+#include "mythappname.h"
 #include "mythdownloadmanager.h"
-#include "mythcorecontext.h"
 #include "mythsocket.h"
 #include "mythsystemlegacy.h"
 #include "mthreadpool.h"
@@ -118,6 +123,7 @@ class MythCoreContextPrivate : public QObject
 
     QList<QHostAddress> m_approvedIps;
     QList<QHostAddress> m_deniedIps;
+    QMutex m_listMutex;
 
     MythPower *m_power { nullptr };
 };
@@ -240,7 +246,7 @@ bool MythCoreContext::Init(void)
         return false;
     }
 
-#ifndef _WIN32
+#ifndef Q_OS_WINDOWS
     static const QRegularExpression utf8
         { "utf-?8", QRegularExpression::CaseInsensitiveOption };
     QString lang_variables("");
@@ -519,7 +525,7 @@ MythSocket *MythCoreContext::ConnectCommandSocket(
         }
 
         if (sleepus != 0us)
-            usleep(sleepus.count());
+            std::this_thread::sleep_for(sleepus);
     }
 
     if (we_attempted_wol)
@@ -703,9 +709,9 @@ bool MythCoreContext::IsMasterBackend(void)
 
 bool MythCoreContext::BackendIsRunning(void)
 {
-#if defined(Q_OS_DARWIN) || defined(__FreeBSD__) || defined(__OpenBSD__)
+#ifdef Q_OS_BSD4
     const char *command = "ps -axc | grep -i mythbackend | grep -v grep > /dev/null";
-#elif defined _WIN32
+#elif defined(Q_OS_WINDOWS)
     const char *command = "%systemroot%\\system32\\tasklist.exe "
        " | %systemroot%\\system32\\find.exe /i \"mythbackend.exe\" ";
 #else
@@ -743,7 +749,7 @@ bool MythCoreContext::IsThisHost(const QString &addr, const QString &host)
 
     QString thisip  = GetBackendServerIP(host);
 
-    return !addrstr.isEmpty() && ((addrstr == thisip));
+    return !addrstr.isEmpty() && (addrstr == thisip);
 }
 
 bool MythCoreContext::IsFrontendOnly(void)
@@ -816,7 +822,9 @@ QString MythCoreContext::GetMasterHostName(void)
     {
 
         if (IsMasterBackend())
+        {
             d->m_masterHostname = d->m_localHostname;
+        }
         else
         {
             QStringList strlist("QUERY_HOSTNAME");
@@ -1292,16 +1300,32 @@ bool MythCoreContext::CheckSubnet(const QAbstractSocket *socket)
 
 bool MythCoreContext::CheckSubnet(const QHostAddress &peer)
 {
-    static const QHostAddress kLinkLocal("fe80::");
     if (GetBoolSetting("AllowConnFromAll",false))
         return true;
+    return IsLocalSubnet(peer, true);
+}
+
+/**
+ * Check if peer is on local subnet.
+ *
+ * \param peer in Host Address to check.
+ * \param log whether to log an error if not.
+ * \return true if on local subnet, false if not.
+*/
+
+bool MythCoreContext::IsLocalSubnet(const QHostAddress &peer, bool log)
+{
+    static const QHostAddress kLinkLocal("fe80::");
+    // Ensure m_approvedIps and m_deniedIps are single threaded
+    QMutexLocker lock(&d->m_listMutex);
     if (d->m_approvedIps.contains(peer))
         return true;
     if (d->m_deniedIps.contains(peer))
     {
-        LOG(VB_GENERAL, LOG_WARNING, LOC +
-          QString("Repeat denied connection from ip address: %1")
-          .arg(peer.toString()));
+        if (log)
+            LOG(VB_GENERAL, LOG_WARNING, LOC +
+              QString("Repeat denied connection from ip address: %1")
+              .arg(peer.toString()));
         return false;
     }
 
@@ -1335,9 +1359,10 @@ bool MythCoreContext::CheckSubnet(const QHostAddress &peer)
         }
     }
     d->m_deniedIps.append(peer);
-    LOG(VB_GENERAL, LOG_WARNING, LOC +
-        QString("Denied connection from ip address: %1")
-        .arg(peer.toString()));
+    if (log)
+        LOG(VB_GENERAL, LOG_WARNING, LOC +
+            QString("Denied connection from ip address: %1")
+            .arg(peer.toString()));
     return false;
 }
 
@@ -1468,7 +1493,9 @@ bool MythCoreContext::SendReceiveStringList(
     if (ok)
     {
         if (strlist.isEmpty())
+        {
             ok = false;
+        }
         else if (strlist[0] == "ERROR")
         {
             if (strlist.size() == 2)
@@ -1568,7 +1595,7 @@ void MythCoreContext::SendHostSystemEvent(const QString &msg,
 
 void MythCoreContext::readyRead(MythSocket *sock)
 {
-    do
+    while (sock->IsDataAvailable())
     {
         QStringList strlist;
         if (!sock->ReadStringList(strlist))
@@ -1655,7 +1682,6 @@ void MythCoreContext::readyRead(MythSocket *sock)
             dispatch(me);
         }
     }
-    while (sock->IsDataAvailable());
 }
 
 void MythCoreContext::connectionClosed([[maybe_unused]] MythSocket *sock)
@@ -2025,6 +2051,7 @@ void MythCoreContext::WantingPlayback(QObject *sender)
                 Qt::BlockingQueuedConnection);
     }
     // Restore blocking connections
+    it = d->m_playbackClients.begin();
     for (; it != d->m_playbackClients.end(); ++it)
     {
         if (it.key() == sender)
@@ -2079,8 +2106,12 @@ bool MythCoreContext::InWantingPlayback(void)
 MythSessionManager* MythCoreContext::GetSessionManager(void)
 {
     if (!d->m_sessionManager)
-        d->m_sessionManager = new MythSessionManager();
-
+    {
+        MythSessionManager::LockSessions();
+        if (!d->m_sessionManager)
+            d->m_sessionManager = new MythSessionManager();
+        MythSessionManager::UnlockSessions();
+    }
     return d->m_sessionManager;
 }
 
@@ -2169,4 +2200,4 @@ bool MythCoreContext::IsRegisteredFileForWrite(const QString& file)
     return d->m_fileswritten.contains(file);
 }
 
-/* vim: set expandtab tabstop=4 shiftwidth=4: */
+#include "moc_mythcorecontext.cpp"

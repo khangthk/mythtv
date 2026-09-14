@@ -7,16 +7,18 @@
  */
 
 // C++ includes
+#include <algorithm>
 #include <iostream>
 #include <utility>
-#include <algorithm>
 
 // Qt includes
 #include <QTextStream>
 #include <QElapsedTimer>
 
 // MythTV headers
+#include "libmythbase/mythcorecontext.h"
 #include "libmythbase/mythdb.h"
+#include "libmythbase/mythlogging.h"
 #include "libmythui/mythdialogbox.h"
 
 #include "channelimporter.h"
@@ -253,7 +255,7 @@ void ChannelImporter::Process(const ScanDTVTransportList &_transports,
     if (m_doDelete)
     {
         ScanDTVTransportList trans = transports;
-        std::copy(db_trans.cbegin(), db_trans.cend(), std::back_inserter(trans));
+        std::ranges::copy(db_trans, std::back_inserter(trans));
         uint deleted_count = DeleteChannels(trans);
         if (deleted_count)
             transports = trans;
@@ -340,9 +342,9 @@ uint ChannelImporter::DeleteChannels(
         return 0;
 
     // List of off-air channels (in database but not in the scan)
-    std::cout << std::endl << "Off-air channels (" << SimpleCountChannels(off_air_transports) << "):" << std::endl;
+    std::cout << "\nOff-air channels (" << SimpleCountChannels(off_air_transports) << "):\n";
     ChannelImporterBasicStats infoA = CollectStats(off_air_transports);
-    std::cout << FormatChannels(off_air_transports, &infoA).toLatin1().constData() << std::endl;
+    std::cout << FormatChannels(off_air_transports, &infoA).toLatin1().constData() << '\n';
 
     // Ask user whether to delete all or some of these stale channels
     // if some is selected ask about each individually
@@ -390,6 +392,7 @@ uint ChannelImporter::DeleteChannels(
 
     // Create a new transports list without the deleted channels
     ScanDTVTransportList newlist;
+    newlist.reserve(transports.size());
     for (size_t i = 0; i < transports.size(); ++i)
     {
         newlist.push_back(transports[i]);
@@ -612,6 +615,11 @@ ScanDTVTransportList ChannelImporter::InsertChannels(
     bool cancel_all = false;
     bool ok_all = false;
 
+    // Reserve list memory up front.  These lists will likely be over-sized.
+    inserted_list.reserve(transports.size());
+    skipped_list.reserve(transports.size());
+    next_list.reserve(transports.size());
+
     // Insert all channels with non-conflicting channum
     // and complete tuning information.
     for (const auto & transport : transports)
@@ -722,9 +730,9 @@ ScanDTVTransportList ChannelImporter::InsertChannels(
                 if (chan.m_channelId)
                 {
                     uint tsid = chan.m_vctTsId;
-                    tsid = (tsid) ? tsid : chan.m_sdtTsId;
-                    tsid = (tsid) ? tsid : chan.m_patTsId;
-                    tsid = (tsid) ? tsid : chan.m_vctChanTsId;
+                    tsid = tsid ? tsid : chan.m_sdtTsId;
+                    tsid = tsid ? tsid : chan.m_patTsId;
+                    tsid = tsid ? tsid : chan.m_vctChanTsId;
 
                     chan.m_dbMplexId = ChannelUtil::CreateMultiplex(
                         chan.m_sourceId, transport, tsid, chan.m_origNetId);
@@ -811,6 +819,11 @@ ScanDTVTransportList ChannelImporter::UpdateChannels(
 {
     ScanDTVTransportList next_list;
 
+    // Reserve list memory up front.  These lists will likely be over-sized.
+    updated_list.reserve(transports.size());
+    skipped_list.reserve(transports.size());
+    next_list.reserve(transports.size());
+
     // update all channels with non-conflicting channum
     // and complete tuning information.
     for (const auto & transport : transports)
@@ -865,9 +878,9 @@ ScanDTVTransportList ChannelImporter::UpdateChannels(
                 // transport and network ID's in case the transport
                 // was created manually
                 uint tsid = chan.m_vctTsId;
-                tsid = (tsid) ? tsid : chan.m_sdtTsId;
-                tsid = (tsid) ? tsid : chan.m_patTsId;
-                tsid = (tsid) ? tsid : chan.m_vctChanTsId;
+                tsid = tsid ? tsid : chan.m_sdtTsId;
+                tsid = tsid ? tsid : chan.m_patTsId;
+                tsid = tsid ? tsid : chan.m_vctChanTsId;
 
                 chan.m_dbMplexId = ChannelUtil::CreateMultiplex(
                     chan.m_sourceId, transport, tsid, chan.m_origNetId);
@@ -969,7 +982,7 @@ void ChannelImporter::MergeSameFrequency(ScanDTVTransportList &transports)
     bool is_dvbs = ((DTVTunerType::kTunerTypeDVBS1 == tuner_type) ||
                     (DTVTunerType::kTunerTypeDVBS2 == tuner_type));
 
-    uint freq_mult = (is_dvbs) ? 1 : 1000;
+    uint freq_mult = is_dvbs ? 1 : 1000;
 
     std::vector<bool> ignore;
     ignore.resize(transports.size());
@@ -1028,6 +1041,7 @@ void ChannelImporter::RemoveDuplicates(ScanDTVTransportList &transports, ScanDTV
 
     ScanDTVTransportList no_dups;
     std::vector<bool> ignore;
+    no_dups.reserve(transports.size());
     ignore.resize(transports.size());
     for (size_t i = 0; i < transports.size(); ++i)
     {
@@ -1315,7 +1329,7 @@ ScanDTVTransportList ChannelImporter::GetDBTransports(
         (DTVTunerType::kTunerTypeDVBS1 == tuner_type) ||
         (DTVTunerType::kTunerTypeDVBS2 == tuner_type);
 
-    uint freq_mult = (is_dvbs) ? 1 : 1000;
+    uint freq_mult = is_dvbs ? 1 : 1000;
 
     MSqlQuery query(MSqlQuery::InitCon());
     query.prepare(
@@ -1693,7 +1707,7 @@ QString ChannelImporter::FormatChannels(
         }
     };
     ScanDTVTransportList transports(transports_in);
-    std::sort(transports.begin(), transports.end(), less_than_key());
+    std::ranges::sort(transports, less_than_key());
 
     QString msg;
 
@@ -1732,7 +1746,7 @@ QString ChannelImporter::FormatTransports(
         }
     };
     ScanDTVTransportList transports(transports_in);
-    std::sort(transports.begin(), transports.end(), less_than_key());
+    std::ranges::sort(transports, less_than_key());
 
     auto fmt_trans = [](const QString& msg, const auto & transport)
         { return msg + FormatTransport(transport) + "\n"; };
@@ -1779,13 +1793,13 @@ bool ChannelImporter::IsType(
     switch (type)
     {
         case kATSCNonConflicting:
-            return ((chan.m_siStandard == "atsc") /* &&
+            return (chan.m_siStandard == "atsc") /* &&
                     (info.m_atscNumCnt[(chan.m_atscMajorChannel << 16) |
-                                        (chan.m_atscMinorChannel)] == 1) */);
+                                        (chan.m_atscMinorChannel)] == 1) */;
 
         case kDVBNonConflicting:
-            return ((chan.m_siStandard == "dvb") /* &&
-                    (info.m_progNumCnt[chan.m_serviceId] == 1) */);
+            return (chan.m_siStandard == "dvb") /* &&
+                    (info.m_progNumCnt[chan.m_serviceId] == 1) */;
 
         case kMPEGNonConflicting:
             return ((chan.m_siStandard == "mpeg") &&
@@ -1911,7 +1925,7 @@ ChannelImporter::QueryUserDelete(const QString &msg)
     if (m_useGui)
     {
         m_functorRetval = -1;
-        do
+        while (m_functorRetval < 0)
         {
             if (m_useWeb) {
                 m_pWeb->m_mutex.lock();
@@ -1946,7 +1960,7 @@ ChannelImporter::QueryUserDelete(const QString &msg)
 
                 m_eventLoop.exec();
             }
-        } while (m_functorRetval < 0);
+        }
 
         switch (m_functorRetval)
         {
@@ -1958,16 +1972,16 @@ ChannelImporter::QueryUserDelete(const QString &msg)
     else if (m_isInteractive)
     {
         std::cout << msg.toLatin1().constData()
-             << std::endl
+             << '\n'
              << tr("Do you want to:").toLatin1().constData()
-             << std::endl
+             << '\n'
              << tr("1. Delete All").toLatin1().constData()
-             << std::endl
+             << '\n'
              << tr("2. Set all invisible").toLatin1().constData()
-             << std::endl
+             << '\n'
 //        cout << "3. Handle manually" << endl;
              << tr("4. Ignore All").toLatin1().constData()
-             << std::endl;
+             << '\n';
         while (true)
         {
             std::string ret;
@@ -1985,7 +1999,7 @@ ChannelImporter::QueryUserDelete(const QString &msg)
 
             //cout << "Please enter either 1, 2, 3 or 4:" << endl;
             std::cout << tr("Please enter either 1, 2 or 4:")
-                .toLatin1().constData() << std::endl;
+                .toLatin1().constData() << '\n';
         }
     }
 
@@ -1999,7 +2013,7 @@ ChannelImporter::QueryUserInsert(const QString &msg)
     if (m_useGui)
     {
         m_functorRetval = -1;
-        do
+        while (m_functorRetval < 0)
         {
             if (m_useWeb) {
                 m_pWeb->m_mutex.lock();
@@ -2033,7 +2047,7 @@ ChannelImporter::QueryUserInsert(const QString &msg)
                 popupStack->AddScreen(insertDialog);
                 m_eventLoop.exec();
             }
-        } while (m_functorRetval < 0);
+        }
 
         switch (m_functorRetval)
         {
@@ -2045,15 +2059,15 @@ ChannelImporter::QueryUserInsert(const QString &msg)
     else if (m_isInteractive)
     {
         std::cout << msg.toLatin1().constData()
-             << std::endl
+             << '\n'
              << tr("Do you want to:").toLatin1().constData()
-             << std::endl
+             << '\n'
              << tr("1. Insert All").toLatin1().constData()
-             << std::endl
+             << '\n'
              << tr("2. Insert Manually").toLatin1().constData()
-             << std::endl
+             << '\n'
              << tr("3. Ignore All").toLatin1().constData()
-             << std::endl;
+             << '\n';
         while (true)
         {
             std::string ret;
@@ -2069,7 +2083,7 @@ ChannelImporter::QueryUserInsert(const QString &msg)
             }
 
             std::cout << tr("Please enter either 1, 2, or 3:")
-                .toLatin1().constData() << std::endl;
+                .toLatin1().constData() << '\n';
         }
     }
 
@@ -2085,7 +2099,7 @@ ChannelImporter::QueryUserUpdate(const QString &msg)
     if (m_useGui)
     {
         m_functorRetval = -1;
-        do
+        while (m_functorRetval < 0)
         {
             if (m_useWeb) {
                 m_pWeb->m_mutex.lock();
@@ -2117,7 +2131,7 @@ ChannelImporter::QueryUserUpdate(const QString &msg)
                 popupStack->AddScreen(updateDialog);
                 m_eventLoop.exec();
             }
-        } while (m_functorRetval < 0);
+        }
 
         switch (m_functorRetval)
         {
@@ -2128,15 +2142,15 @@ ChannelImporter::QueryUserUpdate(const QString &msg)
     else if (m_isInteractive)
     {
         std::cout << msg.toLatin1().constData()
-             << std::endl
+             << '\n'
              << tr("Do you want to:").toLatin1().constData()
-             << std::endl
+             << '\n'
              << tr("1. Update All").toLatin1().constData()
-             << std::endl
+             << '\n'
              << tr("2. Update Manually").toLatin1().constData()
-             << std::endl
+             << '\n'
              << tr("3. Ignore All").toLatin1().constData()
-             << std::endl;
+             << '\n';
         while (true)
         {
             std::string ret;
@@ -2152,7 +2166,7 @@ ChannelImporter::QueryUserUpdate(const QString &msg)
             }
 
             std::cout << tr("Please enter either 1, 2, or 3:")
-                .toLatin1().constData() << std::endl;
+                .toLatin1().constData() << '\n';
         }
     }
     m_functorRetval = 0;    // Reset default menu choice to first item for next menu
@@ -2400,7 +2414,7 @@ OkCancelType ChannelImporter::QueryUserResolve(
     }
     else if (m_isInteractive)
     {
-        std::cout << msg.toLatin1().constData() << std::endl;
+        std::cout << msg.toLatin1().constData() << '\n';
 
         QString cancelStr = QCoreApplication::translate("(Common)",
                                                         "Cancel").toLower();
@@ -2412,7 +2426,7 @@ OkCancelType ChannelImporter::QueryUserResolve(
 
         while (true)
         {
-            std::cout << msg2.toLatin1().constData() << std::endl;
+            std::cout << msg2.toLatin1().constData() << '\n';
             std::string sret;
             std::cin >> sret;
             QString val = QString(sret.c_str());
@@ -2478,7 +2492,7 @@ OkCancelType ChannelImporter::QueryUserInsert(
     }
     else if (m_isInteractive)
     {
-        std::cout << msg.toLatin1().constData() << std::endl;
+        std::cout << msg.toLatin1().constData() << '\n';
 
         QString cancelStr    = QCoreApplication::translate("(Common)", "Cancel").toLower();
         QString cancelAllStr = QCoreApplication::translate("(Common)", "Cancel All").toLower();
@@ -2490,7 +2504,7 @@ OkCancelType ChannelImporter::QueryUserInsert(
 
         while (true)
         {
-            std::cout << msg2.toLatin1().constData() << std::endl;
+            std::cout << msg2.toLatin1().constData() << '\n';
             std::string sret;
             std::cin >> sret;
             QString val = QString(sret.c_str());
@@ -2534,3 +2548,5 @@ bool ChannelImporter::CheckChannelNumber(
         num, chan.m_sourceId, chan.m_channelId);
     return ok;
 }
+
+#include "moc_channelimporter.cpp"
